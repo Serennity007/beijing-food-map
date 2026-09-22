@@ -52,6 +52,8 @@ function readJson<T>(key: string): T | null {
  */
 export function useMapData(api: ApiClient) {
   const [viewport, setViewportState] = useState<MapViewportState>(() => readJson<MapViewportState>(LS_VIEW) ?? DEFAULT_VIEWPORT);
+  // 首次（本机没有可恢复的视角）就请求复位，让相机真的装下北京全图而不是停在默认缩放的中心
+  const [fitSignal, setFitSignal] = useState(() => (readJson<MapViewportState>(LS_VIEW) ? 0 : 1));
   const [filters, setFiltersState] = useState<MapFilters>(() => ({ ...DEFAULT_FILTERS, ...(readJson<Partial<MapFilters>>(LS_FILTERS) ?? {}) }));
   const [entities, setEntities] = useState<MapEntity[]>([]);
   const [list, setList] = useState<Restaurant[]>([]);
@@ -69,7 +71,9 @@ export function useMapData(api: ApiClient) {
   const query = useMemo<MapQueryInput>(
     () => ({
       bounds: viewport.bounds,
-      zoom: viewport.zoom,
+      // 相机 zoom 是连续值，接口按整数 zoom 分档聚合：取整既满足服务端的整数约束，
+      // 也让一次拖拽/捏合只在跨到下一级时才换 queryKey，不至于每帧作废一次快照。
+      zoom: Math.floor(viewport.zoom),
       view: filters.view,
       budget_max: filters.budget_max,
       include_unknown_budget: filters.include_unknown_budget,
@@ -191,11 +195,15 @@ export function useMapData(api: ApiClient) {
     return () => clearInterval(id);
   }, [api, query]);
 
-  const resetView = useCallback(() => setViewport(DEFAULT_VIEWPORT), [setViewport]);
+  const resetView = useCallback(() => {
+    setViewport(DEFAULT_VIEWPORT);
+    setFitSignal((n) => n + 1);
+  }, [setViewport]);
 
   return {
     viewport,
     setViewport,
+    fitSignal,
     filters,
     setFilters,
     entities,

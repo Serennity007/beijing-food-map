@@ -568,7 +568,7 @@ function QueueRow({
         )}
       </td>
       <td>
-        <small>{entry.submitted_at}</small>
+        <small>{entry.submitted_at ?? '时间未知'}</small>
       </td>
       <td>
         <span className={`badge ${st.cls}`}>{st.label}</span>

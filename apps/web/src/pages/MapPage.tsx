@@ -130,7 +130,8 @@ export function MapPage() {
           selectedId={selectedId}
           userLocation={userLocation}
           insets={{ bottom: sideBySide ? 0 : Math.min(bottomInset, Math.round(window.innerHeight * 0.4)) }}
-          initialViewport={null}
+          initialViewport={d.viewport}
+          fitSignal={d.fitSignal}
           onSelectRestaurant={(id) => {
             if (id) focusList(id);
           }}

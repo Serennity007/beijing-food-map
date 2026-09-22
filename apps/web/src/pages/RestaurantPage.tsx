@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   ATTITUDE_LABEL,
+  COMMUNITY_QUALIFICATION_LABEL,
   CUISINE_LABEL,
   DISCLOSURE_LABEL,
   type FeedbackPublic,
@@ -196,8 +197,8 @@ export function RestaurantPage() {
         </p>
         <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
           <li>
-            社区：{d.basis.community}（近 180 天窗口 {d.basis.window_start} ~ {d.basis.window_end}，推荐 {d.basis.tally.recommend} /
-            一般 {d.basis.tally.neutral} / 不推荐 {d.basis.tally.not_recommend}，共 {d.basis.tally.total} 张有效独立票）
+            社区：{COMMUNITY_QUALIFICATION_LABEL[d.basis.community]}。近 180 天窗口 {d.basis.window_start} ~ {d.basis.window_end}，推荐
+            {d.basis.tally.recommend} / 一般 {d.basis.tally.neutral} / 不推荐 {d.basis.tally.not_recommend}，共 {d.basis.tally.total} 张有效独立票
           </li>
           <li>
             编辑实吃背书：

@@ -51,6 +51,8 @@ export interface MapViewProps {
   userLocation: { lng: number; lat: number } | null;
   insets: MapInsets;
   initialViewport: MapViewportState | null;
+  /** >0 时请求把相机复位到北京全图；复位后的真实视野经 onViewportChange 回流到页面状态。 */
+  fitSignal: number;
   onSelectRestaurant(id: string | null): void;
   onSelectCluster(cluster: MapClusterItem): void;
   onViewportChange(viewport: MapViewportState): void;

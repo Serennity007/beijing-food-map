@@ -1,10 +1,23 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 /**
  * 统一开发入口：`node scripts/dev.mjs`（或 `... web` / `... api`）。
  * 输出加前缀，任一子进程退出即整体退出，避免留下端口占用的孤儿进程。
  */
-const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+
+/**
+ * Windows 上 `npm` 是 npm.cmd，直接 spawn .cmd 会 EINVAL（Node 的 .bat/.cmd 安全修复），
+ * 而 shell:true 会让 kill() 只打到 shell 包装层、留活 vite/tsx。
+ * 优先用随 node 一起安装的 npm JS 入口，两边行为就一致了。
+ */
+function npmInvocation() {
+  const cli = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  return existsSync(cli) ? { cmd: process.execPath, pre: [cli] } : { cmd: 'npm', pre: [] };
+}
+
+const npm = npmInvocation();
 const requested = process.argv.slice(2).filter((a) => a === 'web' || a === 'api');
 const targets = requested.length > 0 ? requested : ['api', 'web'];
 
@@ -21,7 +34,7 @@ function prefix(name, chunk) {
 }
 
 for (const target of targets) {
-  const child = spawn(NPM, ['run', 'dev', '-w', `@qianwei/${target}`], {
+  const child = spawn(npm.cmd, [...npm.pre, 'run', 'dev', '-w', `@qianwei/${target}`], {
     stdio: ['inherit', 'pipe', 'pipe'],
     env: process.env,
   });

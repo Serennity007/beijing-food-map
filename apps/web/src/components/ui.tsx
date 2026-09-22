@@ -112,6 +112,7 @@ export function Drawer({ children, onInsets }: { children: ReactNode; onInsets: 
   const [snap, setSnap] = useState(1);
   const [drag, setDrag] = useState(0);
   const start = useRef<number | null>(null);
+  const moved = useRef(false);
   const host = useRef<HTMLDivElement>(null);
 
   const report = useCallback(
@@ -139,10 +140,12 @@ export function Drawer({ children, onInsets }: { children: ReactNode; onInsets: 
   const onPointerDown = (e: React.PointerEvent) => {
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     start.current = e.clientY;
+    moved.current = false;
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (start.current === null || !host.current) return;
     const delta = (start.current - e.clientY) / host.current.parentElement!.clientHeight;
+    if (Math.abs(delta) > 0.02) moved.current = true;
     setDrag(Math.min(0.35, Math.max(-0.35, delta)));
   };
   const onPointerUp = () => {
@@ -152,9 +155,12 @@ export function Drawer({ children, onInsets }: { children: ReactNode; onInsets: 
     SNAP_HEIGHTS.forEach((h, i) => {
       if (Math.abs(h - target) < Math.abs(snapRatio(best) - target)) best = i;
     });
+    // 没有位移就是点按：换到下一档，兑现手柄上"点按或拖动换档"的承诺
+    const tapped = !moved.current;
     start.current = null;
+    moved.current = false;
     setDrag(0);
-    setSnap(best);
+    setSnap(tapped ? (snap + 1) % SNAP_HEIGHTS.length : best);
   };
 
   return (

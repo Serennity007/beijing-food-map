@@ -51,6 +51,13 @@ export type RiskStatus = (typeof RISK_STATUSES)[number];
 export const COMMUNITY_QUALIFICATIONS = ['PENDING', 'QUALIFIED', 'LAPSED'] as const;
 export type CommunityQualification = (typeof COMMUNITY_QUALIFICATIONS)[number];
 
+/** 资格枚举要直接展示给用户，所以中文措辞跟规则语义一起放在合同层。 */
+export const COMMUNITY_QUALIFICATION_LABEL: Record<CommunityQualification, string> = {
+  PENDING: '尚未达标',
+  QUALIFIED: '已达标',
+  LAPSED: '已失效（近期口碑变化）',
+};
+
 export const ENDORSEMENT_STATUSES = ['NONE', 'ACTIVE', 'EXPIRED', 'REVOKED'] as const;
 export type EndorsementStatus = (typeof ENDORSEMENT_STATUSES)[number];
 

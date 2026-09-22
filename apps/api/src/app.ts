@@ -186,6 +186,9 @@ export function createApp(deps: AppDeps): App {
     close: async () => {
       if (server.listening) {
         server.close();
+        // 空闲的 keep-alive 连接会把 listening 套接字按住整个 keepAliveTimeout，
+        // tsx watch 重启期间新进程因此撞上 EADDRINUSE。拆掉空闲连接，仍在处理的请求照常排空。
+        server.closeIdleConnections();
         await once(server, 'close');
       }
     },

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import type { MapEntity } from '@qianwei/contracts';
+import { BEIJING_BOUNDS, type MapEntity } from '@qianwei/contracts';
 import type { MapAdapter, MapEngine, MapViewProps } from './types';
 import { MaplibreAdapter } from './maplibre-adapter';
 import { AmapAdapter } from './amap-adapter';
@@ -41,7 +41,9 @@ export function MapView(props: MapViewProps) {
   useEffect(() => {
     latest.current = props;
   });
-  const initialViewport = useRef(props.initialViewport);
+  // 相机视角的唯一真相：挂载时用它定位，切换底图/重试重建后立即回到原视角，
+  // 之后由适配器的 onViewportChange 持续更新。
+  const viewportRef = useRef(props.initialViewport);
   // 切换底图 / 重试会重建适配器：这三份当前值用于重建后立刻回放，
   // 否则页面层不重新发请求的话，新底图上就没有任何标记。
   const itemsRef = useRef<MapEntity[]>(entities);
@@ -59,8 +61,11 @@ export function MapView(props: MapViewProps) {
     if (!canvas) return;
     const adapter = createAdapter(engine);
     adapterRef.current = adapter;
-    adapter.mount(canvas, initialViewport.current, {
-      onViewportChange: (viewport) => latest.current.onViewportChange(viewport),
+    adapter.mount(canvas, viewportRef.current, {
+      onViewportChange: (viewport) => {
+        viewportRef.current = viewport;
+        latest.current.onViewportChange(viewport);
+      },
       onSelectRestaurant: (id) => latest.current.onSelectRestaurant(id),
       onSelectCluster: (cluster) => latest.current.onSelectCluster(cluster),
       onReady: () => {
@@ -85,6 +90,12 @@ export function MapView(props: MapViewProps) {
       adapter.destroy();
     };
   }, [engine, attempt]);
+
+  // 页面层递增 fitSignal 即"把相机复位到北京全图"；复位后的真实视野会经 onViewportChange 回流到页面状态。
+  const fitSignal = props.fitSignal;
+  useEffect(() => {
+    if (fitSignal > 0) adapterRef.current?.fitBounds(BEIJING_BOUNDS, latest.current.insets);
+  }, [fitSignal]);
 
   useEffect(() => {
     itemsRef.current = entities;

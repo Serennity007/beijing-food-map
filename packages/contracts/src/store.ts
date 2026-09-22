@@ -162,6 +162,8 @@ export interface MediaRec {
   context: 'private' | 'publication';
   publication_id: string | null;
   restaurant_id: string | null;
+  /** 没有这个字段就不能报"提交时间"——早前的本机快照里没有它，读取处要按未知处理。 */
+  created_at?: string;
 }
 
 export interface PublicationRec {
@@ -287,6 +289,7 @@ export class Store {
           context: 'private',
           publication_id: null,
           restaurant_id: s.id,
+          created_at: this.stamp(),
         });
         return id;
       });
@@ -363,6 +366,7 @@ export class Store {
         context: 'private',
         publication_id: null,
         restaurant_id: f.restaurant_id,
+        created_at: this.stamp(),
       });
     }
     // R19 演示旧址票：再补两条同用户不同分店的历史记录（v1）
@@ -679,6 +683,7 @@ export class Store {
       context: 'private',
       publication_id: null,
       restaurant_id: restaurantId,
+      created_at: this.stamp(),
     };
     this.media.set(id, rec);
     return this.mediaOf(id)!;
@@ -1270,11 +1275,12 @@ export class Store {
         media_ids: [m.id],
         status: m.review_status,
         version: 1,
-        submitted_at: this.stamp(),
+        // 早前的图片记录没存过上传时间，这里只能是"不知道"，不能拿本次读取的时间冒充
+        submitted_at: m.created_at ?? null,
         is_author_self: m.owner_user_id === actor.id,
       });
     }
-    return entries.sort((a, b) => b.submitted_at.localeCompare(a.submitted_at));
+    return entries.sort((a, b) => (b.submitted_at ?? '').localeCompare(a.submitted_at ?? ''));
   }
 
   /**

@@ -350,7 +350,7 @@ const QUEUE_ENTRY = obj(
     media_ids: arr(str()),
     status: enumOf(['DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'HIDDEN', 'WITHDRAWN', 'PRIVATE', 'PENDING_REVIEW', 'PUBLISHED', 'REVOKED']),
     version: int(),
-    submitted_at: str('date-time'),
+    submitted_at: nullable(str('date-time')),
     is_author_self: bool(),
   },
   ['id', 'type', 'author', 'preview', 'media_ids', 'status', 'version', 'submitted_at', 'is_author_self'],

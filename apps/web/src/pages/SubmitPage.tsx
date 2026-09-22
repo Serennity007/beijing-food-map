@@ -138,6 +138,8 @@ export function SubmitPage() {
   const detailSeq = useRef(0);
   const idemRef = useRef<string | null>(null);
   const restoredFor = useRef<string | null>(null);
+  const hadDraft = useRef(false);
+  const prefilledFor = useRef<string | null>(null);
   if (idemRef.current === null) idemRef.current = newIdempotencyKey();
 
   const draftKey = `${DRAFT_PREFIX}${user?.id ?? 'anon'}`;
@@ -218,6 +220,8 @@ export function SubmitPage() {
     if (!raw) return;
     const d = parseDraft(raw);
     if (!d) return;
+    // 一打开页面就会落一条空白草稿；只有作者真的写过才算"有草稿"，否则它会把回填挡掉
+    hadDraft.current = d.reason.trim().length > 0 || d.dish_names.length > 0;
     setRestaurantId(d.restaurant_id);
     setVisitedDate(d.visited_date);
     setDishNames(d.dish_names);
@@ -234,6 +238,20 @@ export function SubmitPage() {
       /* 本机没有存储权限时只是不能恢复草稿，不影响提交 */
     }
   }, [draftKey, restaurantId, visitedDate, dishNames, reason, attitude, disclosure]);
+
+  /* 改一条已有反馈时先回填它：让作者从零重填会把实吃日期写成"今天"，那是假记录。 */
+  useEffect(() => {
+    if (!revise || hadDraft.current) return;
+    const my = detail?.my_current_feedback ?? null;
+    if (!my || prefilledFor.current === my.visit_id) return;
+    prefilledFor.current = my.visit_id;
+    setAttitude(my.attitude);
+    setVisitedDate(my.visited_date);
+    setDishNames(my.dish_names);
+    setReason(my.reason);
+    setDisclosure(my.disclosure);
+    setMediaIds(my.media_ids);
+  }, [revise, detail]);
 
   useEffect(() => {
     if (mediaIds.length === 0) {

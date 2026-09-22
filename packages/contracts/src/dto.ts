@@ -298,7 +298,8 @@ export interface ModerationQueueEntry {
   media_ids: string[];
   status: ContentVersionStatus | PublicationStatus;
   version: number;
-  submitted_at: string;
+  /** 图片可能来自没有记录上传时间的旧数据，未知就是 null，不由服务端补当前时刻。 */
+  submitted_at: string | null;
   /** 独立核验要求：作者不能自审自己的内容。 */
   is_author_self: boolean;
 }
