@@ -10,7 +10,9 @@ coverage/
 !.env.*.example
 
 # 演示后端本地数据库与上传目录
-data/
+# 必须锚定路径：裸写 data/ 会连 apps/web/src/data/ 一起忽略掉，源码就丢了
+/data/
+apps/api/data/
 *.sqlite
 *.sqlite-*
 apps/api/uploads/
