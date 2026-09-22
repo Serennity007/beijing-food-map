@@ -51,6 +51,17 @@ grep -o "var base = '[^']*'" apps/web/dist/404.html        # 期望 /beijing-foo
 
 **Windows + Git Bash 的坑**：不加 `MSYS_NO_PATHCONV=1` 时，MSYS 会把以 `/` 开头的环境变量值当 POSIX 路径转换，`VITE_BASE=/repo/` 会变成 `/program/Git/repo/`，构建出的资源前缀全错。Linux runner（GitHub Actions）没有这个问题，所以这一步只能证明"本地构建可用"，不能替代 CI。
 
+## 推送前：确认源码没被 ignore 规则吞掉
+
+CI 只看得到已经提交的文件，`.gitignore` 写宽了不会让本地构建失败，只会让仓库缺件（缺的文件往往正是跑不起来的那几个）：
+
+```bash
+git ls-files --others --exclude-standard          # 期望为空；有输出就是有源码没提交
+git ls-files --others --ignored --exclude-standard # 被忽略的未跟踪文件，逐条确认都是产物
+```
+
+本项目踩过：规则里裸写一行 `data/` 想忽略演示后端数据库目录，结果连前端的数据层 `apps/web/src/data/`（`api.tsx` / `client.ts` / `http.ts`）一起忽略，前两个提交里根本没有这一层。已改成锚定路径 `/data/` + `apps/api/data/`。
+
 ## 验证与回退
 
 - 部署完在 Actions 的 deploy job 日志里读 `Page URL`；浏览器直接访问 `/map`、`/restaurants/R01` 这类深链接并刷新，确认能停在原页面而不是 404。
