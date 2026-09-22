@@ -28,6 +28,7 @@
 | `npm test` | **89 项通过，0 失败**：contracts 57 / api 18 / web 14 |
 | `npx tsx scripts/http-contract-check.mts` | **28 项断言通过**（前端真实 `Http` 客户端 × 已监听后端，带 Cookie Jar；需先 `npm run dev:api`） |
 | `npm run build` | 成功。`index.js` 407 kB（gzip 124 kB）、`maplibre.js` 1 053 kB（gzip 285 kB）、`react.js` 51 kB、CSS 87 kB |
+| Pages 构建预演（`MSYS_NO_PATHCONV=1 VITE_BASE=/repo/ npm run build` + 404 替换） | 资源前缀与深链接回退值都正确；顺带发现 Windows Git Bash 会把 `VITE_BASE` 当路径转换的坑，已写进 runbook |
 
 覆盖到的关键行为（分布在三套测试与契约自检里，都是断言不是"看起来对"）：地图聚合与快照过期 409、媒体可见性、搜索、登录限流 429、投稿幂等键、审核写穿后旧快照 409、撤回不复活、清单发布/撤销换发 token、作者不能自审、门店合并、注销后数据处置、审计日志权限。
 
@@ -36,7 +37,7 @@
 - **视觉与交互**：内嵌浏览器视口是 0×0（`visible=false`），截图与布局无法采集。响应式断点、抽屉遮挡、地图 inset、移动端手势**只做过代码层核对**。
 - **真实底图**：高德 Key 与安全密钥未配置，双适配器只跑过纯函数单测，没有在真实地图上渲染过点位。
 - **Docker 镜像**：本机无 Docker，`Dockerfile` 未构建过。
-- **第三方托管**：后端未部署，`render.yaml` 未在任何账号上导入过；Pages 也还没推送（仓库尚未 `git init`）。
+- **第三方托管**：后端未部署，`render.yaml` 未在任何账号上导入过。仓库已本地 `git init` 并完成首个提交，**尚未推送到任何远端**（凭据与账号归属待确认）。
 - **无障碍**：未跑过键盘遍历与读屏。
 - **迁移演练**：`database/migrations/*.sql` 只在空库上跑过，没有从旧版本升级的路径可验（尚未上线）。
 

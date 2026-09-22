@@ -34,6 +34,19 @@ npm ci → npm run typecheck → npm test → VITE_BASE=/<仓库名>/ npm run bu
 
 `Settings → Pages → Custom domain` 填域名并按提示加 DNS `CNAME`；随后 `VITE_BASE` 要改成 `/`（站点在域名根上），后端的 `ALLOWED_ORIGINS` 加 `https://<你的域名>`。
 
+## 本地预演 Pages 构建
+
+推送前先按工作流的方式构建一次，确认资源前缀与深链接回退都对：
+
+```bash
+MSYS_NO_PATHCONV=1 VITE_BASE=/beijing-food-map/ npm run build
+sed -i "s|__BASE__|/beijing-food-map/|g" apps/web/dist/404.html
+grep -o 'src="[^"]*"' apps/web/dist/index.html | head -1   # 期望 /beijing-food-map/assets/...
+grep -o "var base = '[^']*'" apps/web/dist/404.html        # 期望 /beijing-food-map/
+```
+
+**Windows + Git Bash 的坑**：不加 `MSYS_NO_PATHCONV=1` 时，MSYS 会把以 `/` 开头的环境变量值当 POSIX 路径转换，`VITE_BASE=/repo/` 会变成 `/program/Git/repo/`，构建出的资源前缀全错。Linux runner（GitHub Actions）没有这个问题，所以这一步只能证明"本地构建可用"，不能替代 CI。
+
 ## 验证与回退
 
 - 部署完在 Actions 的 deploy job 日志里读 `Page URL`；浏览器直接访问 `/map`、`/restaurants/R01` 这类深链接并刷新，确认能停在原页面而不是 404。
