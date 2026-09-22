@@ -1,0 +1,21 @@
+{
+  "name": "@qianwei/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "tsx --test test/*.test.ts",
+    "seed:test": "tsx src/seed-cli.ts"
+  },
+  "dependencies": {
+    "@qianwei/contracts": "*",
+    "tsx": "^4.20.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "typescript": "^5.9.2"
+  }
+}

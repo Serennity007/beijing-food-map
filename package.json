@@ -1,0 +1,29 @@
+{
+  "name": "beijing-food-map",
+  "version": "0.1.0",
+  "private": true,
+  "description": "京城黔味地图 demo — 北京贵州菜与西南美食地图（网页端）",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "npm run dev -w @qianwei/web",
+    "dev:api": "npm run dev -w @qianwei/api",
+    "build": "npm run build -w @qianwei/web",
+    "preview": "npm run preview -w @qianwei/web",
+    "start:api": "npm run start -w @qianwei/api",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "seed:test": "npm run seed:test -w @qianwei/api"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,35 @@
+# Render Blueprint —— 准备好但【未部署】。
+#
+# 注册/登录第三方平台、创建服务、绑定域名都是操作用户账号的动作，需要你先明确授权；
+# 本文件只是把要填的表单值写死，方便授权后一键 Import。字段以 Render 控制台当前版本为准。
+#
+# 部署后请把 publicUrl 填回前端构建参数 VITE_API_BASE，并把 Pages 域名加入 ALLOWED_ORIGINS。
+
+services:
+  - type: web
+    name: qianwei-api-demo
+    runtime: docker
+    repoRoot: .
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: singapore
+    branch: main
+    autoDeploy: branch
+    healthCheckPath: /health/live
+    envVars:
+      # production 会被领域引擎拒绝（禁止装载合成测试数据），demo 必须留在 development
+      - key: NODE_ENV
+        value: development
+      # 免费层没有持久磁盘：实例文件系统每次部署/重启会重置，投稿数据随之丢失。
+      # 要长期保留数据请换带 Persistent Disk 的方案，或改用 Postgres（见 docs/blockers.md）。
+      - key: SQLITE_PATH
+        value: /tmp/qianwei/demo.sqlite
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "10000"
+      # 逗号分隔的 Origin 白名单，不允许 *。Pages 的 Origin 只到域名，不含仓库路径
+      - key: ALLOWED_ORIGINS
+        value: https://serennity007.github.io,http://localhost:5173
+      - key: LOGIN_RATE_LIMIT_PER_MIN
+        value: "10"

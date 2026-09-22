@@ -1,0 +1,113 @@
+/** 唯一业务状态枚举。前端、后端、后台都从这里导入，禁止各自手写。 */
+
+export const CUISINES = ['guizhou', 'sichuan', 'chongqing', 'yunnan', 'other'] as const;
+export type Cuisine = (typeof CUISINES)[number];
+
+/** 视图分组：这是产品分类，不是行政区划定义。贵州菜同时属于西南风味。 */
+export const VIEWS = ['guizhou', 'southwest', 'other'] as const;
+export type MapView = (typeof VIEWS)[number];
+
+export const CUISINE_LABEL: Record<Cuisine, string> = {
+  guizhou: '贵州菜',
+  sichuan: '四川菜',
+  chongqing: '重庆菜',
+  yunnan: '云南菜',
+  other: '其他菜系',
+};
+
+export const VIEW_LABEL: Record<MapView, string> = {
+  guizhou: '贵州菜',
+  southwest: '西南风味',
+  other: '北京其他',
+};
+
+/** 西南风味包含的菜系标签。 */
+export const SOUTHWEST_CUISINES: Cuisine[] = ['guizhou', 'sichuan', 'chongqing', 'yunnan'];
+
+export const CONTENT_STATUSES = [
+  'DRAFT',
+  'PENDING',
+  'APPROVED',
+  'REJECTED',
+  'HIDDEN',
+  'WITHDRAWN',
+] as const;
+export type ContentVersionStatus = (typeof CONTENT_STATUSES)[number];
+
+export const PLACE_STATUSES = ['PENDING', 'VERIFIED', 'REJECTED'] as const;
+export type PlaceVerificationStatus = (typeof PLACE_STATUSES)[number];
+
+export const BUSINESS_STATUSES = [
+  'UNKNOWN',
+  'OPEN',
+  'SUSPECTED_CLOSED',
+  'CLOSED',
+] as const;
+export type BusinessStatus = (typeof BUSINESS_STATUSES)[number];
+
+export const RISK_STATUSES = ['CLEAR', 'REVIEW_REQUIRED', 'BLOCKED'] as const;
+export type RiskStatus = (typeof RISK_STATUSES)[number];
+
+export const COMMUNITY_QUALIFICATIONS = ['PENDING', 'QUALIFIED', 'LAPSED'] as const;
+export type CommunityQualification = (typeof COMMUNITY_QUALIFICATIONS)[number];
+
+export const ENDORSEMENT_STATUSES = ['NONE', 'ACTIVE', 'EXPIRED', 'REVOKED'] as const;
+export type EndorsementStatus = (typeof ENDORSEMENT_STATUSES)[number];
+
+export const PUBLICATION_STATUSES = ['PRIVATE', 'PENDING_REVIEW', 'PUBLISHED', 'REVOKED'] as const;
+export type PublicationStatus = (typeof PUBLICATION_STATUSES)[number];
+
+export const ATTITUDES = ['recommend', 'neutral', 'not_recommend'] as const;
+export type FeedbackAttitude = (typeof ATTITUDES)[number];
+
+export const ATTITUDE_LABEL: Record<FeedbackAttitude, string> = {
+  recommend: '推荐',
+  neutral: '一般',
+  not_recommend: '不推荐',
+};
+
+/** 利益披露为必选枚举。非 NONE 的记录可公开披露但不计社区独立票。 */
+export const DISCLOSURES = ['none', 'owner_or_staff', 'invited_tasting', 'gifted_or_promoted', 'other'] as const;
+export type Disclosure = (typeof DISCLOSURES)[number];
+
+export const DISCLOSURE_LABEL: Record<Disclosure, string> = {
+  none: '无关联，自费实吃',
+  owner_or_staff: '店方或员工',
+  invited_tasting: '受邀试吃',
+  gifted_or_promoted: '获赠或推广',
+  other: '其他关联',
+};
+
+export const ROLES = ['user', 'editor', 'moderator', 'admin'] as const;
+export type Role = (typeof ROLES)[number];
+
+export const LAYERS = ['qualified', 'pending_verification'] as const;
+export type MapLayer = (typeof LAYERS)[number];
+
+export const ERROR_CODES = [
+  'VALIDATION_ERROR',
+  'UNAUTHORIZED',
+  'FORBIDDEN',
+  'NOT_FOUND',
+  'VERSION_CONFLICT',
+  'IDEMPOTENCY_CONFLICT',
+  'QUERY_EXPIRED',
+  'RATE_LIMITED',
+  'PROVIDER_UNAVAILABLE',
+] as const;
+export type ErrorCode = (typeof ERROR_CODES)[number];
+
+export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
+  VALIDATION_ERROR: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  VERSION_CONFLICT: 409,
+  IDEMPOTENCY_CONFLICT: 409,
+  QUERY_EXPIRED: 409,
+  RATE_LIMITED: 429,
+  PROVIDER_UNAVAILABLE: 503,
+};
+
+export const RULE_VERSION = 'recommendation-v1';
+export const CONTRACT_VERSION = '2.0-demo-1';

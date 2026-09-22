@@ -1,0 +1,24 @@
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# 演示后端本地数据库与上传目录
+data/
+*.sqlite
+*.sqlite-*
+apps/api/uploads/
+
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.log
+npm-debug.log*
