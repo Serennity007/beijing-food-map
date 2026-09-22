@@ -4,6 +4,10 @@ Pages 只承载**静态前端**。静态模式下浏览器内跑的是与后端�
 
 ## 一次性仓库设置
 
+目标仓库：`https://github.com/Serennity007/beijing-food-map`（public，免费版 Pages 要求 public）。
+本地 `origin` 已指向该地址，仓库已提交但**尚未推送**（等 `gh auth login` 完成）。
+仓库名决定 `VITE_BASE`，但 workflow 是从 `github.event.repository.name` 推导的，改名不用改文件；只有下面的本地预演命令要跟着换。
+
 1. 仓库 `Settings → Pages → Build and deployment → Source` 选 **GitHub Actions**（不是 "Deploy from a branch"）。
 2. `Settings → Actions → General → Workflow permissions` 允许 `Read and write permissions`（或依赖 workflow 里已声明的 `pages: write`）。
 3. 推送到 `main` 即触发 `.github/workflows/deploy-web.yml`；也可在 Actions 里手动 `workflow_dispatch`。
