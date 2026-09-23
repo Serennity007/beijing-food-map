@@ -662,3 +662,52 @@ describe('AUTH/COL/SHARE/DELETE/MERGE/DEMO', () => {
     expect(JSON.stringify(a.requireRestaurant('R01').tally)).toBe(JSON.stringify(b.requireRestaurant('R01').tally));
   });
 });
+
+describe('交接补齐：举报与注销任务', () => {
+  it('删除清单同时清除历史分享快照，旧链接永不恢复', () => {
+    const s = newStore();
+    const col = s.collections.get('COL0001')!;
+    expect(s.sharedSnapshot('demo-token-1')).toBeTruthy();
+    s.deleteCollection(col.id, col.owner_user_id);
+    expect([...s.publications.values()].some(p => p.collection_id === col.id)).toBe(false);
+    expect(() => s.sharedSnapshot('demo-token-1')).toThrow();
+  });
+  it('注销立即隐藏本人编辑背书，无需等待清除任务', () => {
+    const s = newStore();
+    const rec = [...s.restaurants.values()].find(r => r.editorial && s.users.get(r.editorial.author_user_id)?.status === 'active')!;
+    expect(rec).toBeTruthy();
+    const sid = s.login(rec.editorial!.author_user_id, '888888').session_id;
+    s.deleteAccount(sid);
+    expect(rec.editorial).toBeNull();
+    expect(rec.endorsement).toBe('NONE');
+  });
+  it('举报队列有角色边界、稳定倒序和上限，不暴露账号资料', () => {
+    const s = newStore();
+    expect(() => s.reportQueue(null)).toThrow();
+    const user = s.login('U02', '888888').session_id;
+    expect(() => s.reportQueue(user)).toThrow();
+    const mod = s.login('M01', '888888').session_id;
+    for (let i = 0; i < 205; i++) s.createReport({ restaurant_id: 'R01', kind: 'wrong_info', detail: `测试 ${i}` }, user);
+    const rows = s.reportQueue(mod);
+    expect(rows).toHaveLength(200);
+    expect(rows[0]?.detail).toBe('测试 204');
+    expect(rows[0]?.restaurant_name).toBeTruthy();
+    expect(rows[0]).not.toHaveProperty('phone_masked');
+  });
+  it('注销任务可从快照恢复、实际清除个人内容且幂等', () => {
+    const s = newStore();
+    const sid = s.login('U02', '888888').session_id;
+    const job = s.deleteAccount(sid);
+    expect(s.userIdOfSession(sid)).toBeNull();
+    const restored = newStore(); restored.loadState(s.dumpState());
+    expect(restored.users.get('U02')?.deletion_job_id).toBe(job.deletion_job_id);
+    expect(restored.processDeletionJobs()).toBeGreaterThan(0);
+    expect(restored.users.get('U02')?.status).toBe('deleted');
+    expect(restored.users.get('U02')?.phone_masked).toBe('');
+    expect(restored.visits.some(v => v.user_id === 'U02')).toBe(false);
+    expect([...restored.collections.values()].some(c => c.owner_user_id === 'U02')).toBe(false);
+    expect([...restored.media.values()].some(m => m.owner_user_id === 'U02')).toBe(false);
+    expect(restored.processDeletionJobs()).toBe(0);
+    expect(() => restored.login('U02', '888888')).toThrow();
+  });
+});

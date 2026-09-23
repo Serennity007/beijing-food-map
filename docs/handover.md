@@ -22,15 +22,15 @@ npm run build          # 产物 apps/web/dist
 
 | 层 | 现在的事实 |
 | --- | --- |
-| implemented | 领域引擎 + 11 个页面 + 演示后端 + OpenAPI + Pages workflow 全部写完 |
-| verified | typecheck 全绿；测试 **89 项 0 失败**（contracts 57 / api 18 / web 14）；HTTP 契约自检 **28 项**；`npm run build` 成功；**桌面视口浏览器实测**三条闭环走通（静态模式与 `/api` 后端模式各一遍） |
-| release_ready | **否**。合成数据不是真实核验数据；地图 Key / 短信 / 云账号需要你提供或授权；签名会话、真实对象存储、审核侧举报队列未做 |
+| implemented | 领域引擎 + 11 个页面 + 演示后端（含签名会话、注销清除任务、审核侧举报队列）+ OpenAPI + Pages workflow 全部写完 |
+| verified | typecheck 全绿；测试 **100 项 0 失败**（contracts 61 / api 25 / web 14）；HTTP 契约自检 **29 项**；`npm run build` 成功；**桌面视口浏览器实测**闭环走通（静态模式与 `/api` 后端模式各一遍，含举报复核与注销处置）；写路径全部跑在独立 SQLite 文件上，默认演示库未被污染 |
+| release_ready | **否**。合成数据不是真实核验数据；地图 Key / 短信 / 云账号需要你提供或授权；真实对象存储、可水平扩展的持久化、举报工单状态流转、新门店提交核验未做 |
 
 细节账目在 [status.md](./status.md)（含"浏览器实测看到的"逐条证据）与 [blockers.md](./blockers.md)。**外部依赖类阻塞项接手的 AI 无法自行完成**，别去猜凭据、别自己部署、别给真人发消息。
 
 ## 2. 规则只有一份实现：`packages/contracts`
 
-`Store`（`src/store.ts`，1885 行）是唯一规则实现处，`StaticClient` 和 `apps/api` 都调它。
+`Store`（`src/store.ts`，1934 行）是唯一规则实现处，`StaticClient` 和 `apps/api` 都调它。
 **任何业务判断都不允许在页面里重算一遍**，那是这个仓库最容易退化出 bug 的方式。
 
 ```
@@ -40,23 +40,24 @@ packages/contracts/src/
   rules.ts     180 天窗口、社区计票、资格谓词等纯函数
   geo.ts       网格聚合分档 cellDegForZoom、GCJ-02 ↔ WGS84
   store.ts     Store：读接口收 sessionId，写接口收 sessionId + expected_version
-  seed.ts      24 门店 / 9 账号 / 69 条反馈，全是合成，is_test_data=true
+  seed.ts      24 门店 / 9 账号 / 71 条反馈，全是合成，is_test_data=true
   photos.ts    内联合成 SVG data URI（代替对象存储）
 apps/web/src/data/
   api.tsx      ApiClient 接口 + Provider（VITE_API_BASE 决定用哪个实现）
   client.ts    StaticClient：浏览器内 Store + localStorage
   http.ts      Http：真实 fetch + HttpOnly Cookie
 apps/api/src/
-  app.ts       node:http 外壳、优雅退出、Cookie 解析
+  app.ts       node:http 外壳、优雅退出、Cookie 解析、注销清除任务的排空（启动一次 + 每秒一次，`hasPendingDeletions()` 先短路）
   http/handlers.ts   路由表（method + path + summary 即 OpenAPI 来源）
   http/openapi.ts    OpenAPI 3.0 文档（有测试强制它覆盖全部路由）
   http/query.ts body.ts   入参校验：类型/整数/枚举/长度，非法直接 400
   http/security.ts   Origin / Sec-Fetch-Site 跨站写拦截 + 登录限流
+  http/session.ts    会话 Cookie 的 HMAC 签名与校验（密钥来自 env.ts，缺省时每次启动随机）
   db/repository.ts   整库当 JSON 文档存取（dumpState/loadState），不是真实表结构
 ```
 
 网页路由：`/map`、`/restaurants/:id`、`/submit`、`/me`、`/me/collections`、`/me/collections/:id`、`/s/:token`、`/login`、`/admin`、`/privacy`、`/terms`、`*` → 404（`apps/web/src/app/App.tsx:61-74`）。
-API 路由（全部在 `/api/v1` 下）：`/health/live` `/health/ready` `/today` `/map/items` `/restaurants` `/restaurants/search` `/restaurants/:id` `/media/:id` `/uploads/test-photo` `/auth/login` `/auth/logout` `/me` `/me/submissions` `/me/reports` `/submissions` `/restaurants/:id/my-feedback` `POST|DELETE /restaurants/:id/collection-item` `/collections` `/collections/:id` `/collections/:id/items/:restaurantId` `/collections/:id/publication-requests` `/collections/:id/unpublish` `/shared-collections/:token` `/reports` `/admin/queue` `/admin/audit-log` `/admin/moderation/:target/actions` `/admin/restaurants/:id/status` `/admin/restaurants/:id/merge` `/admin/editorial-endorsements/verify|revoke`。
+API 路由（全部在 `/api/v1` 下）：`/health/live` `/health/ready` `/today` `/map/items` `/restaurants` `/restaurants/search` `/restaurants/:id` `/media/:id` `/uploads/test-photo` `/auth/login` `/auth/logout` `/me` `/me/submissions` `/me/reports` `/submissions` `/restaurants/:id/my-feedback` `POST|DELETE /restaurants/:id/collection-item` `/collections` `/collections/:id` `/collections/:id/items/:restaurantId` `/collections/:id/publication-requests` `/collections/:id/unpublish` `/shared-collections/:token` `/reports` `/admin/queue` `/admin/reports` `/admin/audit-log` `/admin/moderation/:target/actions` `/admin/restaurants/:id/status` `/admin/restaurants/:id/merge` `/admin/editorial-endorsements/verify|revoke`。
 
 `localStorage` 键：`qianwei.state`（引擎快照）、`qianwei.session`、`qianwei.mapviewport`、`qianwei.mapfilters`、`qianwei.mapengine`、`qianwei.draft.<userId|anon>`、`qianwei.fallback`（Pages 深链接回退，见 `public/404.html`）。
 
@@ -91,7 +92,9 @@ API 路由（全部在 `/api/v1` 下）：`/health/live` `/health/ready` `/today
 
 **Windows / Node 24**
 - `spawn('npm.cmd')` 报 EINVAL → `scripts/dev.mjs` 改为调用 npm 自带的 `npm-cli.js`。
-- Git Bash 把以 `/` 开头的环境变量值当 POSIX 路径转换：`VITE_BASE=/repo/` 会变成 `/program/Git/repo/` → 前缀 `MSYS_NO_PATHCONV=1`（Linux runner 无此问题，本地预演不能替代 CI）。
+- Git Bash 把以 `/` 开头的环境变量值当 POSIX 路径转换：`VITE_BASE=/repo/` 会变成 `/program/Git/repo/` → 前缀 `MSYS_NO_PATHCONV=1`（Linux runner 无此问题，本地预演不能替代 CI）。同一个坑也吃 `VITE_API_BASE=/api`，而且症状更隐蔽：不报错，只是所有请求打到 `file:///D:/program/Git/api/v1/...`，页面显示"网络不可用，显示的是上次加载的数据"，看着像后端坏了。
+- **会写数据的验证一律指独立库**：`SQLITE_PATH=<项目绝对路径>/work/xxx.sqlite`（`openDatabase` 会 `mkdir -p` 父目录，空库自动由合成种子初始化）。要给 **Windows 风格的绝对路径**：workspace 脚本的 cwd 是 `apps/api` 而不是仓库根，相对路径会落进 `apps/api/work/`；Git Bash 的 `$PWD` 展开成 `/c/Users/...`，Node 在 Windows 上解析出来是另一个地方，你会盯着一个空库排障。契约自检、注销演练、浏览器实测都写库；写默认演示库的话，另一个任务留下的状态就查不回来了，而且 `npm run seed:test` 会整库覆盖。默认库该长什么样见上面"种子数据"那行的基线计数。
+- 后台起的 `npm run dev` 会随休眠/重启一起没了，而浏览器标签页还留着上一次的界面：这时候 localStorage 的读写照样"通过"，看着像服务端还在。判断前先 `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8787/api/v1/health/ready`，拿到 200 再信实测结论。
 - PowerShell 内联脚本里 `$_` 会被 MSYS 吞掉；要导数据用 `ConvertTo-Csv`。
 - `server.close()` 会被代理的 keep-alive 空闲连接按住整个 `keepAliveTimeout`，`tsx watch` 重启期间新进程撞 `EADDRINUSE` 后永久退出 → `app.ts` 里加了 `closeIdleConnections()`。
 
@@ -112,24 +115,27 @@ git ls-files --others --ignored --exclude-standard  # 逐条确认都是产物
 ## 6. 验收门禁（改完必须全绿再说"完成"）
 
 ```bash
-npm run typecheck
-npm test                      # 期望 57 + 14（vitest）
-npm test -w @qianwei/api      # 期望 18（node:test，输出是 ℹ tests / pass / fail）
-npm run dev:api               # 另开一个终端
-npx tsx scripts/http-contract-check.mts   # 期望 28 项，前端真实 Http 客户端 × 已监听后端
-npm run build && npm run seed:test        # 恢复种子基线
+npm run typecheck                            # 期望退出码 0，3 个 workspace
+npm test -w @qianwei/contracts               # 期望 61 通过（vitest）
+npm test -w @qianwei/web                     # 期望 14 通过（vitest）
+npm test -w @qianwei/api                     # 期望 25 pass / 0 fail（node:test，输出是 ℹ tests / pass / fail）
+SQLITE_PATH="C:/绝对/路径/work/gate.sqlite" npm run dev:api &   # 另开一个终端，别写默认库
+npx tsx scripts/http-contract-check.mts      # 期望 29 项，前端真实 Http 客户端 × 已监听后端
+npm run build                                # 期望退出码 0
 ```
+
+数字会变，别照抄：跑之前先按上面命令实测一遍，报告里写你这次真的看到的数（历史文档里 57/18/14 = 89 与 28 项的写法就是上一轮留下的，本轮是 61/25/14 = 100 与 29 项）。`npm run seed:test` 只在你想把**默认**演示库恢复成种子基线时用（它整库覆盖，先确认没有别的任务在里面留状态）。
 
 浏览器实测的操作路径与预期文案见 [status.md](./status.md) 的"浏览器实测看到的"；本地环境细节见 [runbooks/local-dev.md](./runbooks/local-dev.md)。
 契约自检的 Cookie Jar 是脚本内的内存 `Map`，不落盘；如果你手动用 `curl -c` 试过登录接口，把生成的 jar/凭据文件删掉再提交。
 
 ## 7. 待办（按"能不能自主做"分）
 
-**接手的 AI 可以直接做**
-1. 审核侧举报队列接口：`Store.reportQueue(sessionId)` 用 `requireRole(['moderator','admin'])` 把关、最新在前、上限 200、条目带门店与被举报反馈摘要；再加路由 + OpenAPI 条目 + 两个客户端实现 + 管理台面板（设计已定，见 blockers C9）。目前举报只有举报人自己看得到。
-2. 签名会话（`SESSION_SECRET` + 有效期，Cookie 强制 `Secure`）与把 `Secure` 从"只在 production"改成可独立开启。
-3. 注销的异步清除任务：`deleteAccount()` 现在只做同步处置，`deletion_job_id` 是回执，没有后台任务真的删除/匿名化，账号行停在 `deleting`。
-4. 窄屏与真机：内嵌浏览器只有一个固定桌面视口，响应式断点、抽屉遮挡、地图 inset、移动端手势**都没跑过**。Pages 有地址后用手机打开一次即可结掉 blockers 第 10 项。
+**接手的 AI 可以直接做**（按建议优先级）
+1. **阶段 1A 新门店提交核验**：第三方地点候选目前**没有建店能力**，投稿页写明了不提供入口（`SubmitPage.tsx` 头部注释）。要做的是：候选 → 提交 → `PENDING` 门店 → 人工核验（坐标/营业/风险三态）→ 才进资格谓词。规则只能加在 `packages/contracts`，两种模式行为一致，别在页面里补判定。
+2. **阶段 1B 举报闭环**：工单状态流转的写接口（`OPEN → IN_REVIEW → RESOLVED|DISMISSED`，带 `expected_version` 与角色把关）、举报关联到具体反馈或媒体、同一用户重复举报的合并与限频、处理结果回写到举报人"我的"页（现在那里只显示一条固定的 `result_note`）。队列只读部分已完成（见 blockers C9）。
+3. **阶段 2 手机端界面**：窄屏断点、抽屉遮挡、地图 inset、捏合与双指手势 —— blockers C10。内嵌浏览器只有一个固定桌面视口，这一项需要你在真机上看一次，或者直接接受"桌面已验、移动未验"。
+4. 本轮实测看到、刻意没顺手改的小口子：页头同时暴露"登录"与"内测登录"两个入口且都指向 `/login`；后台举报卡片打印原始 ISO 时间戳（`2026-09-23T06:56:20.933Z`）而不是本地日期；卡片不显示举报人（脱敏本身是有意的，但页面上该写一句"为什么不显示是谁举报"）。
 5. Docker 镜像构建验证（本机无 Docker，`Dockerfile` 从未构建）。
 
 **必须先拿到人类授权/凭据，不要自行推进**
@@ -151,5 +157,5 @@ npm run build && npm run seed:test        # 恢复种子基线
 - [README.md](../README.md) 快速开始、两种运行模式、值得手动验证的规则
 - [status.md](./status.md) implemented / verified / not verified / release_ready 分账
 - [blockers.md](./blockers.md) A 需要你提供 / B 上线前必须补 / C 刻意留的缺口
-- [decisions.md](./decisions.md) D01–D13 与原始说明书不同的选择及原因
+- [decisions.md](./decisions.md) D01–D15 与原始说明书不同的选择及原因
 - [runbooks/local-dev.md](./runbooks/local-dev.md) · [deploy-pages.md](./runbooks/deploy-pages.md) · [deploy-api.md](./deploy-api.md)

@@ -281,12 +281,10 @@ export class DocumentRepository {
    */
   save(state: DumpedState, opts: { force?: boolean } = {}): DocKind[] {
     const groups = ALL_KINDS.map((kind) => ({ kind, rows: rowsFor(kind, state, this.stamp()) }));
-    const changed = groups.filter((g) => {
-      const sig = stableHash(g.rows.map((r) => `${r.id}\u0000${r.body}`).join('\u0001'));
-      if (!opts.force && this.signatures.get(g.kind) === sig) return false;
-      this.signatures.set(g.kind, sig);
-      return true;
-    });
+    const changed = groups.map((g) => ({
+      ...g,
+      sig: stableHash(g.rows.map((r) => `${r.id}\u0000${r.body}`).join('\u0001')),
+    })).filter((g) => opts.force || this.signatures.get(g.kind) !== g.sig);
     if (changed.length === 0) return [];
     const del = this.db.prepare('DELETE FROM documents WHERE kind = ?');
     const ins = this.db.prepare(
@@ -299,6 +297,8 @@ export class DocumentRepository {
         for (const r of g.rows) ins.run(r.kind, r.id, r.owner_user_id, r.restaurant_id, r.body, r.updated_at);
       }
       this.db.exec('COMMIT;');
+      // BEGIN 失败也不能提前缓存签名，否则重试会误以为已经写入。
+      for (const g of changed) this.signatures.set(g.kind, g.sig);
     } catch (err) {
       this.db.exec('ROLLBACK;');
       for (const g of changed) this.signatures.delete(g.kind);

@@ -85,6 +85,26 @@ export const DISCLOSURE_LABEL: Record<Disclosure, string> = {
   other: '其他关联',
 };
 
+export const REPORT_KINDS = ['closed', 'wrong_location', 'wrong_info', 'abuse'] as const;
+export type ReportKind = (typeof REPORT_KINDS)[number];
+
+export const REPORT_KIND_LABEL: Record<ReportKind, string> = {
+  closed: '闭店／搬走',
+  wrong_location: '位置有误',
+  wrong_info: '信息有误',
+  abuse: '内容违规',
+};
+
+export const REPORT_STATUSES = ['OPEN', 'IN_REVIEW', 'RESOLVED', 'DISMISSED'] as const;
+export type ReportStatus = (typeof REPORT_STATUSES)[number];
+
+export const REPORT_STATUS_LABEL: Record<ReportStatus, string> = {
+  OPEN: '待处理',
+  IN_REVIEW: '复核中',
+  RESOLVED: '已处理',
+  DISMISSED: '已驳回',
+};
+
 export const ROLES = ['user', 'editor', 'moderator', 'admin'] as const;
 export type Role = (typeof ROLES)[number];
 

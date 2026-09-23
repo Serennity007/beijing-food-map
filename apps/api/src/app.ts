@@ -1,3 +1,4 @@
+import { verifySession } from './http/session';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -123,7 +124,7 @@ export function createApp(deps: AppDeps): App {
       assertWriteAllowed(config, req, method);
 
       const body = method === 'GET' || method === 'HEAD' ? {} : await readBody(req, config.maxBodyBytes);
-      const sessionId = readSessionCookie(req);
+      const sessionId = verifySession(readSessionCookie(req), config.sessionSecret);
       const ctx: Ctx = {
         store,
         req,
@@ -134,7 +135,7 @@ export function createApp(deps: AppDeps): App {
         body,
         sessionId,
         ip: clientIp(req),
-        secureCookie: config.nodeEnv === 'production',
+        secureCookie: config.nodeEnv === 'production' || config.secureCookie === true,
         setCookie: [],
         user: () => store.requireUser(sessionId),
         uid: () => store.requireUser(sessionId).id,
@@ -166,6 +167,14 @@ export function createApp(deps: AppDeps): App {
     }
   }
 
+  let deletionTimer: ReturnType<typeof setInterval> | undefined;
+  const drainDeletions = () => {
+    if (!store.hasPendingDeletions()) return;
+    const before = store.dumpState();
+    try { if (store.processDeletionJobs()) repo.save(snapshot(store)); }
+    catch { store.loadState(before); process.stderr.write('[api] 注销任务暂未完成，将自动重试\n'); }
+  };
+
   const server = createServer((req, res) => {
     void handle(req, res);
   });
@@ -178,12 +187,16 @@ export function createApp(deps: AppDeps): App {
     store,
     repo,
     listen: async () => {
+      drainDeletions();
+      deletionTimer = setInterval(drainDeletions, 1000);
+      deletionTimer.unref();
       server.listen(config.port, config.host);
       await once(server, 'listening');
       const address = server.address();
       return typeof address === 'object' && address ? address.port : config.port;
     },
     close: async () => {
+      if (deletionTimer) clearInterval(deletionTimer);
       if (server.listening) {
         server.close();
         // 空闲的 keep-alive 连接会把 listening 套接字按住整个 keepAliveTimeout，

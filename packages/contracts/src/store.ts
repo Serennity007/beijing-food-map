@@ -14,6 +14,7 @@ import type {
   Restaurant,
   RestaurantDetail,
   ReportTicket,
+  ReportQueueEntry,
   SessionUser,
   SharedCollectionSnapshot,
   Submission,
@@ -102,6 +103,8 @@ export interface UserRec {
   roles: Role[];
   phone_masked: string;
   status: 'active' | 'deleting' | 'deleted';
+  deletion_job_id?: string;
+  deletion_completed_at?: string;
 }
 
 export interface EditorialRec {
@@ -1533,11 +1536,9 @@ export class Store {
 
   deleteCollection(collectionId: string, userId: string): { ok: true } {
     const col = this.requireCollection(collectionId, userId);
-    for (const p of this.publications.values()) {
-      if (p.collection_id === col.id && p.status === 'PUBLISHED') {
-        p.status = 'REVOKED';
-        p.revoked_at = this.stamp();
-      }
+    // 清单删除后无法再追溯快照作者，必须同时清除其所有历史快照。
+    for (const [id, p] of this.publications) {
+      if (p.collection_id === col.id) this.publications.delete(id);
     }
     this.collections.delete(col.id);
     return { ok: true };
@@ -1664,6 +1665,14 @@ export class Store {
     return ticket;
   }
 
+  reportQueue(sessionId: string | null): ReportQueueEntry[] {
+    this.requireRole(sessionId, ['moderator', 'admin']);
+    return [...this.reports]
+      .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id))
+      .slice(0, 200)
+      .map((r) => ({ ...r, restaurant_name: this.restaurants.get(r.restaurant_id)?.name ?? null }));
+  }
+
   myReports(sessionId: string | null): ReportTicket[] {
     const user = this.requireUser(sessionId);
     return this.reports.filter((r) => r.reporter_id === user.id);
@@ -1732,6 +1741,7 @@ export class Store {
   deleteAccount(sessionId: string | null): { deletion_job_id: string } {
     const user = this.requireUser(sessionId);
     user.status = 'deleting';
+    user.deletion_job_id = this.nextId('DELJOB');
     for (const v of this.visits) {
       if (v.user_id !== user.id) continue;
       v.current_revision = null;
@@ -1743,11 +1753,50 @@ export class Store {
       this.unpublishCollection(col.id, user.id);
     }
     for (const m of this.media.values()) if (m.owner_user_id === user.id && m.context === 'publication') m.context = 'private';
+    for (const r of this.restaurants.values()) if (r.editorial?.author_user_id === user.id) r.editorial = null;
     for (const [sid, s] of [...this.sessions.entries()]) if (s.user_id === user.id) this.sessions.delete(sid);
     this.recomputeAll();
     this.touch();
     this.logAudit(user.id, 'delete_account', user.id, '注销：会话撤销、分享撤销、UGC 隐藏、移出计票', null, null);
-    return { deletion_job_id: this.nextId('DELJOB') };
+    return { deletion_job_id: user.deletion_job_id };
+  }
+
+  hasPendingDeletions(): boolean {
+    for (const u of this.users.values()) if (u.status === 'deleting') return true;
+    return false;
+  }
+
+  /** 幂等清除任务。deleting 用户行就是持久化任务，进程重启后继续扫描。 */
+  processDeletionJobs(): number {
+    let count = 0;
+    for (const user of this.users.values()) {
+      if (user.status !== 'deleting') continue;
+      const uid = user.id;
+      const collections = new Set([...this.collections.values()].filter(c => c.owner_user_id === uid).map(c => c.id));
+      const media = new Set([...this.media.values()].filter(m => m.owner_user_id === uid).map(m => m.id));
+      this.visits = this.visits.filter(v => v.user_id !== uid);
+      for (const id of media) this.media.delete(id);
+      for (const [id, pub] of this.publications) if (collections.has(pub.collection_id)) this.publications.delete(id);
+      for (const id of collections) this.collections.delete(id);
+      for (const [key, item] of this.idempotency) if (item.user_id === uid) this.idempotency.delete(key);
+      for (const [sid, session] of this.sessions) if (session.user_id === uid) this.sessions.delete(sid);
+      for (const r of this.restaurants.values()) {
+        r.photo_media_ids = r.photo_media_ids.filter(id => !media.has(id));
+        if (r.editorial?.author_user_id === uid) r.editorial = null;
+      }
+      // 举报和审计保留关联 ID 以供复核，清除该账号提交的自由文本。
+      for (const report of this.reports) if (report.reporter_id === uid) report.detail = '账号已注销，说明已清除';
+      for (const entry of this.audit) if (entry.actor_id === uid) entry.reason = null;
+      user.display_name = '已注销用户';
+      user.phone_masked = '';
+      user.roles = [];
+      user.status = 'deleted';
+      user.deletion_completed_at = this.stamp();
+      this.logAudit('system', 'delete_account_completed', uid, '账号内容清除完成；保留去标识账号行及复核日志', null, null);
+      count += 1;
+    }
+    if (count) { this.recomputeAll(); this.touch(); }
+    return count;
   }
 
   restoreEndorsement(input: { restaurant_id: string; action: 'revoke' | 'verify'; reason?: string }, sessionId: string | null): Restaurant {

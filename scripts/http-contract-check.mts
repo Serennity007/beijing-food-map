@@ -125,6 +125,8 @@ step('待审期间线上清单不报错', beforeRevoke.some((c) => c.id === col.
 // 审核侧：换 M01 批准发布申请
 await api.logout();
 await api.login('M01', '888888');
+const adminReports = await api.reportQueue();
+step('reportQueue 审核员可见且带门店摘要', adminReports.length > 0 && adminReports.every(r => 'restaurant_name' in r));
 const queue = await api.moderationQueue();
 step('moderationQueue 含待审发布', queue.some((e) => e.id === pub.id), `${queue.length} 条`);
 const mod = await api.moderate({ target: pub.id, action: 'approve', expected_version: pub.generation });

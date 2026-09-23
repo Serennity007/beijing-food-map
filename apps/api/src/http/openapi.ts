@@ -643,6 +643,10 @@ function documentOperations(): Record<string, Record<string, unknown>> {
       responses: { '201': ok(ref('ReportTicket')), '400': err(400, 'VALIDATION_ERROR', 'kind 非法或说明为空'), '401': err(401, 'UNAUTHORIZED', '需要登录'), '404': err(404, 'NOT_FOUND', '门店不存在') },
     },
 
+    'GET /admin/reports': {
+      tags: ['admin'], summary: '举报复核队列（最新 200 条）',
+      responses: { '200': ok(arr(ref('ReportQueueEntry'))), '401': err(401, 'UNAUTHORIZED', '需要登录'), '403': err(403, 'FORBIDDEN', '权限不足') },
+    },
     'GET /admin/queue': {
       tags: ['admin'],
       summary: '审核队列',
@@ -773,6 +777,7 @@ export function buildOpenApi(routes: RouteDef[]): Record<string, unknown> {
         Collection: COLLECTION,
         SharedCollectionSnapshot: SHARED_SNAPSHOT,
         ReportTicket: REPORT,
+        ReportQueueEntry: { allOf: [ref('ReportTicket'), obj({ restaurant_name: { type: 'string', nullable: true } }, ['restaurant_name'])] },
         ModerationQueueEntry: QUEUE_ENTRY,
         ModerationResult: MODERATION_RESULT,
         AuditRec: AUDIT_REC,

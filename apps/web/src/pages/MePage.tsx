@@ -7,11 +7,14 @@ import { Link } from 'react-router-dom';
 import {
   ATTITUDE_LABEL,
   DISCLOSURE_LABEL,
+  REPORT_KIND_LABEL,
+  REPORT_STATUS_LABEL,
   type ContentVersionStatus,
   type ReportTicket,
   type Submission,
 } from '@qianwei/contracts';
 import { useApi } from '../data/api';
+import { clearLocalDraft } from '../data/client';
 import { StatusBlock } from '../components/ui';
 
 const STATUS_LABEL: Record<ContentVersionStatus, string> = {
@@ -32,23 +35,10 @@ const STATUS_CLASS: Record<ContentVersionStatus, string> = {
   WITHDRAWN: 'badge muted',
 };
 
-const REPORT_KIND_LABEL: Record<ReportTicket['kind'], string> = {
-  closed: '闭店／搬走',
-  wrong_location: '位置有误',
-  wrong_info: '信息有误',
-  abuse: '内容违规',
-};
-
-const REPORT_STATUS_LABEL: Record<ReportTicket['status'], string> = {
-  OPEN: '待处理',
-  IN_REVIEW: '复核中',
-  RESOLVED: '已处理',
-  DISMISSED: '已驳回',
-};
-
 const DELETE_TEXT =
-  '注销后：本机会话立即撤销，本人的公开分享立即撤销，投稿与资料隐藏，相关票数即时重算；' +
-  '后台再按保留策略异步删除或匿名化。此操作不可自助撤销，确定继续？';
+  '注销后：立即撤销本机会话与本人公开分享，隐藏投稿与资料，相关票数即时重算；' +
+  '随后自动清除账号的投稿、图片、清单与分享快照，并把显示名与电话清空。' +
+  '去标识的账号 ID、举报状态与审计记录会保留供复核。此操作不可自助撤销，确定继续？';
 
 function readFailure(e: unknown): { code: string | null; message: string } {
   if (typeof e === 'object' && e !== null) {
@@ -96,6 +86,7 @@ export function MePage() {
     try {
       const r = await api.deleteAccount();
       setJob(r.deletion_job_id);
+      if (user) clearLocalDraft(user.id);
       await signOut();
       setSubs(null);
       setReports(null);
@@ -125,7 +116,7 @@ export function MePage() {
             <div className="alert ok">
               <div>
                 <strong>注销请求已受理</strong>
-                <p style={{ margin: '4px 0 8px' }}>删除任务编号 {job}，后台会按保留策略异步执行；票数已按撤回处理重算。</p>
+                <p style={{ margin: '4px 0 8px' }}>删除任务编号 {job}，后台会自动继续完成清除；票数已按撤回处理重算。</p>
                 <Link className="btn small" to="/map">
                   回到地图
                 </Link>
@@ -277,14 +268,19 @@ export function MePage() {
       <section className="panel">
         <h3>注销账号</h3>
         <p className="hint">
-          会话立即撤销、本人的公开分享立即撤销、投稿与资料隐藏、票数即时重算，后台按保留策略异步删除或匿名化。
+          会话与本人公开分享立即撤销，投稿与资料隐藏、票数即时重算；随后自动清除投稿、图片、清单与分享快照，并清空显示名与电话。
         </p>
         <div className="btn-row">
           <button className="btn danger" type="button" disabled={busy} onClick={() => void destroy()}>
             {busy ? '处理中…' : '申请注销账号'}
           </button>
         </div>
-        <p className="hint">{api.mode === 'static' ? '当前为静态演示：注销只影响本机浏览器保存的数据。' : '注销请求会发送到后端并生成异步删除任务。'}</p>
+        <p className="hint">
+          {api.mode === 'static'
+            ? '当前为静态演示：注销只清除本机浏览器保存的数据。'
+            : '注销请求会发送到后端并登记清除任务，服务重启后继续未完成的部分。'}
+          本机的投稿草稿会立即删除。
+        </p>
       </section>
     </div>
   );

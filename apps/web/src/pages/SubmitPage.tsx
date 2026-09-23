@@ -18,10 +18,9 @@ import {
   type Submission,
 } from '@qianwei/contracts';
 import { useApi } from '../data/api';
-import type { SearchResult } from '../data/client';
+import { LS_DRAFT_PREFIX, type SearchResult } from '../data/client';
 import { StatusBlock } from '../components/ui';
 
-const DRAFT_PREFIX = 'qianwei.draft.';
 const MAX_MEDIA = 6;
 const FIELD_KEYS: readonly string[] = ['restaurant_id', 'visited_date', 'dish_names', 'reason', 'media_ids', 'disclosure'];
 
@@ -142,7 +141,7 @@ export function SubmitPage() {
   const prefilledFor = useRef<string | null>(null);
   if (idemRef.current === null) idemRef.current = newIdempotencyKey();
 
-  const draftKey = `${DRAFT_PREFIX}${user?.id ?? 'anon'}`;
+  const draftKey = `${LS_DRAFT_PREFIX}${user?.id ?? 'anon'}`;
 
   useEffect(() => {
     let alive = true;

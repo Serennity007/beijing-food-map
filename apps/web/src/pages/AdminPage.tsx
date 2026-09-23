@@ -4,11 +4,14 @@ import { Link } from 'react-router-dom';
 import {
   BUSINESS_STATUSES,
   PLACE_STATUSES,
+  REPORT_KIND_LABEL,
+  REPORT_STATUS_LABEL,
   RISK_STATUSES,
   RULE_VERSION,
   SCORING_WINDOW_DAYS,
   addDays,
   type AuditRec,
+  type ReportQueueEntry,
   type BusinessStatus,
   type EndorsementStatus,
   type ModerationQueueEntry,
@@ -22,10 +25,11 @@ import { ClientError, type PatchStatusInput } from '../data/client';
 import { StatusBlock } from '../components/ui';
 
 type ModerateAction = 'approve' | 'reject' | 'hide';
-type TabKey = 'queue' | 'status' | 'merge' | 'endorsement' | 'audit';
+type TabKey = 'reports' | 'queue' | 'status' | 'merge' | 'endorsement' | 'audit';
 
 const TABS: Array<{ key: TabKey; label: string; adminOnly?: boolean }> = [
   { key: 'queue', label: '待审队列' },
+  { key: 'reports', label: '举报复核' },
   { key: 'status', label: '门店状态' },
   { key: 'merge', label: '合并', adminOnly: true },
   { key: 'endorsement', label: '编辑背书' },
@@ -301,6 +305,7 @@ export function AdminPage() {
       {active === 'endorsement' && (
         <EndorsementPanel detail={detail} busy={detailBusy} error={detailError} onPick={(id) => void loadDetail(id)} onReload={(id) => loadDetail(id)} />
       )}
+      {active === 'reports' && <ReportsPanel onPick={(id) => { void loadDetail(id); setTab('status'); }} />}
       {active === 'audit' && <AuditPanel />}
 
       <p className="hint">
@@ -1150,4 +1155,32 @@ function AuditPanel() {
       )}
     </div>
   );
+}
+
+function ReportsPanel({ onPick }: { onPick: (id: string) => void }) {
+  const { api } = useApi();
+  const [rows, setRows] = useState<ReportQueueEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try { setRows(await api.reportQueue()); }
+    catch (e) { setError(toFailure(e).message); }
+    finally { setBusy(false); }
+  }, [api]);
+  useEffect(() => { void load(); }, [load]);
+  return <div className="panel">
+    <div className="page-head"><h2>举报复核</h2><button className="btn small ghost" disabled={busy} onClick={() => void load()}>刷新</button></div>
+    <p className="hint">最新 200 条举报。当前举报针对门店，未关联具体反馈；请先核实说明，再进入门店状态处理。工单状态流转在下一阶段补齐。</p>
+    {error && <Alert kind="bad">{error}</Alert>}
+    {!rows && busy && <StatusBlock kind="loading" message="举报读取中…" />}
+    {rows?.length === 0 && <StatusBlock kind="empty" message="暂无举报。" />}
+    {rows?.map(r => <article className="card" key={r.id}>
+      <h3>{r.restaurant_name ?? '门店信息不可用'} · {REPORT_KIND_LABEL[r.kind]}</h3>
+      <p>{r.detail}</p><p className="hint">{r.created_at} · {REPORT_STATUS_LABEL[r.status]} · {r.id}</p>
+      {r.result_note && <p>{r.result_note}</p>}
+      <button className="btn small" onClick={() => onPick(r.restaurant_id)}>核验门店状态</button>
+    </article>)}
+  </div>;
 }

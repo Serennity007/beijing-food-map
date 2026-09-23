@@ -165,6 +165,10 @@ export class Http implements ApiClient {
     return this.req<C.ReportTicket>('/reports', { method: 'POST' }, input);
   }
 
+  reportQueue() {
+    return this.req<C.ReportQueueEntry[]>('/admin/reports');
+  }
+
   myReports() {
     return this.req<C.ReportTicket[]>('/me/reports');
   }

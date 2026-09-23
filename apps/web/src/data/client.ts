@@ -15,6 +15,7 @@ import {
   type ModerationQueueEntry,
   type Page,
   type ReportTicket,
+  type ReportQueueEntry,
   type Restaurant,
   type RestaurantDetail,
   type SessionUser,
@@ -89,6 +90,7 @@ export interface ApiClient {
   unpublish(collectionId: string): Promise<Collection>;
   sharedSnapshot(token: string): Promise<SharedCollectionSnapshot>;
   createReport(input: { restaurant_id: string; kind: ReportTicket['kind']; detail: string }): Promise<ReportTicket>;
+  reportQueue(): Promise<ReportQueueEntry[]>;
   myReports(): Promise<ReportTicket[]>;
   auditLog(): Promise<AuditRec[]>;
   moderationQueue(): Promise<ModerationQueueEntry[]>;
@@ -113,6 +115,16 @@ export class ClientError extends Error {
 
 const LS_SESSION = 'qianwei.session';
 const LS_STATE = 'qianwei.state';
+export const LS_DRAFT_PREFIX = 'qianwei.draft.';
+
+/** 投稿草稿是账号内容，只存在这台浏览器里；注销时随账号数据一起清掉。 */
+export function clearLocalDraft(userId: string): void {
+  try {
+    localStorage.removeItem(`${LS_DRAFT_PREFIX}${userId}`);
+  } catch {
+    /* 隐私模式下 localStorage 不可写 */
+  }
+}
 
 /** 静态部署：浏览器内跑同一份领域引擎，状态存 localStorage。 */
 export class StaticClient implements ApiClient {
@@ -130,6 +142,7 @@ export class StaticClient implements ApiClient {
         safeRemove(LS_STATE);
       }
     }
+    if (this.store.processDeletionJobs()) this.persist();
     this.session = safeGet(LS_SESSION);
     if (this.session && !this.store.sessions.has(this.session)) this.session = null;
   }
@@ -284,6 +297,10 @@ export class StaticClient implements ApiClient {
     return r;
   }
 
+  async reportQueue() {
+    return this.store.reportQueue(this.sid());
+  }
+
   async myReports() {
     return this.store.myReports(this.sid());
   }
@@ -327,6 +344,7 @@ export class StaticClient implements ApiClient {
 
   async deleteAccount() {
     const r = this.store.deleteAccount(this.sid());
+    setTimeout(() => { this.store.processDeletionJobs(); this.persist(); }, 0);
     this.session = null;
     localStorage.removeItem(LS_SESSION);
     this.persist();

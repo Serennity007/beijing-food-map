@@ -23,13 +23,18 @@ Pages 上的演示不依赖本服务：静态模式在浏览器里跑同一套�
 | `SQLITE_PATH` | `./data/demo.sqlite` | 目录不存在会自动创建；运行用户必须可写（WAL 需要同目录写权限） |
 | `ALLOWED_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | 逗号分隔、只到 `scheme://host`、**不允许 `*`**（会话是 Cookie，跨站写必须显式放行） |
 | `LOGIN_RATE_LIMIT_PER_MIN` | `10` | 按 `IP + 账号` 的进程内滑动窗口 |
+| `SESSION_SECRET` | 空 | 会话 Cookie 的 HMAC 密钥。**留空 = 每次启动随机临时密钥，重启后所有旧 Cookie 失效、所有人重新登录**；填固定值须 ≥32 字符（`NODE_ENV=production` 下必填）。轮换密钥等同于踢掉全部在线会话 |
+| `SESSION_TTL_SECONDS` | `2592000` | 会话有效期，合法区间 60—2592000；签进 Cookie 载荷里，服务端按签名判定过期 |
+| `COOKIE_SECURE` | 空 | `true`/`false`，**可以独立于 `NODE_ENV` 打开**。demo 必须以 development 跑（种子护栏），所以在 https 域名上部署时要显式设成 `true`，否则 Cookie 不带 `Secure`；production 下强制为真且设 `false` 会启动失败 |
 
-本地跑：
+本地跑（后端**不读 `.env` 文件**，只读真实环境变量 —— 复制一份 `.env` 不会生效）：
 
 ```bash
-cd apps/api && cp .env.example .env   # 填 SQLITE_PATH / ALLOWED_ORIGINS
-npm run dev:api                        # 或 npm run start:api
+cd apps/api                            # 相对路径按进程 cwd 解析；这里已经是 apps/api
+ALLOWED_ORIGINS=http://localhost:5173 npm run dev:api   # 或 npm run start:api，SQLITE_PATH 用默认的 ./data/demo.sqlite
 ```
+
+Git Bash 里别用 `SQLITE_PATH="$PWD/..."`：`$PWD` 展开成 `/c/Users/...`，Node 在 Windows 上会把它当盘相对路径解析到别处（表现为"库是空的、种子每次都重载"）。要么给 `C:/...` 风格的绝对路径，要么用相对路径。
 
 镜像（有 Docker 的环境）：
 
@@ -45,7 +50,8 @@ docker run --rm -p 8080:8080 -e PORT=8080 -e HOST=0.0.0.0 \
 
 1. 后端公网 Origin 加进前端构建变量 `VITE_API_BASE`（只写 `scheme://host`，`api.tsx` 会归一化为 `<origin>/api/v1`），重新构建前端。
 2. 前端站点 Origin（Pages 是 `https://<用户名>.github.io`，只到域名不含仓库路径）加进 `ALLOWED_ORIGINS`，否则浏览器会拦掉带凭据的跨域写。
-3. 会话 Cookie 是 `qw_session`，`HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000`；`Secure` 只在 `NODE_ENV=production` 时附加。也就是说 demo 部署（development）拿到的 Cookie 不带 `Secure` —— 挂 https 域名仍然走加密传输，但这一点在真实上线前必须连同签名会话一起改掉（见 `../blockers.md`）。
+3. 会话 Cookie 是 `qw_session`，值为 `session_id.过期秒.HMAC-SHA256` —— 改 Cookie 里的任何一段都会被判未登录，过期由签名里的时间戳决定（`SESSION_TTL_SECONDS`），`Max-Age` 与它同步。属性是 `HttpOnly; SameSite=Lax; Path=/`，`Secure` 由 `COOKIE_SECURE=true` 或 `NODE_ENV=production` 决定：**demo 以 development 跑，挂 https 时记得显式开 `COOKIE_SECURE`**。密钥留空时重启即全员掉登录，要保住登录态就注入固定 `SESSION_SECRET`（进平台的 secret 管理，不要写进 `render.yaml`）。
+4. 重新部署不需要为注销做善后：`status='deleting'` 的账号行本身就是待办任务，新进程启动时会先排空一轮（之后每秒一轮），没清完的继续清。反过来说，**别在注销还没跑完时直接删持久卷** —— 那等于把清除任务连同数据一起丢掉，虽然演示数据本来就没有保留价值。
 
 ## 持久化的现实约束
 
@@ -66,10 +72,10 @@ curl -s "https://<后端>/api/v1/map/items?west=115.42&south=39.44&east=117.52&n
 
 `/health/live`、`/health/ready`、`/openapi.json` 同时接受根路径和 `/api/v1` 前缀两种写法（部署探针用）。浏览器侧再确认：登录拿得到 `Set-Cookie`、`/admin` 队列非空、连续 11 次错误登录返回 429。
 
-回归对账（先 `npm run dev:api` 把本地后端起在 `127.0.0.1:8787`，脚本打的是已在监听的实例）：
+回归对账（先把本地后端起在 `127.0.0.1:8787`，脚本打的是已在监听的实例；建议按 [local-dev.md](./local-dev.md) 把库指到独立文件）：
 
 ```bash
-npx tsx scripts/http-contract-check.mts   # 28 项断言，覆盖到分享撤回与审计日志
+npx tsx scripts/http-contract-check.mts   # 本轮 29 项断言，覆盖到分享撤回、举报队列与审计日志
 ```
 
 ## 下线

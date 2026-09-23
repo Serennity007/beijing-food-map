@@ -1,6 +1,6 @@
 /**
  * 配置入口：只读 PORT / HOST / NODE_ENV / SQLITE_PATH / ALLOWED_ORIGINS
- * （外加可选的 LOGIN_RATE_LIMIT_PER_MIN）。
+ * （外加登录限流、SESSION_SECRET、SESSION_TTL_SECONDS、COOKIE_SECURE）。
  * 任何校验失败只报"变量名"，绝不把变量值写进日志或响应。
  */
 
@@ -14,6 +14,9 @@ export interface AppConfig {
   allowedOrigins: string[];
   loginRateLimit: { max: number; windowMs: number };
   maxBodyBytes: number;
+  sessionSecret?: string;
+  sessionTtlSeconds?: number;
+  secureCookie?: boolean;
 }
 
 export const API_BASE_PATH = '/api/v1';
@@ -78,7 +81,17 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     if (max < 1 || max > 1000) throw new ConfigError('LOGIN_RATE_LIMIT_PER_MIN 必须在 1—1000 之间');
   }
 
+  const sessionSecret = trim(env.SESSION_SECRET);
+  if ((sessionSecret && sessionSecret.length < 32) || (nodeEnv === 'production' && !sessionSecret)) throw new ConfigError('SESSION_SECRET 至少 32 个字符，生产环境必填');
+  const secure = trim(env.COOKIE_SECURE);
+  if (secure && !['true', 'false'].includes(secure)) throw new ConfigError('COOKIE_SECURE 必须为 true 或 false');
+  if (nodeEnv === 'production' && secure === 'false') throw new ConfigError('生产环境必须开启 COOKIE_SECURE');
+  const sessionTtlSeconds = parseIntEnv(trim(env.SESSION_TTL_SECONDS) || '2592000', 'SESSION_TTL_SECONDS');
+  if (sessionTtlSeconds < 60 || sessionTtlSeconds > 2592000) throw new ConfigError('SESSION_TTL_SECONDS 必须为 60—2592000');
   return {
+    sessionSecret: sessionSecret || undefined,
+    sessionTtlSeconds,
+    secureCookie: nodeEnv === 'production' || secure === 'true',
     nodeEnv,
     port,
     host,
@@ -89,7 +102,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   };
 }
 
-/** 只有 production 才给 Cookie 加 Secure；demo 部署也走非 production，见 runbook。 */
+/** 是否生产运行模式；Cookie Secure 还可以由 COOKIE_SECURE 独立开启。 */
 export function isProduction(cfg: AppConfig): boolean {
   return cfg.nodeEnv === 'production';
 }

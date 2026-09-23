@@ -4,11 +4,12 @@ import {
   DISCLOSURES,
   ApiError,
   PLACE_STATUSES,
+  REPORT_KINDS,
   RISK_STATUSES,
   Store,
   type CollectionItemRecord,
   type Disclosure,
-  type ReportTicket,
+  type ReportKind,
   type Restaurant,
   type SessionUser,
   type SystemCollectionKind,
@@ -17,11 +18,11 @@ import type { AppConfig } from '../env';
 import { Router, type Ctx, type RouteDef } from './router';
 import { assertId, parseMapQuery } from './query';
 import { RateLimiter } from './security';
+import { signSession } from './session';
 import { sessionCookie, sendBinary } from './responses';
 import { bBool, bDate, bEnum, bNumRaw, bStr, bStrArray, need } from './body';
 
 const MODERATION_ACTIONS = ['approve', 'reject', 'hide'] as const;
-const REPORT_KINDS: readonly ReportTicket['kind'][] = ['closed', 'wrong_location', 'wrong_info', 'abuse'];
 const SYSTEM_KINDS: readonly SystemCollectionKind[] = ['want', 'visited', 'private_stash'];
 const ENDORSEMENT_ACTIONS = ['verify', 'revoke'] as const;
 
@@ -91,7 +92,7 @@ function collectionCopy<T extends { items: unknown[] }>(col: T): T {
 }
 
 export function buildRouter(svc: Services): Router {
-  const { store } = svc;
+  const { store, cfg } = svc;
   const router = new Router();
   const routes: RouteDef[] = [
     // ------------------------------------------------------------ 运行状态
@@ -190,7 +191,7 @@ export function buildRouter(svc: Services): Router {
         const budget = svc.logins.take(`${ctx.ip}|${userId}`);
         if (!budget.ok) throw new ApiError('RATE_LIMITED', '登录尝试过于频繁，请稍后再试', 429);
         const r = store.login(userId, code);
-        ctx.setCookie.push(sessionCookie(r.session_id, { secure: ctx.secureCookie }));
+        ctx.setCookie.push(sessionCookie(signSession(r.session_id, cfg.sessionSecret, cfg.sessionTtlSeconds ?? 2592000), { secure: ctx.secureCookie, ttl: cfg.sessionTtlSeconds ?? 2592000 }));
         return { user: r.user };
       },
     },
@@ -384,7 +385,7 @@ export function buildRouter(svc: Services): Router {
         store.createReport(
           {
             restaurant_id: assertId(need(bStr(ctx.body, 'restaurant_id', { required: true, max: 16 }), 'restaurant_id'), 'restaurant_id'),
-            kind: need(bEnum<ReportTicket['kind']>(ctx.body, 'kind', REPORT_KINDS, { required: true }), 'kind'),
+            kind: need(bEnum<ReportKind>(ctx.body, 'kind', REPORT_KINDS, { required: true }), 'kind'),
             detail: bStr(ctx.body, 'detail', { required: true, max: 500 }) ?? '',
           },
           ctx.sessionId,
@@ -392,6 +393,7 @@ export function buildRouter(svc: Services): Router {
     },
 
     // ------------------------------------------------------------ 后台
+    { method: 'GET', path: '/admin/reports', summary: '举报复核队列', handler: (ctx) => store.reportQueue(ctx.sessionId) },
     { method: 'GET', path: '/admin/queue', summary: '审核队列（作者不能自审）', handler: (ctx) => store.moderationQueue(ctx.sessionId) },
     {
       method: 'GET',

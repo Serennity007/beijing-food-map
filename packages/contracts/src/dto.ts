@@ -10,6 +10,8 @@ import type {
   MapView,
   PlaceVerificationStatus,
   PublicationStatus,
+  ReportKind,
+  ReportStatus,
   RiskStatus,
   Role,
 } from './enums';
@@ -280,12 +282,16 @@ export interface SessionUser {
 export interface ReportTicket {
   id: string;
   restaurant_id: string;
-  kind: 'closed' | 'wrong_location' | 'wrong_info' | 'abuse';
+  kind: ReportKind;
   detail: string;
   reporter_id: string;
-  status: 'OPEN' | 'IN_REVIEW' | 'RESOLVED' | 'DISMISSED';
+  status: ReportStatus;
   created_at: string;
   result_note: string | null;
+}
+
+export interface ReportQueueEntry extends ReportTicket {
+  restaurant_name: string | null;
 }
 
 export interface ModerationQueueEntry {

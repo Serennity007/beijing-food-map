@@ -116,17 +116,18 @@ export function readSessionCookie(req: IncomingMessage): string | null {
     const eq = part.indexOf('=');
     if (eq < 0) continue;
     if (part.slice(0, eq).trim() !== 'qw_session') continue;
-    const value = decodeURIComponent(part.slice(eq + 1).trim());
+    let value: string;
+    try { value = decodeURIComponent(part.slice(eq + 1).trim()); } catch { return null; }
     // 只接受会话 id 的形状，避免任何注入或超长值
-    return /^[A-Za-z0-9:_-]{1,128}$/.test(value) ? value : null;
+    return /^[A-Za-z0-9:_.-]{1,256}$/.test(value) ? value : null;
   }
   return null;
 }
 
-export function sessionCookie(value: string, opts: { secure: boolean; clear?: boolean }): string {
+export function sessionCookie(value: string, opts: { secure: boolean; clear?: boolean; ttl?: number }): string {
   const attrs = ['HttpOnly', 'SameSite=Lax', 'Path=/'];
   if (opts.secure) attrs.push('Secure');
-  attrs.push(opts.clear ? 'Max-Age=0' : 'Max-Age=2592000');
+  attrs.push(opts.clear ? 'Max-Age=0' : `Max-Age=${opts.ttl ?? 2592000}`);
   if (opts.clear) attrs.push('Expires=Thu, 01 Jan 1970 00:00:00 GMT');
   return `qw_session=${opts.clear ? '' : encodeURIComponent(value)}; ${attrs.join('; ')}`;
 }
