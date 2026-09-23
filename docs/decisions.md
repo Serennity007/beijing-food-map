@@ -38,5 +38,5 @@ GitHub Pages 不能运行 NestJS/Postgres/SQLite 进程。用户选择的“GitH
 ## D12 Node 版本与工具链固定
 CI（`setup-node`）、`Dockerfile` 与本机验证统一到 Node 24。`engines` 仍声明 `>=22.5`（`node:sqlite` 的引入版本），但 22.x 线上 `node:sqlite` 的开关行为未在本仓库验证过，所以不拿 CI 去赌。
 
-## D10 测试数据与生产的隔离
-`seed:test` 在 `NODE_ENV=production` 下拒绝执行；发布检查脚本待补（见 blockers）。
+## D13 测试数据与生产的隔离
+双层拦截并且有测试盯着（`store.test.ts` 的 DEMO-01）：`seed-cli` 在 `NODE_ENV=production` 下直接拒绝执行，`Store` 构造时 `env === 'production'` 抛 `RuleViolation`，演示登录入口也返回 403。缺的是"发布前扫一遍凭据与测试标记"的独立检查脚本（blockers 里没有单列，属可选加固）。

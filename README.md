@@ -54,7 +54,7 @@ apps/web/             # Vite + React 19 SPA（含 /admin 路由）
 apps/api/             # 演示后端：node:http + SQLite 持久化 + OpenAPI
 database/migrations/  # SQL 迁移（启动时幂等应用）
 scripts/              # 统一开发入口 + HTTP 契约自检
-docs/                 # decisions / status / blockers / runbooks
+docs/                 # handover / decisions / status / blockers / runbooks
 ```
 
 ## 部署
@@ -65,4 +65,5 @@ docs/                 # decisions / status / blockers / runbooks
 
 ## 当前状态
 
+接手改动请先读 `docs/handover.md`（现状口径、规则在哪、改一处的连带清单、已踩过的坑、验收门禁）。
 见 `docs/status.md`（implemented / verified / 未 verified / release_ready 分列）与 `docs/blockers.md`（真实地图 Key、短信、云账号授权、真机视觉验证等外部依赖，以及刻意留下的缺口）。
