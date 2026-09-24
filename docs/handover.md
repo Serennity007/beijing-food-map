@@ -44,7 +44,7 @@ packages/contracts/src/
   rules.ts     180 天窗口、社区计票、资格谓词、名称规范化与重复候选匹配等纯函数
   geo.ts       网格聚合分档 cellDegForZoom、GCJ-02 ↔ WGS84、近似直线距离
   store.ts     Store：读接口收 sessionId，写接口收 sessionId + expected_version
-  seed.ts      24 门店 / 9 账号 / 71 条反馈，全是合成，is_test_data=true
+  seed.ts      42 门店 / 9 账号 / 113 条实吃记录，全是合成，is_test_data=true
   photos.ts    内联合成 SVG data URI（代替对象存储）
 packages/contracts/test/
   store.test.ts       领域与谓词（61）
@@ -93,7 +93,7 @@ API 路由（全部在 `/api/v1` 下）：`/health/live` `/health/ready` `/today
 | 一个 DTO 字段 | `dto.ts` → `openapi.ts`（`nullable` 要写清，见 `submitted_at` 的处理）→ `http.ts` 与 `client.ts` 两个实现 → 页面 |
 | **新增/改一条 API 路由** | `handlers.ts` 路由表 → `openapi.ts` 条目（**"openapi 覆盖全部路由"测试会红**）→ `http.ts` 方法 → `StaticClient` 同名方法 → 页面 → `scripts/http-contract-check.mts` 断言 |
 | 校验规则 | `query.ts`/`body.ts`（服务端）与引擎内校验**两处都要**，否则静态模式与后端模式行为不同 |
-| 种子数据 | `seed.ts` → 基线计数（`collection=28 media=117 meta=1 publication=1 report=2 restaurant=24 user=9 visit=71`）→ 依赖这些 ID 的测试与 `status.md` 的 verified 表 |
+| 种子数据 | `seed.ts` → 基线计数（`collection=28 media=195 meta=1 publication=1 report=2 restaurant=42 user=9 visit=113`）→ 依赖这些 ID 的测试与 `status.md` 的 verified 表 |
 | 地图渲染 | 两个适配器都要过（`maplibre-adapter.ts` / `amap-adapter.ts`），共用 `MapAdapter` 接口（`features/map/types.ts`），纯函数测试在 `map.test.ts` |
 | 迁移 | `database/migrations/*.sql`（启动时幂等应用），同时改 `repository.ts` 的文档结构 |
 | **新增一个实体**（例：本轮的候选） | `store.ts` 的集合 + `dumpState`/`loadState` → `repository.ts` 的 `ENTITY_KINDS`/`DumpedState`/`rowsFor`/`parseDump`/`load` 分支（文档表通用形状，**不需要新迁移**）→ `dto.ts` → `openapi.ts` 的 schema → `client.ts` 接口 + `StaticClient` + `http.ts` → 页面 → 契约自检 → `status.md` 的 verified 表 |

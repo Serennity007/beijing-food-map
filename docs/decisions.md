@@ -27,7 +27,7 @@ GitHub Pages 不能运行 NestJS/Postgres/SQLite 进程。用户选择的“GitH
 没有短信服务，固定码 `888888` 只存在于 `demo`/`development` 环境；`Store` 在 `env === 'production'` 时直接拒绝该入口和测试种子。真实上线前替换为服务端短信验证码（限频、短时、单次使用）。
 
 ## D09 数据边界
-24 家门店全部店名前缀“测试·”、地址写明“演示地址，非真实门店位置”、`is_test_data=true`，每张合成反馈的理由文本里都写明非真实探店。没有任何一条真实餐馆、真实探店或真实票数被编造。种子数据的用途是让每条业务规则都有可复现的正反例。
+42 家门店全部店名前缀“测试·”、地址写明“演示地址，非真实门店位置”、`is_test_data=true`，每张合成反馈的理由文本里都写明非真实探店。没有任何一条真实餐馆、真实探店或真实票数被编造。种子数据的用途是让每条业务规则都有可复现的正反例。
 
 ## D10 读接口的入参统一是 sessionId，不是 userId
 `Store` 的只读接口一律收 `sessionId`，内部用 `userIdOfSession()` 换算，匿名/失效会话/已注销都得到 `null` 而不抛 401。此前 `detail()` 直接把 sessionId 当 userId 用，导致 `my_current_feedback` 恒为 null —— 静态模式和 HTTP 模式同时中招且都不报错。教训：身份换算只能有一处，且必须被契约测试覆盖（`scripts/http-contract-check.mts` 现在盯着这条）。
