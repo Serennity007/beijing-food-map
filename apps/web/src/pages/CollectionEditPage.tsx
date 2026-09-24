@@ -1,7 +1,7 @@
 /** 清单编辑：顺序与笔记 + 显式发布为不可变快照 + 撤回。规则全部由接口判定，页面不推算版本也不补数据。 */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { Collection, CollectionItemRecord, PublicationStatus, Restaurant } from '@qianwei/contracts';
+import { shanghaiDay, type Collection, type CollectionItemRecord, type PublicationStatus, type Restaurant } from '@qianwei/contracts';
 import { useApi } from '../data/api';
 import { CuisineBadges, StatusBlock } from '../components/ui';
 
@@ -401,7 +401,7 @@ export function CollectionEditPage() {
                     {shop ? <CuisineBadges cuisines={shop.cuisines} /> : <span className="badge warn">门店详情读取失败</span>}
                   </div>
                   <p className="card-meta">
-                    position {it.position} · 加入于 {it.added_at.slice(0, 10)}
+                    position {it.position} · 加入于 {shanghaiDay(it.added_at)}
                     {!shop && ' · 名称与链接需等门店记录可读'}
                   </p>
                   {shop && (

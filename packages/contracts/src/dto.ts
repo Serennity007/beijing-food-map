@@ -290,11 +290,20 @@ export interface ReportTicket {
   reporter_id: string;
   status: ReportStatus;
   created_at: string;
+  /** 处理结果说明：由处置动作写入，不是提交时给定的固定文案。 */
   result_note: string | null;
+  /** 可以精确到某条反馈版本（形如 V0092#v1）；只针对门店时为 null。 */
+  feedback_target: string | null;
+  /** 乐观锁：处置要带 expected_version。 */
+  version: number;
+  handled_by: string | null;
+  handled_at: string | null;
 }
 
 export interface ReportQueueEntry extends ReportTicket {
   restaurant_name: string | null;
+  /** 审核队列用：举报人本人不能处置自己的举报（与"作者不能自审"同源）。 */
+  is_reporter_self: boolean;
 }
 
 export interface ModerationQueueEntry {

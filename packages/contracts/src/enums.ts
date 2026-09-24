@@ -141,6 +141,16 @@ export const REPORT_STATUS_LABEL: Record<ReportStatus, string> = {
   DISMISSED: '已驳回',
 };
 
+/** 举报工单的处置动作。结案与驳回都必须留理由。 */
+export const REPORT_ACTIONS = ['start', 'resolve', 'dismiss'] as const;
+export type ReportAction = (typeof REPORT_ACTIONS)[number];
+
+export const REPORT_ACTION_LABEL: Record<ReportAction, string> = {
+  start: '开始复核',
+  resolve: '确认并结案',
+  dismiss: '驳回',
+};
+
 export const ROLES = ['user', 'editor', 'moderator', 'admin'] as const;
 export type Role = (typeof ROLES)[number];
 

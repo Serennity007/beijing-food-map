@@ -34,6 +34,38 @@ export function shanghaiToday(clock: Clock = systemClock): string {
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
+const SHANGHAI_STAMP = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Shanghai',
+  hourCycle: 'h23',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+function shanghaiParts(iso: string): { date: string; time: string } | null {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return null;
+  const parts = SHANGHAI_STAMP.formatToParts(new Date(ms));
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '00';
+  return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour')}:${get('minute')}` };
+}
+
+/**
+ * 服务端 UTC 时间戳 → Asia/Shanghai 日历日。
+ * 不能直接截字符串前 10 位：UTC 的 16:00 之后，上海已经是次日，列表会显示成"昨天提交"。
+ */
+export function shanghaiDay(iso: string): string {
+  return shanghaiParts(iso)?.date ?? iso.slice(0, 10);
+}
+
+/** 服务端 UTC 时间戳 → Asia/Shanghai「日期 时:分」，后台队列要能比先后。 */
+export function shanghaiDateTime(iso: string): string {
+  const p = shanghaiParts(iso);
+  return p ? `${p.date} ${p.time}` : iso.slice(0, 16).replace('T', ' ');
+}
+
 function fromYmd(s: string): { y: number; m: number; d: number } {
   const [y, m, d] = s.split('-').map(Number);
   return { y: y ?? 0, m: m ?? 0, d: d ?? 0 };
@@ -238,6 +270,28 @@ export const CANDIDATE_TRANSITIONS: TransitionRule[] = [
   { from: 'PENDING', to: 'MERGED', actor: 'moderator' },
   { from: 'REJECTED', to: 'PENDING', actor: 'author' },
 ];
+
+/**
+ * 举报工单状态机。结案/驳回是终态： reopened 会让学生式重复举报绕过限频，
+ * 而且 REC-07 要求工单与门店的闭店/风险结论分开，所以这里没有任何回到 OPEN 的边。
+ */
+export const REPORT_TRANSITIONS: TransitionRule[] = [
+  { from: 'OPEN', to: 'IN_REVIEW', actor: 'moderator' },
+  { from: 'OPEN', to: 'RESOLVED', actor: 'moderator' },
+  { from: 'OPEN', to: 'DISMISSED', actor: 'moderator' },
+  { from: 'IN_REVIEW', to: 'RESOLVED', actor: 'moderator' },
+  { from: 'IN_REVIEW', to: 'DISMISSED', actor: 'moderator' },
+];
+
+export const REPORT_ACTION_TARGET: Record<'start' | 'resolve' | 'dismiss', string> = {
+  start: 'IN_REVIEW',
+  resolve: 'RESOLVED',
+  dismiss: 'DISMISSED',
+};
+
+export function canTransitionReport(from: string, to: string, actor: TransitionRule['actor']): boolean {
+  return REPORT_TRANSITIONS.some((r) => r.from === from && r.to === to && r.actor === actor);
+}
 
 export function canTransitionCandidate(from: string, to: string, actor: TransitionRule['actor']): boolean {
   return CANDIDATE_TRANSITIONS.some((r) => r.from === from && r.to === to && r.actor === actor);

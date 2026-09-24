@@ -12,6 +12,7 @@ import {
   PLACE_STATUS_LABEL,
   REPORT_KIND_LABEL,
   REPORT_STATUS_LABEL,
+  shanghaiDay,
   type CandidateFacts,
   type ContentVersionStatus,
   type ReportTicket,
@@ -250,7 +251,7 @@ export function MePage() {
                 <p className="card-dishes">{s.dish_names.length ? `推荐菜：${s.dish_names.join('、')}` : '未填写推荐菜'}</p>
                 <p style={{ margin: '4px 0' }}>{s.reason}</p>
                 <p className="hint" style={{ margin: 0 }}>
-                  {DISCLOSURE_LABEL[s.disclosure]} · 图片 {s.media_ids.length} 张 · 投稿号 {s.id} · 提交 {s.created_at.slice(0, 10)}
+                  {DISCLOSURE_LABEL[s.disclosure]} · 图片 {s.media_ids.length} 张 · 投稿号 {s.id} · 提交 {shanghaiDay(s.created_at)}
                 </p>
                 {s.reject_reason && <p className="hint" style={{ margin: '4px 0 0' }}>未通过原因：{s.reject_reason}</p>}
                 {s.pending_verify_reason && (
@@ -285,7 +286,7 @@ export function MePage() {
                   <span className="badge muted">工单 {r.id}</span>
                 </div>
                 <p className="card-dishes">
-                  <Link to={`/restaurants/${r.restaurant_id}`}>门店 {r.restaurant_id}</Link> · 提交 {r.created_at.slice(0, 10)}
+                  <Link to={`/restaurants/${r.restaurant_id}`}>门店 {r.restaurant_id}</Link> · 提交 {shanghaiDay(r.created_at)}
                 </p>
                 <p style={{ margin: '4px 0' }}>{r.detail}</p>
                 <p className="hint" style={{ margin: 0 }}>
@@ -332,7 +333,7 @@ export function MePage() {
                 </div>
                 <p className="card-dishes">{c.address}</p>
                 <p className="hint" style={{ margin: 0 }}>
-                  提交 {c.created_at.slice(0, 10)} · 来源：{c.source === 'manual_point' ? '手动选点' : '地图地点候选'}
+                  提交 {shanghaiDay(c.created_at)} · 来源：{c.source === 'manual_point' ? '手动选点' : '地图地点候选'}
                 </p>
                 {c.reject_reason && <p className="hint" style={{ margin: '4px 0 0' }}>驳回原因：{c.reject_reason}</p>}
                 {c.duplicates.length > 0 && (

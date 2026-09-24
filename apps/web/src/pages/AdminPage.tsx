@@ -13,6 +13,7 @@ import {
   RULE_VERSION,
   SCORING_WINDOW_DAYS,
   addDays,
+  shanghaiDateTime,
   type AuditRec,
   type ReportQueueEntry,
   type BusinessStatus,
@@ -22,6 +23,7 @@ import {
   type Restaurant,
   type RestaurantCandidate,
   type RestaurantDetail,
+  type ReportStatus,
   type RiskStatus,
 } from '@qianwei/contracts';
 import { useApi } from '../data/api';
@@ -586,7 +588,7 @@ function QueueRow({
         )}
       </td>
       <td>
-        <small>{entry.submitted_at ?? '时间未知'}</small>
+        <small>{entry.submitted_at ? shanghaiDateTime(entry.submitted_at) : '时间未知'}</small>
       </td>
       <td>
         <span className={`badge ${st.cls}`}>{st.label}</span>
@@ -1148,7 +1150,7 @@ function AuditPanel() {
               {rows.map((r) => (
                 <tr key={r.id}>
                   <td>
-                    <small>{r.at}</small>
+                    <small>{shanghaiDateTime(r.at)}</small>
                   </td>
                   <td>{r.actor_id}</td>
                   <td>
@@ -1175,25 +1177,107 @@ function ReportsPanel({ onPick }: { onPick: (id: string) => void }) {
   const [rows, setRows] = useState<ReportQueueEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState<ReportStatus | null>(null);
+  const [reasons, setReasons] = useState<Record<string, string>>({});
   const load = useCallback(async () => {
     setBusy(true);
     setError(null);
-    try { setRows(await api.reportQueue()); }
+    try { setRows(await api.reportQueue(filter)); }
     catch (e) { setError(toFailure(e).message); }
     finally { setBusy(false); }
-  }, [api]);
+  }, [api, filter]);
   useEffect(() => { void load(); }, [load]);
+
+  async function decide(r: ReportQueueEntry, action: 'start' | 'resolve' | 'dismiss'): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.decideReport({
+        id: r.id,
+        action,
+        reason: (reasons[r.id] ?? '').trim() === '' ? undefined : (reasons[r.id] ?? '').trim(),
+        expected_version: r.version,
+      });
+      setRows(await api.reportQueue(filter));
+    } catch (e) {
+      const f = toFailure(e);
+      setError(failureText(f));
+      // 版本冲突就把队列重拉一遍，让审核员看到别人已经做了什么
+      try { setRows(await api.reportQueue(filter)); } catch { /* 保留上面的错误文案 */ }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const FILTERS: Array<{ key: ReportStatus | null; label: string }> = [
+    { key: null, label: '全部' },
+    { key: 'OPEN', label: '待处理' },
+    { key: 'IN_REVIEW', label: '复核中' },
+    { key: 'RESOLVED', label: '已处理' },
+    { key: 'DISMISSED', label: '已驳回' },
+  ];
+
   return <div className="panel">
     <div className="page-head"><h2>举报复核</h2><button className="btn small ghost" disabled={busy} onClick={() => void load()}>刷新</button></div>
-    <p className="hint">最新 200 条举报。当前举报针对门店，未关联具体反馈；请先核实说明，再进入门店状态处理。工单状态流转在下一阶段补齐。</p>
+    <p className="hint">
+      待处理的排在最前，上限 200 条。这里只处置工单本身：闭店与风险结论要在「门店状态」里单独确认 ——
+      举报不会、也不能自动判定一家店关门了。
+    </p>
+    <div className="chips" role="group" aria-label="工单状态">
+      {FILTERS.map((f) => (
+        <button key={f.label} type="button" className={`chip ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
+          {f.label}
+        </button>
+      ))}
+    </div>
     {error && <Alert kind="bad">{error}</Alert>}
     {!rows && busy && <StatusBlock kind="loading" message="举报读取中…" />}
-    {rows?.length === 0 && <StatusBlock kind="empty" message="暂无举报。" />}
+    {rows?.length === 0 && <StatusBlock kind="empty" message={filter ? '该状态下没有工单。' : '暂无举报。'} />}
     {rows?.map(r => <article className="card" key={r.id}>
       <h3>{r.restaurant_name ?? '门店信息不可用'} · {REPORT_KIND_LABEL[r.kind]}</h3>
-      <p>{r.detail}</p><p className="hint">{r.created_at} · {REPORT_STATUS_LABEL[r.status]} · {r.id}</p>
-      {r.result_note && <p>{r.result_note}</p>}
-      <button className="btn small" onClick={() => onPick(r.restaurant_id)}>核验门店状态</button>
+      <p>{r.detail}</p>
+      <div className="card-row">
+        <span className={r.status === 'RESOLVED' ? 'badge ok' : r.status === 'DISMISSED' ? 'badge muted' : r.status === 'IN_REVIEW' ? 'badge warn' : 'badge danger'}>
+          {REPORT_STATUS_LABEL[r.status]}
+        </span>
+        <span className="badge muted">{r.id} · v{r.version}</span>
+        <span className="badge muted">提交 {shanghaiDateTime(r.created_at)}</span>
+        {r.feedback_target && <span className="badge">关联反馈 {r.feedback_target}</span>}
+      </div>
+      {/* 不显示举报人是谁是有意的：举报是匿名协作通道，处置时看内容而不是看人 */}
+      <p className="hint">队列不显示举报人身份：处置依据是说明与现场核实，不是谁提的。</p>
+      {r.result_note && <p>处理结果：{r.result_note}</p>}
+      {r.is_reporter_self ? (
+        <p className="hint">这条是你本人提交的举报：按规则不能自己处置，引擎会以 403 拒绝，请交给其他审核人员。</p>
+      ) : (
+        <>
+          {(r.status === 'OPEN' || r.status === 'IN_REVIEW') && (
+            <label className="field">
+              <span className="label">处理结果（结案与驳回必填，会回写给举报人）</span>
+              <input
+                value={reasons[r.id] ?? ''}
+                placeholder="例如：电话核实仍在营业；已更正地址"
+                onChange={(e) => setReasons((cur) => ({ ...cur, [r.id]: e.target.value }))}
+              />
+            </label>
+          )}
+          <div className="btn-row">
+            {r.status === 'OPEN' && <button className="btn small" disabled={busy} onClick={() => void decide(r, 'start')}>开始复核</button>}
+            {(r.status === 'OPEN' || r.status === 'IN_REVIEW') && (
+              <>
+                <button className="btn small ok" disabled={busy} onClick={() => void decide(r, 'resolve')}>确认并结案</button>
+                <button className="btn small danger" disabled={busy} onClick={() => void decide(r, 'dismiss')}>驳回</button>
+              </>
+            )}
+            {r.status !== 'OPEN' && r.status !== 'IN_REVIEW' && (
+              <span className="hint">已终态，不可回退{r.handled_by ? ` · 由 ${r.handled_by} 处置` : ''}{r.handled_at ? `于 ${shanghaiDateTime(r.handled_at)}` : ''}</span>
+            )}
+          </div>
+        </>
+      )}
+      <div className="btn-row">
+        <button className="btn small plain" onClick={() => onPick(r.restaurant_id)}>核验门店状态</button>
+      </div>
     </article>)}
   </div>;
 }

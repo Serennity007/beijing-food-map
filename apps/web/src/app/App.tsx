@@ -20,7 +20,7 @@ const TABS = [
 ];
 
 export function App() {
-  const { user, ready, demoBadge, signOut } = useApi();
+  const { user, demoBadge, signOut } = useApi();
   const loc = useLocation();
   const onMap = loc.pathname.startsWith('/map');
 
@@ -52,7 +52,6 @@ export function App() {
           ) : (
             <Link to="/login">登录</Link>
           )}
-          {ready && !user && <Link to="/login">内测登录</Link>}
         </nav>
       </header>
 

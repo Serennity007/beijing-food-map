@@ -11,8 +11,8 @@ npm install
 npm run dev          # 前端 http://localhost:5173 + 演示后端 http://127.0.0.1:8787
 npm run dev:web      # 只要前端（静态演示模式，数据存在浏览器 localStorage）
 npm run typecheck
-npm test             # 领域引擎、后端合同与地图纯函数测试（本轮 125 项：contracts 82 / api 29 / web 14）
-npx tsx scripts/http-contract-check.mts   # 前端 HTTP 客户端 × 已监听后端的逐接口对账（本轮 47 项，先把后端起在 127.0.0.1:8787 的独立库上）
+npm test             # 领域引擎、后端合同与地图纯函数测试（本轮 134 项：contracts 91 / api 29 / web 14）
+npx tsx scripts/http-contract-check.mts   # 前端 HTTP 客户端 × 已监听后端的逐接口对账（本轮 57 项，先把后端起在 127.0.0.1:8787 的独立库上）
 npm run build        # apps/web/dist
 ```
 

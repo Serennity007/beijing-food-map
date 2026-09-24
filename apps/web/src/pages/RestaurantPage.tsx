@@ -5,6 +5,8 @@ import {
   COMMUNITY_QUALIFICATION_LABEL,
   CUISINE_LABEL,
   DISCLOSURE_LABEL,
+  REPORT_STATUS_LABEL,
+  shanghaiDay,
   type FeedbackPublic,
   type ReportTicket,
   type RestaurantDetail,
@@ -113,7 +115,7 @@ export function RestaurantPage() {
     setError(null);
     try {
       const t = await api.createReport({ restaurant_id: id, kind: reportKind, detail: reportDetail });
-      setNotice(`纠错工单 ${t.id} 已提交，处理结果会显示在“我的”页面`);
+      setNotice(`工单 ${t.id}（${REPORT_STATUS_LABEL[t.status]}）已记入复核队列：同一门店同一问题重复提交不会新增工单，处理结果会显示在“我的”页面`);
       setReportOpen(false);
       setReportDetail('');
     } catch (e) {
@@ -246,8 +248,8 @@ export function RestaurantPage() {
                 </dd>
               </div>
               <div>
-                <dt>核验日期</dt>
-                <dd>{d.place_verified_at ?? '未核验'}（{d.verification_note}）</dd>
+                <dt>地点核验</dt>
+                <dd>{d.verification_note}</dd>
               </div>
               <div>
                 <dt>营业状态</dt>
@@ -281,7 +283,7 @@ export function RestaurantPage() {
                 <dt>数据来源</dt>
                 <dd>
                   {d.basis.sources.length ? d.basis.sources.map((s) => (s === 'community' ? '社区实吃' : '编辑实吃')).join(' + ') : '尚无有效来源'}
-                  ，最近更新 {d.updated_at.slice(0, 10)}
+                  ，最近更新 {shanghaiDay(d.updated_at)}
                 </dd>
               </div>
             </dl>

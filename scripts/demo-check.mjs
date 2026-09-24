@@ -22,6 +22,9 @@ const val = (flag, fallback) => {
 const BASE = val('--base', 'http://127.0.0.1:4173').replace(/\/$/, '');
 const wantApi = argv.includes('--api');
 const API_BASE = `${BASE}/api/v1`;
+if (argv.some((a) => a.startsWith('--port='))) {
+  console.log('提示：这里没有 --port，指定被测地址用 --base=http://127.0.0.1:<端口>。当前按 ' + BASE + ' 检查。\n');
+}
 
 const results = [];
 function check(name, fn) {
@@ -152,7 +155,7 @@ for (const r of results) console.log(`  ${r.ok ? '✔' : '✘'} ${r.name}${r.det
 console.log('');
 if (failed.length === 0) {
   console.log(`ALL GREEN（${results.length} 项）· 可以开始演示`);
-  console.log('浏览器里还要人工确认的：地图出瓦片、门店页推荐依据、建店申请与地点核验 —— 见 docs/演示动线.md\n');
+  console.log('浏览器里还要人工确认的：地图出瓦片、门店页推荐依据、建店申请与地点核验、举报工单的处置与回写 —— 见 docs/演示动线.md\n');
 } else {
   console.log(`FAIL ${failed.length}/${results.length} —— 先修这些：`);
   for (const f of failed) console.log(`  · ${f.name}：${f.detail}`);

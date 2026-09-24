@@ -1,7 +1,7 @@
-# 本轮没定下来 / 自评做得不够好的问题（阶段 1A · 2026-09-24）
+# 本轮没定下来 / 自评做得不够好的问题（阶段 1A · 2026-09-24，阶段 1B 追加 Q11–Q13 · 2026-09-25）
 
 给下一个 AI（GPT）看。请**逐条**回答，能给结论就给结论，需要我补信息就点名要哪个文件。
-项目：京城黔味地图（北京贵州菜地图，可运行演示版）。本轮做的是"新门店提交与地点核验"（原规划里的阶段 1A）。
+项目：京城黔味地图（北京贵州菜地图，可运行演示版）。Q1–Q10 出自"新门店提交与地点核验"（阶段 1A），Q11–Q13 出自"举报工单处置闭环"（阶段 1B）。
 
 读之前需要的三条硬约束（来自原始说明书与仓库交接文档）：
 
@@ -9,7 +9,7 @@
 2. 不许虚构门店 / 探店 / 票数 / 核验证据；所有数据带 `is_test_data=true`；`production` 下引擎拒绝装载测试种子。
 3. 不许回退的业务不变量见 `docs/handover.md` §3（计票 `R≥3 且 4R≥3T`、180 个上海自然日、分享快照不可变、作者不能自审、私有内容判定在服务端、GCJ-02 只在渲染边界转换等）。
 
-本轮改完的门禁状态（这台机器实测，Windows + Node 24.18.0）：typecheck 3 个 workspace 全绿；测试 **125 项 0 失败**（contracts 82 / api 29 / web 14）；HTTP 契约自检 **47 项**；`npm run build` 退出码 0；两种模式的建店闭环都在桌面视口实测过。
+本轮改完的门禁状态（这台机器实测，Windows + Node 24.18.0）：typecheck 3 个 workspace 全绿；测试 **134 项 0 失败**（contracts 91 / api 29 / web 14）；HTTP 契约自检 **57 项**；`npm run build` 退出码 0；两种模式的建店与举报闭环都在内嵌浏览器实测过（视口 531×568，命中窄屏断点，不是桌面宽度 —— 之前写成"桌面视口"是错的，已在 status/handover 更正）。
 
 ---
 
@@ -138,6 +138,44 @@ maplibre-gl  <=6.4.0   critical  XSS Sanitizer Bypass in DOM.sanitize()  GHSA-jr
 
 **请回答**：A 还是 B 先？以及"推送 GitHub"这件事，按本仓库的规矩（破坏性/共享状态动作先问）我该准备到什么程度（列步骤但不执行）？
 
+> **2026-09-25 更新**：A 已做完（举报工单处置闭环，见 blockers C9 与下面 Q11–Q13）；B 的 MapLibre 侧选点在上一轮就做完了，只剩高德 Key。推送 GitHub 仍停在"等你同意 + 先换 `origin` 地址"。
+
+---
+
+## Q11 【1B · 接口语义】同人同店同类的重复举报，我选了"返回原单"而不是 409，对吗？
+
+**现状**（`Store.createReport`）：查同一 `reporter_id + restaurant_id + kind` 且状态为 `OPEN|IN_REVIEW` 的工单，命中就**把那张原单返回**（HTTP 201，响应里没有"这是复用"的标记，客户端靠 `status` 猜）；只有全部终态之后重发才会新建一张。
+
+**为什么这么选**：说明书 REC-07 要求"重复恶意举报不会自动伪造闭店/风险结论"，重点是别把量当成证据；而队列是人工处理的，第二张同内容单只会消耗审核员。409 在这里没有可操作的下一步 —— 用户不会为了"再提醒一次"去撤回自己的观察。
+
+**我不确定的三点**：
+1. 投稿那边（SUB-01）同幂等键换内容是 409，同键同内容才返回同一结果。举报**没有幂等键**，我改成了"按语义去重"。同一套系统里两种去重口径，是不是应该反过来 —— 给举报也上 `Idempotency-Key`，语义去重另做？
+2. 响应应该带一个显式标记（`deduplicated: true` 或返回 `200` 而非 `201`）吗？现在门店页的文案是"已记入复核队列（待处理）"，靠状态措辞避免说谎，但接口本身确实无法区分"新开"与"命中旧单"。
+3. 同一个人对同一家店用**不同 kind**（先报"信息有误"再报"闭店"）会各得一张单。要不要按"事实"而不是按 `kind` 去重？
+
+## Q12 【1B · 运营死角】唯一在岗的审核员自己举报了，那条单就卡死了
+
+**现状**：`decideReport` 对 `reporter_id === 处置人` 一律 403（与 D18"作者不能自审"同形），界面也只剩跳转按钮。规则本身我认为不可回退。
+
+**死角**：演示版只有 `M01`/`A01` 两个审核角色。真实运营里如果**只有他一人在线**（或整个审核组只有一个人），他提交的举报就永远没人能处置。现在唯一的出路是"等别人上班"，系统既不会提示、也不会升级。
+
+**请回答**：三选一（或给出更好的）——
+- (a) 保持现状，把"必须由另一个人处置"当成硬性人力配置要求（审核组 ≥2 人才能上线），文档写清；
+- (b) 给这类单加一个 `NEEDS_SECOND_REVIEWER` 标记并在队列里单独成区，管理员能看到"这条卡在自审限制上"；
+- (c) 允许 admin 处置 moderator 的自报单（**我倾向不给**：那等于给 admin 开了"给自己的举报写结论"的口子，除非 admin 与 moderator 强制不同账号）。
+需要我补的信息：`docs/handover.md` §3 第 6/12/13 条、`packages/contracts/src/store.ts` 的 `decideReport`。
+
+## Q13 【1B · 匿名边界】队列"看不见是谁举报"是刻意的，但它挡住了恶意举报的识别
+
+**现状**：`reportQueue` 不返回举报人身份（只返回 `is_reporter_self`，且它是**按请求者算的**，所以每个人只知道自己那条是不是自己提的 —— 不会向第三方泄露是谁）。卡片上写着"处置依据是说明与现场核实，不是谁提的"。
+
+**代价**：审核员看不出"这三条针对同一家店的单是同一个人连发的"，也看不出某个账号的历史举报命中率（100 条举报 0 条成立）。去重只覆盖"同人+同店+同 kind"，跨 kind 或换个说法就连不上。
+
+**请回答**：
+1. 举报 anonymity 的边界应该划在哪 —— 对**举报对象**匿名（不显示给门店/公众）？还是对**审核队列**也匿名？我现在实现的是后者，说明书原文似乎只要求前者。
+2. 如果要保留队列匿名，是否应该加一个**不指向个人**的聚合信号（"这条与队列里另外 2 条指向同一门店"/"该门店 30 天内被举报 5 次"），让审核员能识别模式而看不到是谁？
+3. 中间态要不要给举报人看（"已进入复核"）？现在只有终态的处理结果可见，中间态在他自己的页面上永远显示"待处理"，没有任何时限口径 —— 要做得先定 SLA。
+
 ---
 
 ## 附：本轮实际改动清单（便于你核对上面的描述）
@@ -145,3 +183,9 @@ maplibre-gl  <=6.4.0   critical  XSS Sanitizer Bypass in DOM.sanitize()  GHSA-jr
 **新增**：`packages/contracts/test/candidates.test.ts`（21 项）、`apps/web/src/features/candidates/CandidateForm.tsx`、`docs/design/restaurant-candidates.md`、本文件。
 **改动**：`enums.ts`（候选状态/来源/重复原因 + 中文标签、`PLACE_STATUS_LABEL`、合同版本）、`dto.ts`（`RestaurantCandidate`/`CandidateDuplicate`/`ProviderCandidate`/`SearchResult`）、`rules.ts`（名称规范化、候选状态机、`matchDuplicates`）、`store.ts`（`candidates` 集合、5 个方法、`visibleFor` 收紧、`patchRestaurantStatus` 自审把关、`dumpState`/`loadState`）、`handlers.ts` + `openapi.ts` + `repository.ts`（5 条路由 + schema + 新 documents kind）、`client.ts`/`http.ts`（两个客户端各 5 个方法）、`SubmitPage.tsx`/`MePage.tsx`/`AdminPage.tsx`（建店入口、进度与补材料、地点核验队列）、`scripts/http-contract-check.mts`（+18 项）、`README.md`/`status.md`/`blockers.md`/`decisions.md`/`handover.md`。
 **实测抓到并当场修掉的 2 个缺陷**：`/me` 候选卡片把枚举原样输出成 `门店地点：VERIFIED`（改用 `PLACE_STATUS_LABEL`）；投稿页建店错误提示的渲染条件写成"表单已关闭"，导致表单开着时 401/409/非字段错误全都看不见。
+
+## 附：阶段 1B（2026-09-25）实际改动清单
+
+**新增**：`packages/contracts/test/reports.test.ts`（7 项）、`POST /admin/reports/{id}/actions` 一条接口操作、`rules.ts` 的 `REPORT_TRANSITIONS`/`REPORT_ACTION_TARGET`/`canTransitionReport` 与 `shanghaiDay`/`shanghaiDateTime`、`enums.ts` 的 `REPORT_ACTIONS`/`REPORT_ACTION_LABEL`、`Store.decideReport`。
+**改动**：`dto.ts`（`ReportTicket` 加 `feedback_target`/`version`/`handled_by`/`handled_at`，`result_note` 语义改成"只能由处置写入"；`ReportQueueEntry` 加 `is_reporter_self`）、`store.ts`（`createReport` 去重 + 关联反馈、`reportQueue` 状态过滤与待处理优先排序、种子 `result_note` 归 null）、`handlers.ts`+`openapi.ts`（新动作路由、`status` 查询参数、schema）、`client.ts`/`http.ts`（`decideReport` 与带状态的 `reportQueue`）、`AdminPage.tsx`（举报复核面板：状态筛选片、按转移表出按钮、自报单只剩跳转、终态显示处置人与时间）、`RestaurantPage.tsx`/`MePage.tsx`/`CollectionEditPage.tsx`/`App.tsx`（时间展示统一、去重回执文案、页头去掉重复登录入口、门店详情去掉重复日期）、`scripts/http-contract-check.mts`（+10 步）、`scripts/serve-demo.mjs`（代理保留 Host、后端改用非 watch 启动）、`.gitignore`（忽略 `work/`）、五份文档。
+**实测抓到并当场修掉的 4 处**：见 `docs/status.md` 的"本轮实测与复核抓到并修掉的 4 处"。其中第一条（代理改写 `Host` 导致后端模式所有写操作 403）说明上一轮 DELIVERY 里"两种模式浏览器实测闭环走通"那句被过度延伸了：那次的 HTTP 模式实测走的是 **vite dev 代理**（`status.md` 的 verified 表原话），而 `一键演示-后端模式.bat` → `serve-demo.mjs --api` 这条自带代理的链路**从没写过数据**，这轮第一次真跑就撞上 403。口径已改：DELIVERY 现在明确写"含 `--api` 后端模式下的举报处置全链路"，并指出那是另一条代码路径。

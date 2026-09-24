@@ -29,6 +29,7 @@ import {
   CANDIDATE_STATUS_LABEL,
   CUISINES,
   CONTRACT_VERSION,
+  REPORT_STATUS_LABEL,
   RULE_VERSION,
   SOUTHWEST_CUISINES,
   type CandidateSource,
@@ -39,6 +40,8 @@ import {
   type Disclosure,
   type EndorsementStatus,
   type FeedbackAttitude,
+  type ReportAction,
+  type ReportStatus,
   type Role,
 } from './enums';
 import {
@@ -65,10 +68,12 @@ import {
   assertVisitDate,
   addDays,
   canTransitionCandidate,
+  canTransitionReport,
   communityQualification,
   endorsementStatusOn,
   evaluatePublicMapEligibility,
   matchDuplicates,
+  REPORT_ACTION_TARGET,
   shanghaiToday,
   tallyCommunity,
   type Clock,
@@ -520,7 +525,12 @@ export class Store {
         reporter_id: 'U02',
         status: 'IN_REVIEW',
         created_at: this.stamp(),
-        result_note: '已生成高优先级工单，闭店结论需人工证据确认，不因举报自动判定。',
+        // 复核中还没有结论：result_note 只能由真实处置动作写入，不能预先放一句固定话冒充结果。
+        result_note: null,
+        feedback_target: null,
+        version: 2,
+        handled_by: 'M01',
+        handled_at: this.stamp(),
       },
       {
         id: 'REP0002',
@@ -531,6 +541,10 @@ export class Store {
         status: 'OPEN',
         created_at: this.stamp(),
         result_note: null,
+        feedback_target: null,
+        version: 1,
+        handled_by: null,
+        handled_at: null,
       },
     );
   }
@@ -1685,10 +1699,23 @@ export class Store {
 
   // ---------------------------------------------------------------- 举报 / 门店管理 / 注销
 
-  createReport(input: { restaurant_id: string; kind: ReportTicket['kind']; detail: string }, sessionId: string | null): ReportTicket {
+  createReport(input: { restaurant_id: string; kind: ReportTicket['kind']; detail: string; feedback_target?: string | null }, sessionId: string | null): ReportTicket {
     const user = this.requireUser(sessionId);
     const rec = this.requireRestaurant(input.restaurant_id);
     if (!input.detail.trim()) throw new ApiError('VALIDATION_ERROR', '请填写说明', 400, { detail: '必填' });
+    const target = input.feedback_target?.trim() || null;
+    if (target) {
+      const [visitId] = target.split('#v');
+      const visit = this.visits.find((v) => v.id === visitId);
+      if (!visit || visit.restaurant_id !== rec.id) {
+        throw new ApiError('VALIDATION_ERROR', '举报关联的反馈不属于这家门店', 400, { feedback_target: '与门店不一致' });
+      }
+    }
+    // 同一人对同一家店的同一类问题，未结案的不重复开单：否则刷举报只会淹没队列
+    const open = this.reports.find(
+      (x) => x.reporter_id === user.id && x.restaurant_id === rec.id && x.kind === input.kind && (x.status === 'OPEN' || x.status === 'IN_REVIEW'),
+    );
+    if (open) return open;
     const ticket: ReportTicket = {
       id: this.nextId('REP'),
       restaurant_id: rec.id,
@@ -1698,6 +1725,10 @@ export class Store {
       status: 'OPEN',
       created_at: this.stamp(),
       result_note: null,
+      feedback_target: target,
+      version: 1,
+      handled_by: null,
+      handled_at: null,
     };
     this.reports.push(ticket);
     const closedReporters = new Set(
@@ -1714,17 +1745,61 @@ export class Store {
     return ticket;
   }
 
-  reportQueue(sessionId: string | null): ReportQueueEntry[] {
-    this.requireRole(sessionId, ['moderator', 'admin']);
+  reportQueue(sessionId: string | null, status: ReportStatus | null = null): ReportQueueEntry[] {
+    const actor = this.requireRole(sessionId, ['moderator', 'admin']);
     return [...this.reports]
-      .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id))
-      .slice(0, 200)
-      .map((r) => ({ ...r, restaurant_name: this.restaurants.get(r.restaurant_id)?.name ?? null }));
+      .filter((r) => (status ? r.status === status : true))
+      // 待处理的排最前，其余按时间倒序：否则早期未结案的单会被新单永远压住
+      .sort(
+        (a, b) =>
+          (a.status === 'OPEN' ? 0 : a.status === 'IN_REVIEW' ? 1 : 2) - (b.status === 'OPEN' ? 0 : b.status === 'IN_REVIEW' ? 1 : 2) ||
+          b.created_at.localeCompare(a.created_at) ||
+          b.id.localeCompare(a.id),
+      )
+      .slice(0, MAX_ENTITIES_PER_RESPONSE)
+      .map((r) => ({
+        ...r,
+        restaurant_name: this.restaurants.get(r.restaurant_id)?.name ?? null,
+        is_reporter_self: r.reporter_id === actor.id,
+      }));
   }
 
   myReports(sessionId: string | null): ReportTicket[] {
     const user = this.requireUser(sessionId);
     return this.reports.filter((r) => r.reporter_id === user.id);
+  }
+
+  /**
+   * 工单处置。只改工单本身：门店的闭店/风险结论是另一套操作（REC-07 要求两者分开），
+   * 举报人本人也不能处置自己的举报 —— 与「作者不能自审」同源。
+   */
+  decideReport(input: { id: string; action: ReportAction; reason?: string; expected_version: number }, sessionId: string | null): ReportQueueEntry {
+    const actor = this.requireRole(sessionId, ['moderator', 'admin']);
+    const ticket = this.reports.find((r) => r.id === input.id);
+    if (!ticket) throw new ApiError('NOT_FOUND', '举报工单不存在', 404);
+    if (ticket.reporter_id === actor.id) {
+      throw new ApiError('FORBIDDEN', '不能处置自己提交的举报，请交给其他审核人员', 403);
+    }
+    if (ticket.version !== input.expected_version) throw new ApiError('VERSION_CONFLICT', '版本冲突，请重载后再操作', 409);
+    const to = REPORT_ACTION_TARGET[input.action] as ReportStatus;
+    if (!canTransitionReport(ticket.status, to, 'moderator')) {
+      throw new ApiError('VALIDATION_ERROR', `该工单当前为「${REPORT_STATUS_LABEL[ticket.status]}」，不能执行此操作`, 400);
+    }
+    const reason = input.reason?.trim() ?? '';
+    if (input.action !== 'start' && !reason) {
+      throw new ApiError('VALIDATION_ERROR', '结案与驳回都必须写明处理结果', 400, { reason: '必填' });
+    }
+    ticket.status = to;
+    ticket.handled_by = actor.id;
+    ticket.handled_at = this.stamp();
+    ticket.result_note = input.action === 'start' ? ticket.result_note : reason;
+    ticket.version += 1;
+    this.logAudit(actor.id, `report_${input.action}`, ticket.id, reason || null, ticket.version - 1, ticket.version);
+    return {
+      ...ticket,
+      restaurant_name: this.restaurants.get(ticket.restaurant_id)?.name ?? null,
+      is_reporter_self: false,
+    };
   }
 
   patchRestaurantStatus(input: { id: string; place_status?: RestaurantRec['place_status']; business_status?: RestaurantRec['business_status']; risk_status?: RestaurantRec['risk_status']; reason?: string }, sessionId: string | null): Restaurant {

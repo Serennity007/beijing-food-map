@@ -6,6 +6,8 @@ import {
   type CandidateDecision,
   type MapQueryInput,
   type PatchStatusInput,
+  type ReportDecision,
+  type ReportInput,
   type SubmitInput,
 } from './client';
 
@@ -207,12 +209,21 @@ export class Http implements ApiClient {
     return this.req<C.SharedCollectionSnapshot>(`/shared-collections/${encodeURIComponent(token)}`);
   }
 
-  createReport(input: { restaurant_id: string; kind: C.ReportTicket['kind']; detail: string }) {
+  createReport(input: ReportInput) {
     return this.req<C.ReportTicket>('/reports', { method: 'POST' }, input);
   }
 
-  reportQueue() {
-    return this.req<C.ReportQueueEntry[]>('/admin/reports');
+  reportQueue(status?: C.ReportStatus | null) {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+    return this.req<C.ReportQueueEntry[]>(`/admin/reports${qs}`);
+  }
+
+  decideReport(input: ReportDecision) {
+    return this.req<C.ReportQueueEntry>(`/admin/reports/${encodeURIComponent(input.id)}/actions`, { method: 'POST' }, {
+      action: input.action,
+      reason: input.reason,
+      expected_version: input.expected_version,
+    });
   }
 
   myReports() {

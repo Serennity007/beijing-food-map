@@ -194,6 +194,40 @@ step('驳回并回传原因', rejectedB.status === 'REJECTED' && (rejectedB.reje
 step('被驳回的门店退出待验证图层', !(await api.detail(candB.restaurant_id!)).in_default_layer && (await api.detail(candB.restaurant_id!)).place_status === 'REJECTED');
 step('版本冲突被拒（409）', await rejects(() => api.decideCandidate({ id: candA.id, action: 'verify', expected_version: 9999 })));
 
+// ---------------------------------------------- 举报工单处置闭环（M01 处置别人的单）
+const beforeQueue = await api.reportQueue('OPEN');
+const foreign = beforeQueue.find((r) => !r.is_reporter_self);
+step('队列里有可处置的他人工单', !!foreign, foreign?.id ?? '无');
+if (!foreign) throw new Error('种子里没有 OPEN 工单，无法验证处置闭环');
+const startedRep = await api.decideReport({ id: foreign.id, action: 'start', expected_version: foreign.version });
+step('开始复核', startedRep.status === 'IN_REVIEW' && startedRep.result_note === null, startedRep.id);
+const resolvedRep = await api.decideReport({
+  id: foreign.id,
+  action: 'resolve',
+  reason: '契约自检：已核实并更正门店信息',
+  expected_version: startedRep.version,
+});
+step('结案并回写处理结果', resolvedRep.status === 'RESOLVED' && (resolvedRep.result_note ?? '').includes('已核实'));
+step('缺处理结果被拒（400）', await rejects(() => api.decideReport({ id: resolvedRep.id, action: 'start', expected_version: resolvedRep.version })));
+step('终态不可回退', await rejects(() => api.decideReport({ id: foreign.id, action: 'start', expected_version: resolvedRep.version })));
+step('版本冲突被拒（409）', await rejects(() => api.decideReport({ id: foreign.id, action: 'start', expected_version: 9999 })));
+
+const mineAsMod = await api.createReport({ restaurant_id: 'R21', kind: 'wrong_info', detail: 'M01 自己提的举报，用来验证不能自处置。' });
+step('同人同店同类未结案不重复开单', (await api.createReport({ restaurant_id: 'R21', kind: 'wrong_info', detail: '换措辞的同类举报' })).id === mineAsMod.id);
+step('自己提的举报不能自己处置（403）', await rejects(() => api.decideReport({ id: mineAsMod.id, action: 'start', expected_version: mineAsMod.version })));
+const filtered = await api.reportQueue('RESOLVED');
+step('队列按状态过滤', filtered.length > 0 && filtered.every((r) => r.status === 'RESOLVED'), `${filtered.length} 条`);
+const openQueue = await api.reportQueue();
+step(
+  '队列待处理优先于已终态',
+  (() => {
+    const firstDone = openQueue.findIndex((r) => r.status === 'RESOLVED' || r.status === 'DISMISSED');
+    const lastOpen = openQueue.map((r) => r.status).lastIndexOf('OPEN');
+    return firstDone === -1 || lastOpen < firstDone;
+  })(),
+  `${openQueue.length} 条`,
+);
+
 const queue = await api.moderationQueue();
 step('moderationQueue 含待审发布', queue.some((e) => e.id === pub.id), `${queue.length} 条`);
 const mod = await api.moderate({ target: pub.id, action: 'approve', expected_version: pub.generation });
@@ -216,7 +250,7 @@ await api.deleteCollection(col.id);
 step('deleteCollection', !(await api.collections()).some((c) => c.id === col.id));
 
 const reports = await api.myReports();
-step('myReports 可读', Array.isArray(reports), `${reports.length} 条`);
+step('myReports 可读且带处置字段', Array.isArray(reports) && reports.every((r) => typeof r.version === 'number' && !!r.status), `${reports.length} 条`);
 
 // ---------------------------------------------- 补材料（U02 在被驳回的申请上改）
 const lvBeforeAmend = (await api.detail(candB.restaurant_id!)).location_version;

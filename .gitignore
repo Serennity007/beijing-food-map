@@ -17,6 +17,9 @@ apps/api/data/
 *.sqlite-*
 apps/api/uploads/
 
+# 本地演示/自检的临时库与日志（门禁脚本每次跑都会新建）
+/work/
+
 .DS_Store
 Thumbs.db
 .vscode/*

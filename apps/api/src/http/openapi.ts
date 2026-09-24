@@ -325,8 +325,13 @@ const REPORT = obj(
     status: enumOf(['OPEN', 'IN_REVIEW', 'RESOLVED', 'DISMISSED']),
     created_at: str('date-time'),
     result_note: nullable(str()),
+    /** 精确到某条反馈版本（形如 V0092#v1）；只针对门店时为 null。 */
+    feedback_target: nullable(str()),
+    version: int(1),
+    handled_by: nullable(str()),
+    handled_at: nullable(str('date-time')),
   },
-  ['id', 'restaurant_id', 'kind', 'detail', 'reporter_id', 'status', 'created_at'],
+  ['id', 'restaurant_id', 'kind', 'detail', 'reporter_id', 'status', 'created_at', 'version'],
 );
 
 /** 审计条目：只记录谁在什么时候对什么做了什么，不含验证码与令牌。 */
@@ -786,14 +791,46 @@ function documentOperations(): Record<string, Record<string, unknown>> {
     'POST /reports': {
       tags: ['reports'],
       summary: '举报门店',
-      description: '3 个不同账号报告闭店只会生成复核工单并把营业状态标为 SUSPECTED_CLOSED，不自动判定闭店。',
-      requestBody: body(obj({ restaurant_id: str(), kind: enumOf(['closed', 'wrong_location', 'wrong_info', 'abuse']), detail: str() }, ['restaurant_id', 'kind', 'detail'])),
-      responses: { '201': ok(ref('ReportTicket')), '400': err(400, 'VALIDATION_ERROR', 'kind 非法或说明为空'), '401': err(401, 'UNAUTHORIZED', '需要登录'), '404': err(404, 'NOT_FOUND', '门店不存在') },
+      description:
+        '3 个不同账号报告闭店只会生成复核工单并把营业状态标为 SUSPECTED_CLOSED，不自动判定闭店。' +
+        '同一人对同一门店的同一类问题在未结案前不重复开单；结案后可另开一单，旧单不复活。',
+      requestBody: body(
+        obj(
+          {
+            restaurant_id: str(),
+            kind: enumOf(['closed', 'wrong_location', 'wrong_info', 'abuse']),
+            detail: str(),
+            feedback_target: nullable(str()),
+          },
+          ['restaurant_id', 'kind', 'detail'],
+        ),
+      ),
+      responses: { '201': ok(ref('ReportTicket')), '400': err(400, 'VALIDATION_ERROR', 'kind 非法、说明为空或关联反馈不属于该门店'), '401': err(401, 'UNAUTHORIZED', '需要登录'), '404': err(404, 'NOT_FOUND', '门店不存在') },
     },
 
     'GET /admin/reports': {
-      tags: ['admin'], summary: '举报复核队列（最新 200 条）',
+      tags: ['admin'],
+      summary: '举报复核队列（待处理优先，上限 200）',
+      description: '可按状态过滤；is_reporter_self 标记"举报人本人不能处置自己的举报"。',
+      parameters: [q('status', 'string', '按工单状态过滤：OPEN | IN_REVIEW | RESOLVED | DISMISSED', false)],
       responses: { '200': ok(arr(ref('ReportQueueEntry'))), '401': err(401, 'UNAUTHORIZED', '需要登录'), '403': err(403, 'FORBIDDEN', '权限不足') },
+    },
+    'POST /admin/reports/{id}/actions': {
+      tags: ['admin'],
+      summary: '工单处置：开始复核 / 结案 / 驳回',
+      description:
+        '结案与驳回必须写处理结果，且是终态不可回退；处置工单不会改动门店的闭店或风险结论（两者是分开的事务）。' +
+        '举报人本人不能处置自己的举报，即使他同时是审核人员。',
+      requestBody: body(obj({ action: enumOf(['start', 'resolve', 'dismiss']), reason: nullable(str()), expected_version: int(1) }, ['action', 'expected_version'])),
+      parameters: [p('id', '工单 ID')],
+      responses: {
+        '200': ok(ref('ReportQueueEntry')),
+        '400': err(400, 'VALIDATION_ERROR', 'action 非法、缺处理结果或该状态不可执行此操作'),
+        '401': err(401, 'UNAUTHORIZED', '需要登录'),
+        '403': err(403, 'FORBIDDEN', '权限不足，或举报人处置自己的举报'),
+        '404': err(404, 'NOT_FOUND', '工单不存在'),
+        '409': err(409, 'VERSION_CONFLICT', '版本冲突，请重载后再操作'),
+      },
     },
     'GET /admin/queue': {
       tags: ['admin'],
@@ -929,7 +966,7 @@ export function buildOpenApi(routes: RouteDef[]): Record<string, unknown> {
         RestaurantCandidate: RESTAURANT_CANDIDATE,
         CandidateDuplicate: CANDIDATE_DUPLICATE,
         ProviderCandidate: PROVIDER_CANDIDATE,
-        ReportQueueEntry: { allOf: [ref('ReportTicket'), obj({ restaurant_name: { type: 'string', nullable: true } }, ['restaurant_name'])] },
+        ReportQueueEntry: { allOf: [ref('ReportTicket'), obj({ restaurant_name: { type: 'string', nullable: true }, is_reporter_self: bool() }, ['restaurant_name', 'is_reporter_self'])] },
         ModerationQueueEntry: QUEUE_ENTRY,
         ModerationResult: MODERATION_RESULT,
         AuditRec: AUDIT_REC,

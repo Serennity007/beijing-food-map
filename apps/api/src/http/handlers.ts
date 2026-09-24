@@ -7,6 +7,7 @@ import {
   ApiError,
   PLACE_STATUSES,
   REPORT_KINDS,
+  REPORT_STATUSES,
   RISK_STATUSES,
   Store,
   type CandidateFacts,
@@ -17,6 +18,7 @@ import {
   type Cuisine,
   type Disclosure,
   type ReportKind,
+  type ReportStatus,
   type Restaurant,
   type SessionUser,
   type SystemCollectionKind,
@@ -31,6 +33,7 @@ import { bBool, bDate, bEnum, bNum, bNumRaw, bStr, bStrArray, need } from './bod
 
 const MODERATION_ACTIONS = ['approve', 'reject', 'hide'] as const;
 const CANDIDATE_ACTIONS = ['verify', 'reject', 'merge'] as const;
+const REPORT_ACTIONS = ['start', 'resolve', 'dismiss'] as const;
 const SYSTEM_KINDS: readonly SystemCollectionKind[] = ['want', 'visited', 'private_stash'];
 const ENDORSEMENT_ACTIONS = ['verify', 'revoke'] as const;
 
@@ -123,13 +126,21 @@ function candidateCreateFrom(ctx: Ctx): CandidateInput {
   };
 }
 
-function candidateStatusParam(ctx: Ctx): CandidateStatus | null {
-  const raw = ctx.search.get('status');
+function candidateStatusParam(ctx: Ctx): CandidateStatus | null {  const raw = ctx.search.get('status');
   if (raw === null || raw === '') return null;
   if (!(CANDIDATE_STATUSES as readonly string[]).includes(raw)) {
     throw new ApiError('VALIDATION_ERROR', `status 只能是 ${CANDIDATE_STATUSES.join(' | ')}`, 400, { status: '非法枚举' });
   }
   return raw as CandidateStatus;
+}
+
+function reportStatusParam(ctx: Ctx): ReportStatus | null {
+  const raw = ctx.search.get('status');
+  if (raw === null || raw === '') return null;
+  if (!(REPORT_STATUSES as readonly string[]).includes(raw)) {
+    throw new ApiError('VALIDATION_ERROR', `status 只能是 ${REPORT_STATUSES.join(' | ')}`, 400, { status: '非法枚举值' });
+  }
+  return raw as ReportStatus;
 }
 
 /** 审核返回体：Store.moderate 不返回门店，这里用公开方法补上（与 StaticClient 同逻辑）。 */function moderateResult(store: Store, target: string): { ok: true; restaurant: Restaurant | null } {
@@ -444,6 +455,7 @@ export function buildRouter(svc: Services): Router {
             restaurant_id: assertId(need(bStr(ctx.body, 'restaurant_id', { required: true, max: 16 }), 'restaurant_id'), 'restaurant_id'),
             kind: need(bEnum<ReportKind>(ctx.body, 'kind', REPORT_KINDS, { required: true }), 'kind'),
             detail: bStr(ctx.body, 'detail', { required: true, max: 500 }) ?? '',
+            feedback_target: bStr(ctx.body, 'feedback_target', { max: 80 }) ?? null,
           },
           ctx.sessionId,
         ),
@@ -500,7 +512,28 @@ export function buildRouter(svc: Services): Router {
     },
 
     // ------------------------------------------------------------ 后台
-    { method: 'GET', path: '/admin/reports', summary: '举报复核队列', handler: (ctx) => store.reportQueue(ctx.sessionId) },
+    {
+      method: 'GET',
+      path: '/admin/reports',
+      summary: '举报复核队列（待处理优先，可按状态过滤）',
+      handler: (ctx) => store.reportQueue(ctx.sessionId, reportStatusParam(ctx)),
+    },
+    {
+      method: 'POST',
+      path: '/admin/reports/:id/actions',
+      summary: '工单处置：开始复核 / 结案 / 驳回（举报人不能处置自己的举报）',
+      writes: true,
+      handler: (ctx) =>
+        store.decideReport(
+          {
+            id: idParam(ctx, 'id'),
+            action: need(bEnum(ctx.body, 'action', REPORT_ACTIONS, { required: true }), 'action'),
+            reason: bStr(ctx.body, 'reason', { max: 300 }) ?? undefined,
+            expected_version: expectedVersion(ctx),
+          },
+          ctx.sessionId,
+        ),
+    },
     { method: 'GET', path: '/admin/queue', summary: '审核队列（作者不能自审）', handler: (ctx) => store.moderationQueue(ctx.sessionId) },
     {
       method: 'GET',

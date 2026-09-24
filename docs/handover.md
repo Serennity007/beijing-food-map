@@ -26,9 +26,9 @@ npm run build          # apps/web/dist
 
 | 层 | 现在的事实 |
 | --- | --- |
-| implemented | 领域引擎（含**新门店候选与地点核验**）+ 11 个页面 + 演示后端 36 条路由（含签名会话、注销清除任务、审核侧举报队列、**5 条候选接口**）+ OpenAPI + Pages workflow 全部写完 |
-| verified | typecheck 全绿；测试 **125 项 0 失败**（contracts 82 / api 29 / web 14）；HTTP 契约自检 **47 项**；`npm run build` 成功；**桌面视口浏览器实测**在两种模式下各走一遍（地图 / 投稿审核 / 清单发布分享撤销 / 纠错举报 / **建店申请与地点核验** / 注销处置）；写路径全部跑在独立 SQLite 文件上，默认演示库本机未生成 |
-| release_ready | **否**。合成数据不是真实核验数据；签名会话与注销清除已闭合、建店与地点核验已闭合，但真实对象存储、可水平扩展的持久化、举报工单的处置闭环没有；地图选点与真实 POI 数据源依赖凭据；窄屏与真机没验；后端没部署；仓库没推送到 GitHub |
+| implemented | 领域引擎（含**新门店候选与地点核验**）+ 11 个页面 + 演示后端 44 条接口操作（含签名会话、注销清除任务、**举报队列与处置**、**5 条候选接口**）+ OpenAPI + Pages workflow 全部写完 |
+| verified | typecheck 全绿；测试 **134 项 0 失败**（contracts 91 / api 29 / web 14）；HTTP 契约自检 **57 项**；`npm run build` 成功；**内嵌浏览器实测（视口 531×568，命中 `max-width:719px` 窄屏断点，不是桌面宽度）**在两种模式下各走一遍（地图 / 投稿审核 / 清单发布分享撤销 / **纠错与举报处置闭环** / **建店申请与地点核验** / 注销处置）；后端模式的写操作这次是**经 `serve-demo.mjs --api` 自带的代理**跑的（上一轮走的是 vite 代理，那条 403 缺陷只在今天这条路暴露）；写路径全部跑在独立 SQLite 文件上，默认演示库本机未生成 |
+| release_ready | **否**。合成数据不是真实核验数据；签名会话与注销清除、建店与地点核验、举报工单处置闭环都已闭合，但真实对象存储与可水平扩展的持久化没有；地图选点与真实 POI 数据源依赖凭据；窄屏与真机没验；后端没部署；仓库没推送到 GitHub |
 
 细节账目在 [status.md](./status.md)（含"浏览器实测看到的"逐条证据）与 [blockers.md](./blockers.md)。**外部依赖类阻塞项接手的 AI 无法自行完成**，别去猜凭据、别自己部署、别给真人发消息。
 
@@ -41,14 +41,15 @@ npm run build          # apps/web/dist
 packages/contracts/src/
   enums.ts     所有枚举 + 中文标签（枚举要直接展示给用户，措辞跟语义放一起）
   dto.ts       对外数据结构（页面/接口读到的形状）
-  rules.ts     180 天窗口、社区计票、资格谓词、名称规范化与重复候选匹配等纯函数
+  rules.ts     180 天窗口、社区计票、资格谓词、名称规范化与重复候选匹配、举报工单状态机、上海时区日历日展示等纯函数
   geo.ts       网格聚合分档 cellDegForZoom、GCJ-02 ↔ WGS84、近似直线距离
   store.ts     Store：读接口收 sessionId，写接口收 sessionId + expected_version
   seed.ts      49 门店 / 9 账号 / 128 条实吃记录，全是合成，is_test_data=true
   photos.ts    内联合成 SVG data URI（代替对象存储）
 packages/contracts/test/
-  store.test.ts       领域与谓词（61）
+  store.test.ts       领域与谓词（63）
   candidates.test.ts  建店候选与地点核验（21）
+  reports.test.ts     举报工单的生成/去重/状态机/角色与版本锁（7）
 apps/web/src/data/
   api.tsx      ApiClient 接口 + Provider（VITE_API_BASE 决定用哪个实现）
   client.ts    StaticClient：浏览器内 Store + localStorage
@@ -66,7 +67,7 @@ apps/api/src/
 ```
 
 网页路由：`/map`、`/restaurants/:id`、`/submit`、`/me`、`/me/collections`、`/me/collections/:id`、`/s/:token`、`/login`、`/admin`、`/privacy`、`/terms`、`*` → 404（`apps/web/src/app/App.tsx:61-74`）。
-API 路由（全部在 `/api/v1` 下）：`/health/live` `/health/ready` `/today` `/map/items` `/restaurants` `/restaurants/search` `/restaurants/:id` `/media/:id` `/uploads/test-photo` `/auth/login` `/auth/logout` `/me` `/me/submissions` `/me/reports` `/submissions` `/restaurants/:id/my-feedback` `POST|DELETE /restaurants/:id/collection-item` `/collections` `/collections/:id` `/collections/:id/items/:restaurantId` `/collections/:id/publication-requests` `/collections/:id/unpublish` `/shared-collections/:token` `/reports` `/restaurant-candidates` `POST /restaurant-candidates/:id/materials` `/admin/queue` `/admin/reports` `/admin/candidates` `/admin/candidates/:id/actions` `/admin/audit-log` `/admin/moderation/:target/actions` `/admin/restaurants/:id/status` `/admin/restaurants/:id/merge` `/admin/editorial-endorsements/verify|revoke`。
+API 路由（全部在 `/api/v1` 下）：`/health/live` `/health/ready` `/today` `/map/items` `/restaurants` `/restaurants/search` `/restaurants/:id` `/media/:id` `/uploads/test-photo` `/auth/login` `/auth/logout` `/me` `/me/submissions` `/me/reports` `/submissions` `/restaurants/:id/my-feedback` `POST|DELETE /restaurants/:id/collection-item` `/collections` `/collections/:id` `/collections/:id/items/:restaurantId` `/collections/:id/publication-requests` `/collections/:id/unpublish` `/shared-collections/:token` `/reports` `/restaurant-candidates` `POST /restaurant-candidates/:id/materials` `/admin/queue` `/admin/reports` `POST /admin/reports/:id/actions` `/admin/candidates` `/admin/candidates/:id/actions` `/admin/audit-log` `/admin/moderation/:target/actions` `/admin/restaurants/:id/status` `/admin/restaurants/:id/merge` `/admin/editorial-endorsements/verify|revoke`。
 
 `localStorage` 键：`qianwei.state`（引擎快照）、`qianwei.session`、`qianwei.mapviewport`、`qianwei.mapfilters`、`qianwei.mapengine`、`qianwei.draft.<userId|anon>`、`qianwei.fallback`（Pages 深链接回退，见 `public/404.html`）。
 
@@ -84,6 +85,7 @@ API 路由（全部在 `/api/v1` 下）：`/health/live` `/health/ready` `/today
 10. 测试种子与固定验证码 `888888` 在 `NODE_ENV=production` 下被引擎直接拒绝装载。
 11. **建店只给 `PENDING` 地点**：候选创建时落的门店必须靠原有谓词被默认层挡住；核验通过也**不等于**好店达标（还要社区票或编辑背书）。重复只出提示，绝不自动合并、不自动驳回。同一作者重复提交同一家店复用同一条候选。驳回必填理由、理由回传给作者、状态不可回退（`REJECTED → PENDING` 只能由作者补材料触发）。
 12. **本人提交的建店申请不能本人核验**，即使同时是 moderator/admin —— `decideCandidate` 与 `patchRestaurantStatus`（候选来源门店的 `place_status` 变更）两处都把守，缺一处就有绕过路径。
+13. **举报工单只是复核线索，不是结论**：同人+同店+同类型且未结案时复用同一张单（不产生第二张）；`OPEN → IN_REVIEW → RESOLVED|DISMISSED` 的终态**没有回退边**（`REPORT_TRANSITIONS` 里就没有指向 `OPEN` 的转移）；结案与驳回必须写明处理结果；处置人不能是举报人本人（403，即使他挂着 moderator/admin）；**处置工单不会改门店的营业/风险状态** —— 闭店与"需人工复核"只能在 `PATCH /admin/restaurants/:id/status` 单独确认，3 个举报不会自动判闭店（REC-07）。
 
 ## 4. 改东西的连带清单（最容易漏的部分）
 
@@ -127,6 +129,11 @@ API 路由（全部在 `/api/v1` 下）：`/health/live` `/health/ready` `/today
 - 枚举回潮：`/me` 的候选卡片把 `place_status` 原样打成了 `VERIFIED`。凡是新加的展示字段，先查 `enums.ts` 有没有标签，没有就补标签而不是直接输出。
 - 错误提示的渲染条件别写反：建店的告警原本挂在"表单已关闭"上，结果表单开着时的 401/409/非字段错误全都看不见。
 
+**本轮（阶段 1B）新踩到的**
+- **`netstat` 显示 8787 有监听，不代表只有一个后端在答**：上一轮 `tsx watch` 的残留子进程和这一轮新起的进程可以同时挂在 8787 上，浏览器与 `curl` 会分别打到**两个不同的库**（我就是这样看到"界面里的 REP0003 后端查不到、后端里的 REP0025 界面没见过"）。动手前 `netstat -ano | grep :8787` 只应有一个 PID，且要和 `Get-CimInstance Win32_Process` 查到的启动时间对上；杀的时候用 `taskkill //PID <pid> //T //F` 连子进程一起。
+- **演示与验证不要用 watch 模式**：`serve-demo.mjs` 原先用 `npm run dev -w @qianwei/api`（= `tsx watch`），演示途中改一下 `packages/contracts` 就会重启后端，新进程撞不到端口就静默留下一个"还在监听但会话已丢"的后端。已改成 `npm run start -w @qianwei/api`。
+- **别用 Git Bash 的 `curl -d '中文'` 写数据**：控制台代码页会把 UTF-8 请求体压成乱码，服务端如实存下来（它收到的就是那串字节），于是你在界面上看到"处理结果：`___`"并以为是编码 bug。要么把 body 放进文件 `--data-binary @file.json`，要么直接在浏览器里输入。存心验编码链路时再看网络层，不要顺手当测试数据。
+
 **仓库完整性**：`.gitignore` 裸写 `data/` 连 `apps/web/src/data/` 一起吞掉，**整个数据层不在前两个提交里**，克隆下来无法构建（提交 `2ef99e6`）。推送前必查：
 ```bash
 git ls-files --others --exclude-standard            # 期望空
@@ -137,15 +144,15 @@ git ls-files --others --ignored --exclude-standard  # 逐条确认都是产物
 
 ```bash
 npm run typecheck                            # 期望退出码 0，3 个 workspace
-npm test -w @qianwei/contracts               # 期望 82 通过（2 个文件：store 61 + candidates 21，vitest）
+npm test -w @qianwei/contracts               # 期望 91 通过（3 个文件：store 63 + candidates 21 + reports 7，vitest）
 npm test -w @qianwei/web                     # 期望 14 通过（vitest）
 npm test -w @qianwei/api                     # 期望 29 pass / 0 fail（node:test，输出是 ℹ tests / pass / fail）
-SQLITE_PATH="C:/绝对/路径/work/gate-1b.sqlite" npm run dev:api &   # 另开终端，别写默认库；每轮换新库
-npx tsx scripts/http-contract-check.mts      # 期望 47 项，前端真实 Http 客户端 × 已监听后端
+SQLITE_PATH="C:/绝对/路径/work/gate-1b.sqlite" npm run start:api &   # 另开终端，别写默认库；每轮换新库；用 start 不要用 dev（watch 会中途重启）
+npx tsx scripts/http-contract-check.mts      # 期望 57 项，前端真实 Http 客户端 × 已监听后端
 npm run build                                # 期望退出码 0
 ```
 
-数字会变，别照抄：跑之前先按上面命令实测一遍，报告里写你这次真的看到的数（历史：57/18/14 = 89 与 28 项 → 阶段 0 的 61/25/14 = 100 与 29 项 → 阶段 1A 的 82/29/14 = 125 与 47 项）。`npm run seed:test` 只在你想把**默认**演示库恢复成种子基线时用（它整库覆盖，先确认没有别的任务在里面留状态）。
+数字会变，别照抄：跑之前先按上面命令实测一遍，报告里写你这次真的看到的数（历史：57/18/14 = 89 与 28 项 → 阶段 0 的 61/25/14 = 100 与 29 项 → 阶段 1A 的 82/29/14 = 125 与 47 项 → 阶段 1B 的 91/29/14 = 134 与 57 项）。`npm run seed:test` 只在你想把**默认**演示库恢复成种子基线时用（它整库覆盖，先确认没有别的任务在里面留状态）。
 
 浏览器实测的操作路径与预期文案见 [status.md](./status.md) 的"浏览器实测看到的"；本地环境细节见 [runbooks/local-dev.md](./runbooks/local-dev.md)。
 契约自检的 Cookie Jar 是脚本内的内存 `Map`，不落盘；如果你手动用 `curl -c` 试过登录接口，把生成的 jar/凭据文件删掉再提交。
@@ -153,11 +160,12 @@ npm run build                                # 期望退出码 0
 ## 7. 待办（按"能不能自主做"分）
 
 **接手的 AI 可以直接做**（按建议优先级）
-1. **阶段 1B 举报闭环**：工单状态流转的写接口（`OPEN → IN_REVIEW → RESOLVED|DISMISSED`，带 `expected_version` 与角色把关）、举报关联到具体反馈或媒体、同一用户重复举报的合并与限频、处理结果回写到举报人"我的"页（现在那里只显示一条固定的 `result_note`）。队列只读部分已完成（见 blockers C9）。做法可以照搬本轮 1A 的连带清单（§4 最后一行）。
-2. **阶段 2 手机端界面**：窄屏断点、抽屉遮挡、地图 inset、捏合与双指手势 —— blockers C10。本轮新加的建店表单与后台「地点核验」卡片同样只在桌面视口看过。内嵌浏览器只有一个固定桌面视口，这一项需要你在真机上看一次，或者直接接受"桌面已验、移动未验"。
-3. **两个待决问题需要人拍板**（详见 `docs/questions-for-next-review.md`）：核验状态翻转是否该递增 `location_version`（现状会清零已有社区票，已用特征测试钉住）；提交人注销后其待核验候选要不要自动退出队列。
-4. 本轮实测看到、刻意没顺手改的小口子：门店详情页"核验日期"那行把日期与 `verification_note` 叠成 `2026-09-24（地点已核验（2026-09-24））`；页头同时暴露"登录"与"内测登录"两个入口且都指向 `/login`；后台举报卡片打印原始 ISO 时间戳而不是本地日期；卡片不显示举报人（脱敏本身是有意的，但页面上该写一句"为什么不显示是谁举报"）。
-5. Docker 镜像构建验证（本机无 Docker，`Dockerfile` 从未构建）。
+1. **阶段 2 手机端界面**：360/390/430 宽度、抽屉遮挡、地图 inset、捏合与双指手势 —— blockers C10。建店表单、后台「地点核验」与「举报复核」面板都只在 **531px** 这一个视口看过（它已命中窄屏断点，所以换行与溢出这一类已经走过一遍），真机宽度与手势没有。这一项需要你在真机上看一次，或者直接接受"531px 已验、真机未验"。
+2. **两个待决问题需要人拍板**（详见 `docs/questions-for-next-review.md`）：核验状态翻转是否该递增 `location_version`（现状会清零已有社区票，已用特征测试钉住）；提交人注销后其待核验候选要不要自动退出队列。
+3. **举报闭环剩下的尾巴**（1B 本轮只做了规格要求的那圈）：限频/配额没做（同一账号一天能开多少单没有上限，只有"同人同店同类不重复开单"的去重）；`feedback_target` 现在只有投稿页"这条有问题"那一条通道会填，图片与清单条目的举报还没有入口；举报人看不到处理过程（只有终态的处理结果），要中间态就要先定 SLA 口径。这三条都是产品决策，不是补代码就能自证的。
+4. Docker 镜像构建验证（本机无 Docker，`Dockerfile` 从未构建）。
+
+**本轮（阶段 1B）已闭合**：举报工单的写接口与状态机、去重、自报自审拦截、处理结果回写给举报人（见 §3 第 13 条与 blockers C9）。§7 上一版列出的 4 个小口子一并收掉：门店详情"核验日期"重复显示 → 改为只显示 `verification_note`；页头同时暴露"登录"与"内测登录" → 只留一个；后台打印原始 ISO 时间戳 → `rules.ts` 新增 `shanghaiDay`/`shanghaiDateTime`，7 处展示统一按上海日历日（UTC 16:00 之后不再显示成前一天）；举报卡片不显示举报人 → 保持不显示，并把"为什么不显示是谁举报"写在卡片上。
 
 **必须先拿到人类授权/凭据，不要自行推进**
 - 推送到 GitHub：目标仓库 `Serennity007/beijing-food-map`（public）。**这台机器上 `gh` 已经登录到 Serennity007**（token scopes: gist/read:org/repo），所以原机器上"你先登录我再推"的卡点已经解除 —— 但推送仍然要用户明确同意。
@@ -179,7 +187,7 @@ npm run build                                # 期望退出码 0
 - [README.md](../README.md) 快速开始、两种运行模式、值得手动验证的规则
 - [status.md](./status.md) implemented / verified / not verified / release_ready 分账
 - [blockers.md](./blockers.md) A 需要你提供 / B 上线前必须补 / C 刻意留的缺口
-- [decisions.md](./decisions.md) D01–D18 与原始说明书不同的选择及原因
+- [decisions.md](./decisions.md) D01–D20 与原始说明书不同的选择及原因
 - [design/restaurant-candidates.md](./design/restaurant-candidates.md) 阶段 1A 的方案与它依据的规格条款
 - [questions-for-next-review.md](./questions-for-next-review.md) 本轮**没定下来**或**自评做得不够好**的问题，按优先级排，等外部意见
 - [runbooks/local-dev.md](./runbooks/local-dev.md) · [deploy-pages.md](./runbooks/deploy-pages.md) · [deploy-api.md](./deploy-api.md)

@@ -19,6 +19,7 @@ import {
   type ProviderCandidate,
   type ReportTicket,
   type ReportQueueEntry,
+  type ReportStatus,
   type Restaurant,
   type RestaurantCandidate,
   type RestaurantDetail,
@@ -82,6 +83,20 @@ export interface PatchStatusInput {
   reason?: string;
 }
 
+export interface ReportDecision {
+  id: string;
+  action: 'start' | 'resolve' | 'dismiss';
+  reason?: string;
+  expected_version: number;
+}
+
+export interface ReportInput {
+  restaurant_id: string;
+  kind: ReportTicket['kind'];
+  detail: string;
+  feedback_target?: string | null;
+}
+
 export interface ApiClient {
   readonly mode: 'static' | 'http';
   mapItems(q: MapQueryInput, snapshotId?: string | null): Promise<MapItemsResponse>;
@@ -112,8 +127,10 @@ export interface ApiClient {
   requestPublication(collectionId: string, shareItemIds: string[]): Promise<{ id: string; status: string; generation: number }>;
   unpublish(collectionId: string): Promise<Collection>;
   sharedSnapshot(token: string): Promise<SharedCollectionSnapshot>;
-  createReport(input: { restaurant_id: string; kind: ReportTicket['kind']; detail: string }): Promise<ReportTicket>;
-  reportQueue(): Promise<ReportQueueEntry[]>;
+  createReport(input: ReportInput): Promise<ReportTicket>;
+  reportQueue(status?: ReportStatus | null): Promise<ReportQueueEntry[]>;
+  /** 工单处置：开始复核 / 结案 / 驳回。举报人本人不能处置自己的举报。 */
+  decideReport(input: ReportDecision): Promise<ReportQueueEntry>;
   myReports(): Promise<ReportTicket[]>;
   auditLog(): Promise<AuditRec[]>;
   moderationQueue(): Promise<ModerationQueueEntry[]>;
@@ -340,14 +357,20 @@ export class StaticClient implements ApiClient {
     return this.store.sharedSnapshot(token);
   }
 
-  async createReport(input: { restaurant_id: string; kind: ReportTicket['kind']; detail: string }) {
+  async createReport(input: ReportInput) {
     const r = this.store.createReport(input, this.sid());
     this.persist();
     return r;
   }
 
-  async reportQueue() {
-    return this.store.reportQueue(this.sid());
+  async reportQueue(status?: ReportStatus | null) {
+    return this.store.reportQueue(this.sid(), status ?? null);
+  }
+
+  async decideReport(input: ReportDecision) {
+    const r = this.store.decideReport(input, this.sid());
+    this.persist();
+    return r;
   }
 
   async myReports() {

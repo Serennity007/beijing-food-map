@@ -8,6 +8,8 @@ import {
   communityQualification,
   endorsementStatusOn,
   isInScoringWindow,
+  shanghaiDateTime,
+  shanghaiDay,
   shanghaiToday,
   type Clock,
   type MapQuery,
@@ -37,6 +39,14 @@ const REASON = '测试内容（合成数据，非真实探店）：这条理由�
 describe('REC-00 计票窗口与资格规则', () => {
   it('Asia/Shanghai 的“今天”不依赖宿主时区', () => {
     expect(shanghaiToday(clock())).toBe(TODAY);
+  });
+
+  it('UTC 时间戳按上海日历日展示，跨 UTC 16:00 不会显示成前一天', () => {
+    expect(shanghaiDay('2026-09-24T15:59:59.000Z')).toBe('2026-09-24');
+    expect(shanghaiDay('2026-09-24T16:53:21.421Z')).toBe('2026-09-25');
+    expect(shanghaiDateTime('2026-09-24T16:53:21.421Z')).toBe('2026-09-25 00:53');
+    expect(shanghaiDay('2026-09-24')).toBe('2026-09-24');
+    expect(shanghaiDay('不是时间戳')).toBe('不是时间戳');
   });
 
   it('窗口两端包含，第 181 天不计（共 180 个自然日）', () => {
@@ -681,18 +691,62 @@ describe('交接补齐：举报与注销任务', () => {
     expect(rec.editorial).toBeNull();
     expect(rec.endorsement).toBe('NONE');
   });
-  it('举报队列有角色边界、稳定倒序和上限，不暴露账号资料', () => {
+  it('举报队列有角色边界、待处理优先、上限 200，不暴露账号资料', () => {
     const s = newStore();
     expect(() => s.reportQueue(null)).toThrow();
     const user = s.login('U02', '888888').session_id;
     expect(() => s.reportQueue(user)).toThrow();
     const mod = s.login('M01', '888888').session_id;
-    for (let i = 0; i < 205; i++) s.createReport({ restaurant_id: 'R01', kind: 'wrong_info', detail: `测试 ${i}` }, user);
+    // 跨门店、跨类型铺够数量，验证上限与排序（同一人的重复举报由另一条用例专门管）
+    const kinds = ['wrong_info', 'wrong_location', 'abuse', 'closed'] as const;
+    const others = ['U03', 'U04', 'U05', 'E01', 'A01'] as const;
+    let made = 0;
+    for (const rid of [...s.restaurants.keys()]) {
+      for (const k of kinds) {
+        s.createReport({ restaurant_id: rid, kind: k, detail: `铺量 ${rid} ${k}` }, user);
+        made += 1;
+      }
+      if (made > 210) break;
+    }
+    for (const u of others) {
+      const sid = s.login(u, '888888').session_id;
+      s.createReport({ restaurant_id: 'R01', kind: 'wrong_info', detail: `${u} 的独立举报` }, sid);
+    }
     const rows = s.reportQueue(mod);
-    expect(rows).toHaveLength(200);
-    expect(rows[0]?.detail).toBe('测试 204');
-    expect(rows[0]?.restaurant_name).toBeTruthy();
+    expect(rows.length).toBe(200);
+    // 待处理必须排在已结案之前：否则早期未结案的单会被新单永远压住
+    const firstClosed = rows.findIndex((r) => r.status === 'RESOLVED' || r.status === 'DISMISSED');
+    const lastOpen = rows.map((r) => r.status).lastIndexOf('OPEN');
+    expect(firstClosed).toBe(-1);
+    expect(lastOpen).toBeGreaterThanOrEqual(0);
     expect(rows[0]).not.toHaveProperty('phone_masked');
+    expect(rows[0]?.restaurant_name).toBeTruthy();
+    expect(rows.filter((r) => r.status === 'OPEN').length).toBeGreaterThan(150);
+    // 状态过滤可用
+    expect(s.reportQueue(mod, 'OPEN').every((r) => r.status === 'OPEN')).toBe(true);
+    expect(s.reportQueue(mod, 'IN_REVIEW').every((r) => r.status === 'IN_REVIEW')).toBe(true);
+  });
+  it('同一人对同一门店同一类问题不重复开单，不同人各自独立', () => {
+    const s = newStore();
+    const u02 = s.login('U02', '888888').session_id;
+    const u03 = s.login('U03', '888888').session_id;
+    const first = s.createReport({ restaurant_id: 'R01', kind: 'wrong_info', detail: '测试 1' }, u02);
+    for (let i = 2; i <= 40; i += 1) {
+      const again = s.createReport({ restaurant_id: 'R01', kind: 'wrong_info', detail: `测试 ${i}` }, u02);
+      expect(again.id).toBe(first.id);
+    }
+    expect(s.reports.filter((r) => r.restaurant_id === 'R01' && r.kind === 'wrong_info').length).toBe(1);
+    const other = s.createReport({ restaurant_id: 'R01', kind: 'wrong_info', detail: '另一个人的举报' }, u03);
+    expect(other.id).not.toBe(first.id);
+    // 换一类问题可以另开一单：闭店与信息有误不是同一件事
+    const closed = s.createReport({ restaurant_id: 'R01', kind: 'closed', detail: '后来关门了' }, u02);
+    expect(closed.id).not.toBe(first.id);
+    // 结案后同一人再举报同一类问题，允许开新单（旧单不复活）
+    const mod = s.login('M01', '888888').session_id;
+    s.decideReport({ id: first.id, action: 'resolve', reason: '已核实并更正信息', expected_version: first.version }, mod);
+    const after = s.createReport({ restaurant_id: 'R01', kind: 'wrong_info', detail: '又错了' }, u02);
+    expect(after.id).not.toBe(first.id);
+    expect(after.status).toBe('OPEN');
   });
   it('注销任务可从快照恢复、实际清除个人内容且幂等', () => {
     const s = newStore();

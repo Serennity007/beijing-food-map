@@ -108,8 +108,23 @@ async function ensureApi() {
     return true;
   }
   mkdirSync(join(ROOT, 'work'), { recursive: true });
-  const db = join(ROOT, 'work', `demo-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '')}.sqlite`);
-  const child = spawn(npm.cmd, [...npm.pre, 'run', 'dev', '-w', '@qianwei/api'], {
+  // 文件名用上海时间：界面里的"提交时间"已经是上海日历日，UTC 命名的话
+  // 凌晨那场演示会出现"截图写 09-25、库文件写 09-24"的对不上。
+  const dayParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date());
+  const pick = (t) => dayParts.find((p) => p.type === t)?.value ?? '00';
+  const db = join(ROOT, 'work', `demo-${pick('year')}${pick('month')}${pick('day')}${pick('hour')}${pick('minute')}${pick('second')}.sqlite`);
+  // 用 start 而不是 dev：dev 是 tsx watch，演示途中改一下源码就会重启后端，
+  // 新进程若抢不到 8787 会静默留下一个"还在监听但会话已丢"的后端，内存态会话与队列全断。
+  const child = spawn(npm.cmd, [...npm.pre, 'run', 'start', '-w', '@qianwei/api'], {
     cwd: ROOT,
     env: { ...process.env, SQLITE_PATH: db, NODE_ENV: 'development' },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -188,7 +203,10 @@ function proxyApi(req, res) {
       port: API.port,
       method: req.method,
       path: req.url,
-      headers: { ...req.headers, host: `${API.host}:${API.port}` },
+      // 保留访客的 Host（不改成 127.0.0.1:8787）：后端拿 Origin 的 host 与 Host 头比对来判同源，
+      // 改掉就会把"浏览器↔演示服务"这条真实同源链路误判成跨站，写操作全 403。
+      // 跨站页面伪造不了 Host，所以这不放松 CSRF 判断。
+      headers: { ...req.headers },
     },
     (up) => {
       const headers = { ...up.headers };
