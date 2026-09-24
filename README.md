@@ -11,8 +11,8 @@ npm install
 npm run dev          # 前端 http://localhost:5173 + 演示后端 http://127.0.0.1:8787
 npm run dev:web      # 只要前端（静态演示模式，数据存在浏览器 localStorage）
 npm run typecheck
-npm test             # 领域引擎、后端合同与地图纯函数测试（本轮 100 项：contracts 61 / web 14 / api 25）
-npx tsx scripts/http-contract-check.mts   # 前端 HTTP 客户端 × 已监听后端的逐接口对账（本轮 29 项，先把后端起在 127.0.0.1:8787）
+npm test             # 领域引擎、后端合同与地图纯函数测试（本轮 125 项：contracts 82 / api 29 / web 14）
+npx tsx scripts/http-contract-check.mts   # 前端 HTTP 客户端 × 已监听后端的逐接口对账（本轮 47 项，先把后端起在 127.0.0.1:8787 的独立库上）
 npm run build        # apps/web/dist
 ```
 
@@ -45,6 +45,8 @@ npm run build        # apps/web/dist
 - 利益披露非“无关联”的记录会公开披露，但不算独立票。
 - 分享快照不可变；撤销后旧 token 永久失效，`publication_generation` 递增会作废此前全部待审发布申请。
 - 作者不能审核自己的内容或发布申请，即使同时是管理员。
+- 建店申请：搜不到这家店就能申请新增，提交后落一家地点 `PENDING` 的门店 —— 只出现在显式开启的待验证图层，**核验通过也不等于好店达标**（详情页会写"不符合项：无有效推荐来源"）。
+- 建店去重：同名且近似直线距离 ≤ 150 米只给重复提示，不自动合并；同一作者重复提交同一家店会复用同一条候选，不会多出第二家门店。被驳回后只能在原申请上补材料（`revision` 递增），不能新开一条。
 
 ## 目录
 
@@ -54,7 +56,7 @@ apps/web/             # Vite + React 19 SPA（含 /admin 路由）
 apps/api/             # 演示后端：node:http + SQLite 持久化 + OpenAPI
 database/migrations/  # SQL 迁移（启动时幂等应用）
 scripts/              # 统一开发入口 + HTTP 契约自检
-docs/                 # handover / decisions / status / blockers / runbooks
+docs/                 # handover / decisions / status / blockers / runbooks / design / questions-for-next-review
 ```
 
 ## 部署
