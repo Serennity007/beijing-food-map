@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   VIEW_LABEL,
   isValidGcj02,
+  straightLineMeters,
   wgs84ToGcj02,
   type MapView as ViewKind,
   type Restaurant,
@@ -118,6 +119,18 @@ export function MapPage() {
     const entityWord = d.mode === 'clusters' ? '个聚合点' : '个点位';
     return `匹配 ${d.totalMatched} 家 · 视野内 ${d.entities.length} ${entityWord}`;
   }, [d.totalMatched, d.entities.length, d.mode]);
+
+  /**
+   * 空状态要说清"为什么空"：放到很细的层级时视野只剩几十米，覆盖不到任何门店，
+   * 这时该让用户缩小地图 —— 旧文案写的是"放大"，方向正好相反。
+   */
+  const spanMeters = useMemo(() => {
+    const b = d.viewport.bounds;
+    return Math.round(straightLineMeters({ lng: b.west, lat: b.south }, { lng: b.east, lat: b.south }));
+  }, [d.viewport.bounds]);
+  const deepZoom = d.viewport.zoom >= 14;
+  const zoomLabel = d.viewport.zoom.toFixed(1);
+  const spanLabel = spanMeters >= 1000 ? `${(spanMeters / 1000).toFixed(1)} 公里` : `${spanMeters} 米`;
 
   return (
     <div className="map-page">
@@ -309,7 +322,9 @@ export function MapPage() {
               message={
                 d.filters.layer === 'pending_verification'
                   ? '当前视野没有待验证门店。'
-                  : '当前视野内没有符合推荐资格的门店。可以移动或放大地图、切换“北京其他”，或提交你吃过的店。'
+                  : deepZoom
+                    ? `你已经放到 ${zoomLabel} 级，视野只有约 ${spanLabel}，这个范围通常覆盖不到任何门店。请缩小地图（往外拉）或回到全图。`
+                    : '当前视野内没有符合推荐资格的门店。可以移动地图、切换"北京其他"，或提交你吃过的店。'
               }
               action={
                 <div className="btn-row">

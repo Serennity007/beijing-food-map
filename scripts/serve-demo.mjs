@@ -11,7 +11,8 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer, request as httpRequest } from 'node:http';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { createReadStream, statSync } from 'node:fs';
+import { statSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { networkInterfaces } from 'node:os';
@@ -131,9 +132,31 @@ function contentType(path) {
   return MIME[extname(path).toLowerCase()] ?? 'application/octet-stream';
 }
 
-function sendFile(res, file, status = 200) {
-  res.writeHead(status, { 'content-type': contentType(file), 'cache-control': 'no-cache' });
-  createReadStream(file).pipe(res);
+/**
+ * 演示服务必须自己压缩：真实 Pages/CDN 会给 gzip，而这里不发就变成
+ * 未压缩的 1 MB 底图 SDK + 438 KB 应用代码原样过线 —— 手机上看就是"地图卡/白屏久"。
+ * 只压文本类；瓦片与图片由上游给，不在此列。
+ */
+const COMPRESSIBLE = /\.(js|mjs|css|json|map|html|svg)(\?.*)?$/i;
+
+function gzipResponse(req, res, file, status = 200) {
+  const accept = req.headers['accept-encoding'] ?? '';
+  const raw = readFileSync(file);
+  const headers = { 'content-type': contentType(file), 'cache-control': 'no-cache' };
+  if (COMPRESSIBLE.test(file) && /\bgzip\b/.test(accept)) {
+    const body = gzipSync(raw);
+    headers['content-encoding'] = 'gzip';
+    headers['vary'] = 'accept-encoding';
+    res.writeHead(status, headers);
+    res.end(body);
+    return;
+  }
+  res.writeHead(status, headers);
+  res.end(raw);
+}
+
+function sendFile(req, res, file, status = 200) {
+  gzipResponse(req, res, file, status);
 }
 
 /** 静态资源 → dist；未知路径回 index.html（本地演示不需要 Pages 那套 404.html 回退）。 */
@@ -147,11 +170,11 @@ function serveStatic(req, res) {
     return;
   }
   if (existsSync(abs) && statSync(abs).isFile()) {
-    sendFile(res, abs);
+    sendFile(req, res, abs);
     return;
   }
   const index = join(DIST, 'index.html');
-  if (existsSync(index)) sendFile(res, index);
+  if (existsSync(index)) sendFile(req, res, index);
   else {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
     res.end('404 找不到构建产物，先跑 npm run build');
