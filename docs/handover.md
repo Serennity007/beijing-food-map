@@ -6,12 +6,16 @@
 
 ## 0. 5 分钟上手
 
+**只想把网页打开给人看**（不需要记命令）：双击仓库根的 `一键演示.bat`，或 `node scripts/serve-demo.mjs`。
+上台前跑 `node scripts/demo-check.mjs` 看 ALL GREEN。交付视角的说明在 [../DELIVERY.md](../DELIVERY.md)，
+照着讲的六幕脚本在 [演示动线.md](./演示动线.md)。下面是开发用的命令。
+
 ```bash
 npm install            # npm workspaces，锁文件 package-lock.json（没有 pnpm，见 decisions D01）
 npm run dev            # 前端 :5173 + 演示后端 127.0.0.1:8787，日志打在终端（要落盘自己重定向，`*.log` 已 gitignore）
-npm run typecheck      # 3 个 workspace
+npm run typecheck
 npm test               # 注意：contracts/web 是 vitest，api 是 node:test，输出格式不同
-npm run build          # 产物 apps/web/dist
+npm run build          # apps/web/dist
 ```
 
 需要 **Node ≥ 22.5**（后端用内置 `node:sqlite`），本机与 CI/镜像固定 **Node 24**。
