@@ -22,9 +22,9 @@ npm run build          # 产物 apps/web/dist
 
 | 层 | 现在的事实 |
 | --- | --- |
-| implemented | 领域引擎 + 11 个页面 + 演示后端（含签名会话、注销清除任务、审核侧举报队列）+ OpenAPI + Pages workflow 全部写完 |
-| verified | typecheck 全绿；测试 **100 项 0 失败**（contracts 61 / api 25 / web 14）；HTTP 契约自检 **29 项**；`npm run build` 成功；**桌面视口浏览器实测**闭环走通（静态模式与 `/api` 后端模式各一遍，含举报复核与注销处置）；写路径全部跑在独立 SQLite 文件上，默认演示库未被污染 |
-| release_ready | **否**。合成数据不是真实核验数据；地图 Key / 短信 / 云账号需要你提供或授权；真实对象存储、可水平扩展的持久化、举报工单状态流转、新门店提交核验未做 |
+| implemented | 领域引擎（含**新门店候选与地点核验**）+ 11 个页面 + 演示后端 36 条路由（含签名会话、注销清除任务、审核侧举报队列、**5 条候选接口**）+ OpenAPI + Pages workflow 全部写完 |
+| verified | typecheck 全绿；测试 **125 项 0 失败**（contracts 82 / api 29 / web 14）；HTTP 契约自检 **47 项**；`npm run build` 成功；**桌面视口浏览器实测**在两种模式下各走一遍（地图 / 投稿审核 / 清单发布分享撤销 / 纠错举报 / **建店申请与地点核验** / 注销处置）；写路径全部跑在独立 SQLite 文件上，默认演示库本机未生成 |
+| release_ready | **否**。合成数据不是真实核验数据；签名会话与注销清除已闭合、建店与地点核验已闭合，但真实对象存储、可水平扩展的持久化、举报工单的处置闭环没有；地图选点与真实 POI 数据源依赖凭据；窄屏与真机没验；后端没部署；仓库没推送到 GitHub |
 
 细节账目在 [status.md](./status.md)（含"浏览器实测看到的"逐条证据）与 [blockers.md](./blockers.md)。**外部依赖类阻塞项接手的 AI 无法自行完成**，别去猜凭据、别自己部署、别给真人发消息。
 
@@ -37,15 +37,20 @@ npm run build          # 产物 apps/web/dist
 packages/contracts/src/
   enums.ts     所有枚举 + 中文标签（枚举要直接展示给用户，措辞跟语义放一起）
   dto.ts       对外数据结构（页面/接口读到的形状）
-  rules.ts     180 天窗口、社区计票、资格谓词等纯函数
-  geo.ts       网格聚合分档 cellDegForZoom、GCJ-02 ↔ WGS84
+  rules.ts     180 天窗口、社区计票、资格谓词、名称规范化与重复候选匹配等纯函数
+  geo.ts       网格聚合分档 cellDegForZoom、GCJ-02 ↔ WGS84、近似直线距离
   store.ts     Store：读接口收 sessionId，写接口收 sessionId + expected_version
   seed.ts      24 门店 / 9 账号 / 71 条反馈，全是合成，is_test_data=true
   photos.ts    内联合成 SVG data URI（代替对象存储）
+packages/contracts/test/
+  store.test.ts       领域与谓词（61）
+  candidates.test.ts  建店候选与地点核验（21）
 apps/web/src/data/
   api.tsx      ApiClient 接口 + Provider（VITE_API_BASE 决定用哪个实现）
   client.ts    StaticClient：浏览器内 Store + localStorage
   http.ts      Http：真实 fetch + HttpOnly Cookie
+apps/web/src/features/candidates/
+  CandidateForm.tsx  建店与补材料共用的表单（投稿页与"我的"页都用它，别再抄第二份）
 apps/api/src/
   app.ts       node:http 外壳、优雅退出、Cookie 解析、注销清除任务的排空（启动一次 + 每秒一次，`hasPendingDeletions()` 先短路）
   http/handlers.ts   路由表（method + path + summary 即 OpenAPI 来源）
@@ -57,7 +62,7 @@ apps/api/src/
 ```
 
 网页路由：`/map`、`/restaurants/:id`、`/submit`、`/me`、`/me/collections`、`/me/collections/:id`、`/s/:token`、`/login`、`/admin`、`/privacy`、`/terms`、`*` → 404（`apps/web/src/app/App.tsx:61-74`）。
-API 路由（全部在 `/api/v1` 下）：`/health/live` `/health/ready` `/today` `/map/items` `/restaurants` `/restaurants/search` `/restaurants/:id` `/media/:id` `/uploads/test-photo` `/auth/login` `/auth/logout` `/me` `/me/submissions` `/me/reports` `/submissions` `/restaurants/:id/my-feedback` `POST|DELETE /restaurants/:id/collection-item` `/collections` `/collections/:id` `/collections/:id/items/:restaurantId` `/collections/:id/publication-requests` `/collections/:id/unpublish` `/shared-collections/:token` `/reports` `/admin/queue` `/admin/reports` `/admin/audit-log` `/admin/moderation/:target/actions` `/admin/restaurants/:id/status` `/admin/restaurants/:id/merge` `/admin/editorial-endorsements/verify|revoke`。
+API 路由（全部在 `/api/v1` 下）：`/health/live` `/health/ready` `/today` `/map/items` `/restaurants` `/restaurants/search` `/restaurants/:id` `/media/:id` `/uploads/test-photo` `/auth/login` `/auth/logout` `/me` `/me/submissions` `/me/reports` `/submissions` `/restaurants/:id/my-feedback` `POST|DELETE /restaurants/:id/collection-item` `/collections` `/collections/:id` `/collections/:id/items/:restaurantId` `/collections/:id/publication-requests` `/collections/:id/unpublish` `/shared-collections/:token` `/reports` `/restaurant-candidates` `POST /restaurant-candidates/:id/materials` `/admin/queue` `/admin/reports` `/admin/candidates` `/admin/candidates/:id/actions` `/admin/audit-log` `/admin/moderation/:target/actions` `/admin/restaurants/:id/status` `/admin/restaurants/:id/merge` `/admin/editorial-endorsements/verify|revoke`。
 
 `localStorage` 键：`qianwei.state`（引擎快照）、`qianwei.session`、`qianwei.mapviewport`、`qianwei.mapfilters`、`qianwei.mapengine`、`qianwei.draft.<userId|anon>`、`qianwei.fallback`（Pages 深链接回退，见 `public/404.html`）。
 
@@ -73,6 +78,8 @@ API 路由（全部在 `/api/v1` 下）：`/health/live` `/health/ready` `/today
 8. 坐标全程 GCJ-02，**只在 MapLibre 渲染边界转 WGS84**。高德原样使用。
 9. 列表上限 200；地图快照 `queryKey` 过期回 409 `QUERY_EXPIRED`；写操作乐观锁 `expected_version`。
 10. 测试种子与固定验证码 `888888` 在 `NODE_ENV=production` 下被引擎直接拒绝装载。
+11. **建店只给 `PENDING` 地点**：候选创建时落的门店必须靠原有谓词被默认层挡住；核验通过也**不等于**好店达标（还要社区票或编辑背书）。重复只出提示，绝不自动合并、不自动驳回。同一作者重复提交同一家店复用同一条候选。驳回必填理由、理由回传给作者、状态不可回退（`REJECTED → PENDING` 只能由作者补材料触发）。
+12. **本人提交的建店申请不能本人核验**，即使同时是 moderator/admin —— `decideCandidate` 与 `patchRestaurantStatus`（候选来源门店的 `place_status` 变更）两处都把守，缺一处就有绕过路径。
 
 ## 4. 改东西的连带清单（最容易漏的部分）
 
@@ -85,6 +92,8 @@ API 路由（全部在 `/api/v1` 下）：`/health/live` `/health/ready` `/today
 | 种子数据 | `seed.ts` → 基线计数（`collection=28 media=117 meta=1 publication=1 report=2 restaurant=24 user=9 visit=71`）→ 依赖这些 ID 的测试与 `status.md` 的 verified 表 |
 | 地图渲染 | 两个适配器都要过（`maplibre-adapter.ts` / `amap-adapter.ts`），共用 `MapAdapter` 接口（`features/map/types.ts`），纯函数测试在 `map.test.ts` |
 | 迁移 | `database/migrations/*.sql`（启动时幂等应用），同时改 `repository.ts` 的文档结构 |
+| **新增一个实体**（例：本轮的候选） | `store.ts` 的集合 + `dumpState`/`loadState` → `repository.ts` 的 `ENTITY_KINDS`/`DumpedState`/`rowsFor`/`parseDump`/`load` 分支（文档表通用形状，**不需要新迁移**）→ `dto.ts` → `openapi.ts` 的 schema → `client.ts` 接口 + `StaticClient` + `http.ts` → 页面 → 契约自检 → `status.md` 的 verified 表 |
+| 候选/核验相关 | 中文标签一律取 `enums.ts`（`CANDIDATE_STATUS_LABEL` / `CANDIDATE_SOURCE_LABEL` / `DUPLICATE_REASON_LABEL` / `PLACE_STATUS_LABEL`）；表单只用 `features/candidates/CandidateForm.tsx` 那一份 |
 
 `Store` 的只读接口入参**一律是 sessionId**，内部只经 `userIdOfSession()` 换算一次。曾有 bug 是 `detail()` 把 sessionId 当 userId 用，`my_current_feedback` 恒为 null，两种模式都不报错（decisions D10）；契约自检现在盯着这条。
 
@@ -106,6 +115,14 @@ API 路由（全部在 `/api/v1` 下）：`/health/live` `/health/ready` `/today
 - 静态模式刷新即掉登录 → `StaticClient.login/logout` 漏了 `persist()`。
 - 枚举原样输出 `社区：QUALIFIED` → 中文标签进 `enums.ts`。
 
+**本轮（阶段 1A）新踩到的**
+- **停掉后台任务不等于停掉服务**：`TaskStop` 只杀 `npm run dev:api` 的外壳，`tsx watch` 子进程还占着 8787。症状是"新库没生效"：我起了 `SQLITE_PATH=work/browser-1a.sqlite` 的新实例，日志里写着「启动失败：端口不可用」，而浏览器实测的数据全落在上一个库。判断前先看新进程日志有没有这行，或直接 `netstat -ano | grep 8787` 比对 PID；必要时 `taskkill //PID <pid> //F`。
+- **契约自检不能在同一库上跑第二遍**：`createCandidate` 走幂等缓存，第二次运行同键同内容会返回**第一次的响应快照**（`version` 还是旧值），于是后面的 `expected_version` 必然 409。这不是缺陷（幂等重放本来就该返回同一结果），但意味着每轮验证都要换一个新的 `SQLITE_PATH`。
+- **`requireRestaurant()` 返回的是 Map 里的活动对象**，不是副本。测试里 `const before = s.requireRestaurant(id)` 之后改它，`before.x` 会跟着变（我就这样写出过一次假失败断言）。要比"改前/改后"必须先存标量。
+- 同一个 `requireRestaurant()` 会先走 `canonical()`：门店被合并后，用旧 ID 取到的是 **target 记录**。所以断言"旧 ID 永久重定向"要读 `s.restaurants.get(id).merged_into`，而不是 `requireRestaurant(id).merged_into`。
+- 枚举回潮：`/me` 的候选卡片把 `place_status` 原样打成了 `VERIFIED`。凡是新加的展示字段，先查 `enums.ts` 有没有标签，没有就补标签而不是直接输出。
+- 错误提示的渲染条件别写反：建店的告警原本挂在"表单已关闭"上，结果表单开着时的 401/409/非字段错误全都看不见。
+
 **仓库完整性**：`.gitignore` 裸写 `data/` 连 `apps/web/src/data/` 一起吞掉，**整个数据层不在前两个提交里**，克隆下来无法构建（提交 `2ef99e6`）。推送前必查：
 ```bash
 git ls-files --others --exclude-standard            # 期望空
@@ -116,15 +133,15 @@ git ls-files --others --ignored --exclude-standard  # 逐条确认都是产物
 
 ```bash
 npm run typecheck                            # 期望退出码 0，3 个 workspace
-npm test -w @qianwei/contracts               # 期望 61 通过（vitest）
+npm test -w @qianwei/contracts               # 期望 82 通过（2 个文件：store 61 + candidates 21，vitest）
 npm test -w @qianwei/web                     # 期望 14 通过（vitest）
-npm test -w @qianwei/api                     # 期望 25 pass / 0 fail（node:test，输出是 ℹ tests / pass / fail）
-SQLITE_PATH="C:/绝对/路径/work/gate.sqlite" npm run dev:api &   # 另开一个终端，别写默认库
-npx tsx scripts/http-contract-check.mts      # 期望 29 项，前端真实 Http 客户端 × 已监听后端
+npm test -w @qianwei/api                     # 期望 29 pass / 0 fail（node:test，输出是 ℹ tests / pass / fail）
+SQLITE_PATH="C:/绝对/路径/work/gate-1b.sqlite" npm run dev:api &   # 另开终端，别写默认库；每轮换新库
+npx tsx scripts/http-contract-check.mts      # 期望 47 项，前端真实 Http 客户端 × 已监听后端
 npm run build                                # 期望退出码 0
 ```
 
-数字会变，别照抄：跑之前先按上面命令实测一遍，报告里写你这次真的看到的数（历史文档里 57/18/14 = 89 与 28 项的写法就是上一轮留下的，本轮是 61/25/14 = 100 与 29 项）。`npm run seed:test` 只在你想把**默认**演示库恢复成种子基线时用（它整库覆盖，先确认没有别的任务在里面留状态）。
+数字会变，别照抄：跑之前先按上面命令实测一遍，报告里写你这次真的看到的数（历史：57/18/14 = 89 与 28 项 → 阶段 0 的 61/25/14 = 100 与 29 项 → 阶段 1A 的 82/29/14 = 125 与 47 项）。`npm run seed:test` 只在你想把**默认**演示库恢复成种子基线时用（它整库覆盖，先确认没有别的任务在里面留状态）。
 
 浏览器实测的操作路径与预期文案见 [status.md](./status.md) 的"浏览器实测看到的"；本地环境细节见 [runbooks/local-dev.md](./runbooks/local-dev.md)。
 契约自检的 Cookie Jar 是脚本内的内存 `Map`，不落盘；如果你手动用 `curl -c` 试过登录接口，把生成的 jar/凭据文件删掉再提交。
@@ -132,16 +149,17 @@ npm run build                                # 期望退出码 0
 ## 7. 待办（按"能不能自主做"分）
 
 **接手的 AI 可以直接做**（按建议优先级）
-1. **阶段 1A 新门店提交核验**：第三方地点候选目前**没有建店能力**，投稿页写明了不提供入口（`SubmitPage.tsx` 头部注释）。要做的是：候选 → 提交 → `PENDING` 门店 → 人工核验（坐标/营业/风险三态）→ 才进资格谓词。规则只能加在 `packages/contracts`，两种模式行为一致，别在页面里补判定。
-2. **阶段 1B 举报闭环**：工单状态流转的写接口（`OPEN → IN_REVIEW → RESOLVED|DISMISSED`，带 `expected_version` 与角色把关）、举报关联到具体反馈或媒体、同一用户重复举报的合并与限频、处理结果回写到举报人"我的"页（现在那里只显示一条固定的 `result_note`）。队列只读部分已完成（见 blockers C9）。
-3. **阶段 2 手机端界面**：窄屏断点、抽屉遮挡、地图 inset、捏合与双指手势 —— blockers C10。内嵌浏览器只有一个固定桌面视口，这一项需要你在真机上看一次，或者直接接受"桌面已验、移动未验"。
-4. 本轮实测看到、刻意没顺手改的小口子：页头同时暴露"登录"与"内测登录"两个入口且都指向 `/login`；后台举报卡片打印原始 ISO 时间戳（`2026-09-23T06:56:20.933Z`）而不是本地日期；卡片不显示举报人（脱敏本身是有意的，但页面上该写一句"为什么不显示是谁举报"）。
+1. **阶段 1B 举报闭环**：工单状态流转的写接口（`OPEN → IN_REVIEW → RESOLVED|DISMISSED`，带 `expected_version` 与角色把关）、举报关联到具体反馈或媒体、同一用户重复举报的合并与限频、处理结果回写到举报人"我的"页（现在那里只显示一条固定的 `result_note`）。队列只读部分已完成（见 blockers C9）。做法可以照搬本轮 1A 的连带清单（§4 最后一行）。
+2. **阶段 2 手机端界面**：窄屏断点、抽屉遮挡、地图 inset、捏合与双指手势 —— blockers C10。本轮新加的建店表单与后台「地点核验」卡片同样只在桌面视口看过。内嵌浏览器只有一个固定桌面视口，这一项需要你在真机上看一次，或者直接接受"桌面已验、移动未验"。
+3. **两个待决问题需要人拍板**（详见 `docs/questions-for-next-review.md`）：核验状态翻转是否该递增 `location_version`（现状会清零已有社区票，已用特征测试钉住）；提交人注销后其待核验候选要不要自动退出队列。
+4. 本轮实测看到、刻意没顺手改的小口子：门店详情页"核验日期"那行把日期与 `verification_note` 叠成 `2026-09-24（地点已核验（2026-09-24））`；页头同时暴露"登录"与"内测登录"两个入口且都指向 `/login`；后台举报卡片打印原始 ISO 时间戳而不是本地日期；卡片不显示举报人（脱敏本身是有意的，但页面上该写一句"为什么不显示是谁举报"）。
 5. Docker 镜像构建验证（本机无 Docker，`Dockerfile` 从未构建）。
 
 **必须先拿到人类授权/凭据，不要自行推进**
-- 推送到 GitHub：目标仓库已确认 `Serennity007/beijing-food-map`（public），本机 `gh` 当前**未登录**。用户指令原文是"你先登录，我再推 Serennity007"。登录完成后建仓、推 `main`、确认 Pages source = GitHub Actions、回报线上地址。注意本机 git 提交身份是 `Pasteliangzhengtao <cse.ztliang22@gzu.edu.cn>`，public 仓库里会公开可见，改不改由用户决定（**不要擅自改 git config**）。
+- 推送到 GitHub：目标仓库 `Serennity007/beijing-food-map`（public）。**这台机器上 `gh` 已经登录到 Serennity007**（token scopes: gist/read:org/repo），所以原机器上"你先登录我再推"的卡点已经解除 —— 但推送仍然要用户明确同意。
+- ⚠️ 现在 `origin` 是一个**指向源机器本地路径的失效 remote**：`D:/桌面/qianwei-project-20260924/code/beijing-food-map`，`git ls-remote origin` 直接 fatal。推送前必须先换地址，这一步由用户确认后再做。本机 git 提交身份是 `Pasteliangzhengtao <cse.ztliang22@gzu.edu.cn>`，public 仓库里会公开可见，改不改由用户决定（**不要擅自改 git config**）。
 - 后端托管（Render/Fly/Railway）、`VITE_AMAP_KEY` + 安全密钥、短信服务、云账号、任何付费开通、任何对真人发送消息。
-- 真实门店数据：需要经人工核验的门店库。**虚构门店/探店/票数/截图是硬约束禁止项。**
+- 真实门店数据：需要经人工核验的门店库。**虚构门店/探店/票数/截图是硬约束禁止项。** 建店流程（C11）已经通了，所以现在缺的只是数据与核验人力，不是功能。
 
 ## 8. 给接手 AI 的沟通约定
 
@@ -157,5 +175,7 @@ npm run build                                # 期望退出码 0
 - [README.md](../README.md) 快速开始、两种运行模式、值得手动验证的规则
 - [status.md](./status.md) implemented / verified / not verified / release_ready 分账
 - [blockers.md](./blockers.md) A 需要你提供 / B 上线前必须补 / C 刻意留的缺口
-- [decisions.md](./decisions.md) D01–D15 与原始说明书不同的选择及原因
+- [decisions.md](./decisions.md) D01–D18 与原始说明书不同的选择及原因
+- [design/restaurant-candidates.md](./design/restaurant-candidates.md) 阶段 1A 的方案与它依据的规格条款
+- [questions-for-next-review.md](./questions-for-next-review.md) 本轮**没定下来**或**自评做得不够好**的问题，按优先级排，等外部意见
 - [runbooks/local-dev.md](./runbooks/local-dev.md) · [deploy-pages.md](./runbooks/deploy-pages.md) · [deploy-api.md](./deploy-api.md)

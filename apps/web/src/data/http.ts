@@ -1,5 +1,13 @@
 import type * as C from '@qianwei/contracts';
-import { ClientError, type ApiClient, type MapQueryInput, type PatchStatusInput, type SubmitInput } from './client';
+import {
+  ClientError,
+  type ApiClient,
+  type CandidateCreateInput,
+  type CandidateDecision,
+  type MapQueryInput,
+  type PatchStatusInput,
+  type SubmitInput,
+} from './client';
 
 /** 有后端时（VITE_API_BASE 指向已部署 API）走这条路径；静态部署用 StaticClient。 */
 export class Http implements ApiClient {
@@ -63,7 +71,7 @@ export class Http implements ApiClient {
   }
 
   search(q: string) {
-    return this.req<{ own: C.Restaurant[]; provider_candidates: Array<{ provider: string; poi_id: string; name: string; address: string }> }>(
+    return this.req<{ own: C.Restaurant[]; provider_candidates: C.ProviderCandidate[] }>(
       `/restaurants/search?q=${encodeURIComponent(q)}`,
     );
   }
@@ -107,6 +115,44 @@ export class Http implements ApiClient {
 
   mySubmissions() {
     return this.req<C.Submission[]>('/me/submissions');
+  }
+
+  createCandidate(input: CandidateCreateInput) {
+    return this.req<C.RestaurantCandidate>(
+      '/restaurant-candidates',
+      { method: 'POST', headers: input.idempotency_key ? { 'idempotency-key': input.idempotency_key } : {} },
+      input,
+    );
+  }
+
+  myCandidates() {
+    return this.req<C.RestaurantCandidate[]>('/me/restaurant-candidates');
+  }
+
+  resubmitCandidate(id: string, patch: Partial<C.CandidateFacts>, expectedVersion: number) {
+    return this.req<C.RestaurantCandidate>(
+      `/restaurant-candidates/${encodeURIComponent(id)}/materials`,
+      { method: 'POST' },
+      { ...patch, expected_version: expectedVersion },
+    );
+  }
+
+  candidateQueue(status?: C.CandidateStatus | null) {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+    return this.req<C.RestaurantCandidate[]>(`/admin/candidates${qs}`);
+  }
+
+  decideCandidate(input: CandidateDecision) {
+    return this.req<C.RestaurantCandidate>(
+      `/admin/candidates/${encodeURIComponent(input.id)}/actions`,
+      { method: 'POST' },
+      {
+        action: input.action,
+        reason: input.reason,
+        target_restaurant_id: input.target_restaurant_id,
+        expected_version: input.expected_version,
+      },
+    );
   }
 
   async withdrawFeedback(restaurantId: string) {

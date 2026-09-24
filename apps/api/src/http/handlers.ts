@@ -1,13 +1,20 @@
 import {
   ATTITUDES,
   BUSINESS_STATUSES,
+  CANDIDATE_SOURCES,
+  CANDIDATE_STATUSES,
   DISCLOSURES,
   ApiError,
   PLACE_STATUSES,
   REPORT_KINDS,
   RISK_STATUSES,
   Store,
+  type CandidateFacts,
+  type CandidateInput,
+  type CandidateSource,
+  type CandidateStatus,
   type CollectionItemRecord,
+  type Cuisine,
   type Disclosure,
   type ReportKind,
   type Restaurant,
@@ -20,9 +27,10 @@ import { assertId, parseMapQuery } from './query';
 import { RateLimiter } from './security';
 import { signSession } from './session';
 import { sessionCookie, sendBinary } from './responses';
-import { bBool, bDate, bEnum, bNumRaw, bStr, bStrArray, need } from './body';
+import { bBool, bDate, bEnum, bNum, bNumRaw, bStr, bStrArray, need } from './body';
 
 const MODERATION_ACTIONS = ['approve', 'reject', 'hide'] as const;
+const CANDIDATE_ACTIONS = ['verify', 'reject', 'merge'] as const;
 const SYSTEM_KINDS: readonly SystemCollectionKind[] = ['want', 'visited', 'private_stash'];
 const ENDORSEMENT_ACTIONS = ['verify', 'revoke'] as const;
 
@@ -74,8 +82,57 @@ function submitInputFrom(ctx: Ctx, restaurantId: string) {
   };
 }
 
-/** 审核返回体：Store.moderate 不返回门店，这里用公开方法补上（与 StaticClient 同逻辑）。 */
-function moderateResult(store: Store, target: string): { ok: true; restaurant: Restaurant | null } {
+/**
+ * 建店与补材料共用。HTTP 层只管形状（类型、长度、数域），
+ * 北京范围、菜系枚举、信息来源字数这些领域边界仍然由 Store 判 —— 两种模式才会同一条规则。
+ */
+function candidatePatchFrom(ctx: Ctx): Partial<CandidateFacts> {
+  const out: Partial<CandidateFacts> = {};
+  if (ctx.body['name'] !== undefined) out.name = need(bStr(ctx.body, 'name', { required: true, max: 60 }), 'name');
+  if (ctx.body['branch'] !== undefined) out.branch = bStr(ctx.body, 'branch', { max: 40 });
+  if (ctx.body['address'] !== undefined) out.address = need(bStr(ctx.body, 'address', { required: true, max: 200 }), 'address');
+  if (ctx.body['floor_info'] !== undefined) out.floor_info = bStr(ctx.body, 'floor_info', { max: 60 });
+  if (ctx.body['cuisines'] !== undefined) out.cuisines = bStrArray(ctx.body, 'cuisines', { max: 3, itemMax: 20 }) as Cuisine[];
+  if (ctx.body['lng'] !== undefined) out.lng = need(bNum(ctx.body, 'lng', { required: true, min: 73.66, max: 135.05 }), 'lng');
+  if (ctx.body['lat'] !== undefined) out.lat = need(bNum(ctx.body, 'lat', { required: true, min: 3.86, max: 53.55 }), 'lat');
+  if (ctx.body['source'] !== undefined) {
+    out.source = need(bEnum<CandidateSource>(ctx.body, 'source', CANDIDATE_SOURCES, { required: true }), 'source');
+  }
+  if (ctx.body['provider'] !== undefined) out.provider = bStr(ctx.body, 'provider', { max: 40 });
+  if (ctx.body['poi_id'] !== undefined) out.poi_id = bStr(ctx.body, 'poi_id', { max: 60 });
+  if (ctx.body['evidence_note'] !== undefined) {
+    out.evidence_note = need(bStr(ctx.body, 'evidence_note', { required: true, max: 400 }), 'evidence_note');
+  }
+  return out;
+}
+
+function candidateCreateFrom(ctx: Ctx): CandidateInput {
+  return {
+    name: need(bStr(ctx.body, 'name', { required: true, max: 60 }), 'name'),
+    branch: bStr(ctx.body, 'branch', { max: 40 }),
+    address: need(bStr(ctx.body, 'address', { required: true, max: 200 }), 'address'),
+    floor_info: bStr(ctx.body, 'floor_info', { max: 60 }),
+    cuisines: bStrArray(ctx.body, 'cuisines', { max: 3, itemMax: 20 }) as Cuisine[],
+    lng: need(bNum(ctx.body, 'lng', { required: true, min: 73.66, max: 135.05 }), 'lng'),
+    lat: need(bNum(ctx.body, 'lat', { required: true, min: 3.86, max: 53.55 }), 'lat'),
+    source: need(bEnum<CandidateSource>(ctx.body, 'source', CANDIDATE_SOURCES, { required: true }), 'source'),
+    provider: bStr(ctx.body, 'provider', { max: 40 }),
+    poi_id: bStr(ctx.body, 'poi_id', { max: 60 }),
+    evidence_note: need(bStr(ctx.body, 'evidence_note', { required: true, max: 400 }), 'evidence_note'),
+    idempotency_key: idempotencyKey(ctx),
+  };
+}
+
+function candidateStatusParam(ctx: Ctx): CandidateStatus | null {
+  const raw = ctx.search.get('status');
+  if (raw === null || raw === '') return null;
+  if (!(CANDIDATE_STATUSES as readonly string[]).includes(raw)) {
+    throw new ApiError('VALIDATION_ERROR', `status 只能是 ${CANDIDATE_STATUSES.join(' | ')}`, 400, { status: '非法枚举' });
+  }
+  return raw as CandidateStatus;
+}
+
+/** 审核返回体：Store.moderate 不返回门店，这里用公开方法补上（与 StaticClient 同逻辑）。 */function moderateResult(store: Store, target: string): { ok: true; restaurant: Restaurant | null } {
   const visitId = target.split('#v')[0] ?? '';
   const visit = store.visits.find((v) => v.id === visitId);
   return { ok: true, restaurant: visit ? store.toDto(store.requireRestaurant(visit.restaurant_id)) : null };
@@ -387,6 +444,56 @@ export function buildRouter(svc: Services): Router {
             restaurant_id: assertId(need(bStr(ctx.body, 'restaurant_id', { required: true, max: 16 }), 'restaurant_id'), 'restaurant_id'),
             kind: need(bEnum<ReportKind>(ctx.body, 'kind', REPORT_KINDS, { required: true }), 'kind'),
             detail: bStr(ctx.body, 'detail', { required: true, max: 500 }) ?? '',
+          },
+          ctx.sessionId,
+        ),
+    },
+
+    // ------------------------------------------------------------ 新门店候选（阶段 1A）
+    {
+      method: 'POST',
+      path: '/restaurant-candidates',
+      status: 201,
+      summary: '提交新门店候选：同时落一家地点待核验的门店，不自动推荐',
+      writes: true,
+      handler: (ctx) => store.createCandidate(candidateCreateFrom(ctx), ctx.sessionId),
+    },
+    {
+      method: 'GET',
+      path: '/me/restaurant-candidates',
+      summary: '我的建店申请进度（含待核验与驳回原因）',
+      handler: (ctx) => store.myCandidates(ctx.sessionId),
+    },
+    {
+      method: 'POST',
+      path: '/restaurant-candidates/:id/materials',
+      summary: '被驳回的建店申请补充材料，回到待核验（revision 递增）',
+      writes: true,
+      handler: (ctx) =>
+        store.resubmitCandidateMaterials(
+          { id: idParam(ctx, 'id'), patch: candidatePatchFrom(ctx), expected_version: expectedVersion(ctx) },
+          ctx.sessionId,
+        ),
+    },
+    {
+      method: 'GET',
+      path: '/admin/candidates',
+      summary: '地点核验队列（本人提交的候选不能自审）',
+      handler: (ctx) => store.candidateQueue(ctx.sessionId, candidateStatusParam(ctx)),
+    },
+    {
+      method: 'POST',
+      path: '/admin/candidates/:id/actions',
+      summary: '核验通过 / 驳回 / 并入已有门店（并入需管理员）',
+      writes: true,
+      handler: (ctx) =>
+        store.decideCandidate(
+          {
+            id: idParam(ctx, 'id'),
+            action: need(bEnum(ctx.body, 'action', CANDIDATE_ACTIONS, { required: true }), 'action'),
+            reason: bStr(ctx.body, 'reason', { max: 300 }) ?? undefined,
+            target_restaurant_id: bStr(ctx.body, 'target_restaurant_id', { max: 16 }) ?? undefined,
+            expected_version: expectedVersion(ctx),
           },
           ctx.sessionId,
         ),

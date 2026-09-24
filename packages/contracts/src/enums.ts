@@ -37,6 +37,42 @@ export type ContentVersionStatus = (typeof CONTENT_STATUSES)[number];
 export const PLACE_STATUSES = ['PENDING', 'VERIFIED', 'REJECTED'] as const;
 export type PlaceVerificationStatus = (typeof PLACE_STATUSES)[number];
 
+export const PLACE_STATUS_LABEL: Record<PlaceVerificationStatus, string> = {
+  PENDING: '待核验',
+  VERIFIED: '已核验',
+  REJECTED: '核验未通过',
+};
+
+/** 候选门店的来源：没有地图 Key 时只有手动选点，第三方候选是接入位。 */
+export const CANDIDATE_SOURCES = ['manual_point', 'provider_poi'] as const;
+export type CandidateSource = (typeof CANDIDATE_SOURCES)[number];
+
+export const CANDIDATE_SOURCE_LABEL: Record<CandidateSource, string> = {
+  manual_point: '手动选点',
+  provider_poi: '地图地点候选',
+};
+
+export const CANDIDATE_STATUSES = ['PENDING', 'VERIFIED', 'REJECTED', 'MERGED'] as const;
+export type CandidateStatus = (typeof CANDIDATE_STATUSES)[number];
+
+export const CANDIDATE_STATUS_LABEL: Record<CandidateStatus, string> = {
+  PENDING: '待核验',
+  VERIFIED: '已核验通过',
+  REJECTED: '已驳回',
+  MERGED: '已并入已有门店',
+};
+
+/** 重复提示只是给人看的线索，引擎绝不据此自动合并或自动驳回。 */
+export const DUPLICATE_REASONS = ['same_poi_id', 'name_nearby', 'same_name_far', 'same_author_pending'] as const;
+export type DuplicateReason = (typeof DUPLICATE_REASONS)[number];
+
+export const DUPLICATE_REASON_LABEL: Record<DuplicateReason, string> = {
+  same_poi_id: '同一地点数据源 ID',
+  name_nearby: '名称相同且距离很近，可能是同一家',
+  same_name_far: '名称相同但距离较远，可能是不同分店',
+  same_author_pending: '你已经提交过同一家店的待核验申请',
+};
+
 export const BUSINESS_STATUSES = [
   'UNKNOWN',
   'OPEN',
@@ -137,4 +173,5 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
 };
 
 export const RULE_VERSION = 'recommendation-v1';
-export const CONTRACT_VERSION = '2.0-demo-1';
+/** 加了新门店候选与地点核验接口（阶段 1A）。 */
+export const CONTRACT_VERSION = '2.0-demo-2';

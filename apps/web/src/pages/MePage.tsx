@@ -6,15 +6,21 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ATTITUDE_LABEL,
+  CANDIDATE_STATUS_LABEL,
   DISCLOSURE_LABEL,
+  DUPLICATE_REASON_LABEL,
+  PLACE_STATUS_LABEL,
   REPORT_KIND_LABEL,
   REPORT_STATUS_LABEL,
+  type CandidateFacts,
   type ContentVersionStatus,
   type ReportTicket,
+  type RestaurantCandidate,
   type Submission,
 } from '@qianwei/contracts';
 import { useApi } from '../data/api';
 import { clearLocalDraft } from '../data/client';
+import { CandidateForm } from '../features/candidates/CandidateForm';
 import { StatusBlock } from '../components/ui';
 
 const STATUS_LABEL: Record<ContentVersionStatus, string> = {
@@ -55,6 +61,9 @@ export function MePage() {
   const { api, user, ready, signOut } = useApi();
   const [subs, setSubs] = useState<Submission[] | null>(null);
   const [reports, setReports] = useState<ReportTicket[] | null>(null);
+  const [cands, setCands] = useState<RestaurantCandidate[] | null>(null);
+  const [amend, setAmend] = useState<RestaurantCandidate | null>(null);
+  const [candFields, setCandFields] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<string | null>(null);
@@ -63,9 +72,10 @@ export function MePage() {
     setBusy(true);
     setError(null);
     try {
-      const [s, r] = await Promise.all([api.mySubmissions(), api.myReports()]);
+      const [s, r, c] = await Promise.all([api.mySubmissions(), api.myReports(), api.myCandidates()]);
       setSubs(s);
       setReports(r);
+      setCands(c);
     } catch (e) {
       const f = readFailure(e);
       setError(f.code ? `${f.message}（${f.code}）` : f.message);
@@ -90,9 +100,31 @@ export function MePage() {
       await signOut();
       setSubs(null);
       setReports(null);
+      setCands(null);
+      setAmend(null);
     } catch (e) {
       // 只透传服务端结果：FORBIDDEN／UNAUTHORIZED 由后端判定
       const f = readFailure(e);
+      setError(f.code ? `${f.message}（${f.code}）` : f.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** 补材料只改候选自己：同一条申请回到待核验，不新开一条，也不由前端推断状态。 */
+  async function sendAmend(facts: CandidateFacts): Promise<void> {
+    if (!amend) return;
+    setBusy(true);
+    setCandFields({});
+    setError(null);
+    try {
+      await api.resubmitCandidate(amend.id, facts, amend.version);
+      setAmend(null);
+      setCands(await api.myCandidates());
+    } catch (e) {
+      const f = readFailure(e);
+      const fields = (e as { fieldErrors?: Record<string, string> }).fieldErrors ?? {};
+      setCandFields(fields);
       setError(f.code ? `${f.message}（${f.code}）` : f.message);
     } finally {
       setBusy(false);
@@ -263,6 +295,87 @@ export function MePage() {
             ))}
           </div>
         )}
+      </section>
+
+      <section className="panel">
+        <h2>我的建店申请（{cands ? cands.length : '…'}）</h2>
+        {cands === null && !error ? (
+          <StatusBlock kind="loading" message="正在读取建店申请…" />
+        ) : cands && cands.length === 0 ? (
+          <p className="hint">
+            还没有申请过新增门店。投稿时搜不到这家店就可以提交申请，审核员核验地点后它才会出现在待验证图层。
+          </p>
+        ) : (
+          <div className="list">
+            {cands?.map((c) => (
+              <article className="card" key={c.id}>
+                <h3>
+                  {c.restaurant_id ? (
+                    <Link to={`/restaurants/${c.restaurant_id}`}>
+                      {c.name}
+                      {c.branch ? `（${c.branch}）` : ''}
+                    </Link>
+                  ) : (
+                    c.name
+                  )}
+                </h3>
+                <div className="card-row">
+                  <span
+                    className={
+                      c.status === 'PENDING' ? 'badge warn' : c.status === 'REJECTED' ? 'badge danger' : 'badge ok'
+                    }
+                  >
+                    {CANDIDATE_STATUS_LABEL[c.status]}
+                  </span>
+                  <span className="badge muted">第 {c.revision} 版 · {c.id}</span>
+                  {c.place_status && <span className="badge">门店地点：{PLACE_STATUS_LABEL[c.place_status]}</span>}
+                </div>
+                <p className="card-dishes">{c.address}</p>
+                <p className="hint" style={{ margin: 0 }}>
+                  提交 {c.created_at.slice(0, 10)} · 来源：{c.source === 'manual_point' ? '手动选点' : '地图地点候选'}
+                </p>
+                {c.reject_reason && <p className="hint" style={{ margin: '4px 0 0' }}>驳回原因：{c.reject_reason}</p>}
+                {c.duplicates.length > 0 && (
+                  <p className="hint" style={{ margin: '4px 0 0' }}>
+                    重复提示：
+                    {c.duplicates
+                      .map((d) => `${d.name}（${DUPLICATE_REASON_LABEL[d.reason]}${d.distance_m !== null ? ` 约 ${d.distance_m} 米` : ''}）`)
+                      .join('；')}
+                  </p>
+                )}
+                {c.status === 'REJECTED' && amend?.id !== c.id && (
+                  <div className="btn-row">
+                    <button
+                      className="btn small"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        setCandFields({});
+                        setAmend(c);
+                      }}
+                    >
+                      补充材料重新提交
+                    </button>
+                  </div>
+                )}
+                {amend?.id === c.id && (
+                  <CandidateForm
+                    initial={c}
+                    busy={busy}
+                    title="补充材料"
+                    submitLabel="提交补充材料"
+                    fieldErrors={candFields}
+                    onSubmit={(facts) => void sendAmend(facts)}
+                    onCancel={() => setAmend(null)}
+                  />
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+        <p className="hint">
+          申请通过只代表"地点核验通过"，能不能进好店地图仍取决于社区票或编辑背书；这两件事由规则分开判定。
+        </p>
       </section>
 
       <section className="panel">

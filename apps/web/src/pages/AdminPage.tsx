@@ -3,6 +3,9 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom';
 import {
   BUSINESS_STATUSES,
+  CANDIDATE_SOURCE_LABEL,
+  CANDIDATE_STATUS_LABEL,
+  DUPLICATE_REASON_LABEL,
   PLACE_STATUSES,
   REPORT_KIND_LABEL,
   REPORT_STATUS_LABEL,
@@ -17,6 +20,7 @@ import {
   type ModerationQueueEntry,
   type PlaceVerificationStatus,
   type Restaurant,
+  type RestaurantCandidate,
   type RestaurantDetail,
   type RiskStatus,
 } from '@qianwei/contracts';
@@ -25,10 +29,11 @@ import { ClientError, type PatchStatusInput } from '../data/client';
 import { StatusBlock } from '../components/ui';
 
 type ModerateAction = 'approve' | 'reject' | 'hide';
-type TabKey = 'reports' | 'queue' | 'status' | 'merge' | 'endorsement' | 'audit';
+type TabKey = 'reports' | 'candidates' | 'queue' | 'status' | 'merge' | 'endorsement' | 'audit';
 
 const TABS: Array<{ key: TabKey; label: string; adminOnly?: boolean }> = [
   { key: 'queue', label: '待审队列' },
+  { key: 'candidates', label: '地点核验' },
   { key: 'reports', label: '举报复核' },
   { key: 'status', label: '门店状态' },
   { key: 'merge', label: '合并', adminOnly: true },
@@ -86,6 +91,11 @@ const AUDIT_LABEL: Record<string, string> = {
   endorsement_verify: '编辑背书核验',
   endorsement_revoke: '编辑背书撤销',
   workorder_created: '举报生成复核工单',
+  candidate_create: '提交建店申请',
+  candidate_resubmit: '建店申请补材料',
+  candidate_verify: '地点核验通过',
+  candidate_reject: '地点核验驳回',
+  candidate_merge: '建店申请并入已有门店',
   delete_account: '账号注销',
 };
 
@@ -306,6 +316,9 @@ export function AdminPage() {
         <EndorsementPanel detail={detail} busy={detailBusy} error={detailError} onPick={(id) => void loadDetail(id)} onReload={(id) => loadDetail(id)} />
       )}
       {active === 'reports' && <ReportsPanel onPick={(id) => { void loadDetail(id); setTab('status'); }} />}
+      {active === 'candidates' && (
+        <CandidatesPanel isAdmin={isAdmin} onPick={(id) => { void loadDetail(id); }} />
+      )}
       {active === 'audit' && <AuditPanel />}
 
       <p className="hint">
@@ -1183,4 +1196,176 @@ function ReportsPanel({ onPick }: { onPick: (id: string) => void }) {
       <button className="btn small" onClick={() => onPick(r.restaurant_id)}>核验门店状态</button>
     </article>)}
   </div>;
+}
+
+/**
+ * 地点核验队列。这里只做"地点"这一件事：通过不等于好店达标，
+ * 社区票与编辑背书仍由原有规则判定；并入走门店合并，仅 admin 可执行。
+ */
+function CandidatesPanel({ isAdmin, onPick }: { isAdmin: boolean; onPick: (id: string) => void }) {
+  const { api } = useApi();
+  const [rows, setRows] = useState<RestaurantCandidate[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [targets, setTargets] = useState<Record<string, string>>({});
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      setRows(await api.candidateQueue());
+    } catch (e) {
+      setError(toFailure(e).message);
+    } finally {
+      setBusy(false);
+    }
+  }, [api]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function decide(c: RestaurantCandidate, action: 'verify' | 'reject' | 'merge'): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.decideCandidate({
+        id: c.id,
+        action,
+        reason: (reasons[c.id] ?? '').trim() === '' ? undefined : (reasons[c.id] ?? '').trim(),
+        target_restaurant_id: action === 'merge' ? (targets[c.id] ?? '').trim() || undefined : undefined,
+        expected_version: c.version,
+      });
+      setRows(await api.candidateQueue());
+    } catch (e) {
+      const f = toFailure(e);
+      setError(failureText(f));
+      // 版本冲突就把队列重新拉一遍，让审核员看到别人已经做了什么
+      try {
+        setRows(await api.candidateQueue());
+      } catch {
+        /* 读取失败时保留上面的错误文案 */
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="panel">
+      <div className="page-head">
+        <h2>地点核验</h2>
+        <button className="btn small ghost" disabled={busy} onClick={() => void load()}>
+          刷新
+        </button>
+      </div>
+      <p className="hint">
+        用户提交的新门店候选。核验通过只解决「这家店在哪里、是否真实存在」；能不能进默认好店层仍要看社区票或编辑背书。
+      </p>
+      {error && <Alert kind="bad">{error}</Alert>}
+      {!rows && busy && <StatusBlock kind="loading" message="建店申请读取中…" />}
+      {rows?.length === 0 && <StatusBlock kind="empty" message="没有待处理的建店申请。" />}
+      {rows?.map((c) => {
+        const dupStores = c.duplicates.filter((d) => d.kind === 'restaurant');
+        const target = targets[c.id] ?? dupStores[0]?.matched_id ?? '';
+        const pending = c.status === 'PENDING';
+        return (
+          <article className="card" key={c.id}>
+            <h3>
+              {c.name}
+              {c.branch ? `（${c.branch}）` : ''}
+            </h3>
+            <p className="card-dishes">{c.address}</p>
+            <div className="card-row">
+              <span className={c.status === 'PENDING' ? 'badge warn' : c.status === 'REJECTED' ? 'badge danger' : 'badge ok'}>
+                {CANDIDATE_STATUS_LABEL[c.status]}
+              </span>
+              <span className="badge muted">
+                {c.id} · 第 {c.revision} 版 · v{c.version}
+              </span>
+              <span className="badge muted">
+                {CANDIDATE_SOURCE_LABEL[c.source]}
+                {c.provider ? ` ${c.provider}/${c.poi_id}` : ''}
+              </span>
+              {c.place_status && <span className="badge">门店地点 {PLACE_LABEL[c.place_status]}</span>}
+            </div>
+            <p style={{ margin: '4px 0' }}>来源说明：{c.evidence_note}</p>
+            <p className="hint" style={{ margin: 0 }}>
+              提交人 {c.author_display_name} · 坐标 {c.lng.toFixed(5)}, {c.lat.toFixed(5)}（GCJ-02）
+              {c.floor_info ? ` · ${c.floor_info}` : ''} · 菜系 {c.cuisines.join('、')}
+            </p>
+            {c.reject_reason && <p className="hint" style={{ margin: '4px 0 0' }}>上次驳回原因：{c.reject_reason}</p>}
+            {dupStores.length > 0 && (
+              <ul className="pin-list">
+                {dupStores.map((d) => (
+                  <li key={`${d.kind}-${d.matched_id}`}>
+                    <div>
+                      <strong>{d.name}</strong>
+                      <div className="hint">
+                        {DUPLICATE_REASON_LABEL[d.reason]}
+                        {d.distance_m !== null ? ` · 约 ${d.distance_m} 米（直线）` : ''} · {d.matched_id}
+                      </div>
+                    </div>
+                    <button className="btn small plain" type="button" onClick={() => onPick(d.matched_id)}>
+                      看这家店
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {c.is_author_self ? (
+              <p className="hint">这条是你本人提交的申请：按规则不能自审，引擎会以 403 拒绝，请交给其他审核人员。</p>
+            ) : pending ? (
+              <>
+                <label className="field">
+                  <span className="label">处理理由（驳回与并入必填）</span>
+                  <input
+                    value={reasons[c.id] ?? ''}
+                    placeholder="例如：现场照片与门牌一致；坐标落在商场内"
+                    onChange={(e) => setReasons((cur) => ({ ...cur, [c.id]: e.target.value }))}
+                  />
+                </label>
+                <div className="btn-row">
+                  <button className="btn small" type="button" disabled={busy} onClick={() => void decide(c, 'verify')}>
+                    地点核验通过
+                  </button>
+                  <button className="btn small danger" type="button" disabled={busy} onClick={() => void decide(c, 'reject')}>
+                    驳回
+                  </button>
+                </div>
+                {isAdmin && (
+                  <div className="btn-row">
+                    <input
+                      value={target}
+                      aria-label="并入目标门店 ID"
+                      placeholder="并入到哪个门店 ID"
+                      style={{ maxWidth: 180 }}
+                      onChange={(e) => setTargets((cur) => ({ ...cur, [c.id]: e.target.value }))}
+                    />
+                    <button
+                      className="btn small plain"
+                      type="button"
+                      disabled={busy || target.trim() === ''}
+                      onClick={() => void decide(c, 'merge')}
+                    >
+                      并入已有门店
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="hint">该申请已处理完成，状态不可回退；需要改地点请在「门店状态」里操作并写明理由。</p>
+            )}
+            {c.restaurant_id && (
+              <div className="btn-row">
+                <button className="btn small plain" type="button" onClick={() => onPick(c.restaurant_id!)}>
+                  看新建的这家店
+                </button>
+              </div>
+            )}
+          </article>
+        );
+      })}
+    </div>
+  );
 }

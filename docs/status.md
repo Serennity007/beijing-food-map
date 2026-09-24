@@ -13,28 +13,49 @@
 - 利益披露非"无关联"的记录公开披露但不计入独立票；编辑背书需非作者核验。
 - 服务端固定网格聚合（`cellDegForZoom` 分档），点击展开带 `expansion_bounds`；快照/`queryKey` 过期返回 409 `QUERY_EXPIRED`；列表上限 200；写操作乐观锁 `expected_version`。
 - 坐标全程 GCJ-02，只在 MapLibre 渲染边界转 WGS84。
+- **新门店候选与地点核验**（阶段 1A，方案见 [design/restaurant-candidates.md](./design/restaurant-candidates.md)）：候选是独立实体，不与投稿版本混用；创建候选同时落一家 `place_status=PENDING` 的门店，默认层谓词未改动即把它挡在外面。同一作者重复提交同一家店复用同一条候选（不产生第二家门店）；命中已有门店只给重复提示（provider+poi_id / 同名且 ≤150 m / 同名但远），绝不自动合并或自动驳回；驳回必填理由且理由回传给作者；作者补材料在同一候选上 `revision+1` 并回到待核验，换坐标才递增 `location_version`；并入已有门店复用门店合并（仅 admin）。本人提交的候选在 `decideCandidate` 与 `patchRestaurantStatus` 两处都不能自审。
 
-**网页端（`apps/web`）**：地图首页 + 筛选/搜索 + 详情、投稿、我的（清单/反馈/举报/注销）、清单编辑与发布/撤回、分享只读页、`/admin` 审核台（含举报复核面板）、登录、法律页。地图适配器双实现（MapLibre 公共瓦片 + 高德 JS API 2.0），无 Key 时走瓦片兜底。举报与状态的中文标签统一取自 `contracts/enums.ts`，页面里不再各写一份。
+**网页端（`apps/web`）**：地图首页 + 筛选/搜索 + 详情、投稿（含**建店申请**入口）、我的（清单/反馈/举报/**建店进度与补材料**/注销）、清单编辑与发布/撤回、分享只读页、`/login`、`/admin` 审核台（含举报复核面板与**地点核验队列**）、法律页。地图适配器双实现（MapLibre 公共瓦片 + 高德 JS API 2.0），无 Key 时走瓦片兜底。举报、状态、候选与重复提示的中文标签统一取自 `contracts/enums.ts`，页面里不再各写一份。建店表单在 `features/candidates/CandidateForm.tsx` 只有一份，投稿页与"我的"页共用。
 
-**演示后端（`apps/api`）**：`node:http` 外壳 + `node:sqlite` 文档表持久化 + SQL 迁移 + OpenAPI 3.0 全量覆盖 + HMAC 签名会话 Cookie（`SESSION_SECRET` 缺失时用进程内临时密钥，`SESSION_TTL_SECONDS` 控有效期，`COOKIE_SECURE` 可独立于 `NODE_ENV` 开启）+ 登录限流 + Origin/Sec-Fetch-Site 跨站写拦截 + 图片鉴权直出 + 审计日志 + 注销清除任务排空（启动时与每秒各跑一次，失败自动重试）。
+**演示后端（`apps/api`）**：`node:http` 外壳 + `node:sqlite` 文档表持久化 + SQL 迁移 + OpenAPI 3.0 全量覆盖 + HMAC 签名会话 Cookie（`SESSION_SECRET` 缺失时用进程内临时密钥，`SESSION_TTL_SECONDS` 控有效期，`COOKIE_SECURE` 可独立于 `NODE_ENV` 开启）+ 登录限流 + Origin/Sec-Fetch-Site 跨站写拦截 + 图片鉴权直出 + 审计日志 + 注销清除任务排空（启动时与每秒各跑一次，失败自动回滚重试）。新增 5 条候选接口后共 36 条路由，`documents` 表按 kind 多一行 `candidate`，**不需要新迁移**（文档表是通用形状）。
 
 **运行模式**：`VITE_API_BASE` 为空时前端用 `StaticClient`（浏览器内跑同一引擎，落 `localStorage`）；非空时用 `Http` 客户端。页面层只依赖 `ApiClient` 接口，规则不会两套。两种模式下注销都会立即清掉本机投稿草稿 `qianwei.draft.<userId>`（键名前缀由 `data/client.ts` 单一来源导出，投稿页不再自己拼字符串）。
 
-## verified（本机 Node 24，命令均退出码 0）
+## verified（2026-09-24 跨机接手后重跑，Windows + Node 24.18.0，命令均退出码 0）
 
 | 命令 | 结果 |
 | --- | --- |
-| `npm run typecheck` | 3 个 workspace 全绿（`strict` + `noUncheckedIndexedAccess`），退出码 0 |
-| `npm test -w @qianwei/contracts` / `-w @qianwei/web` / `-w @qianwei/api` | **100 项通过，0 失败**：contracts 61 / web 14 / api 25（三条命令各自退出码 0） |
-| `npx tsx scripts/http-contract-check.mts` | **29 项断言通过**（前端真实 `Http` 客户端 × 已监听后端，带 Cookie Jar；需先起后端，含新增的 `reportQueue` 一条） |
-| `npm run build` | 退出码 0，19.87s。`index.js` 411.94 kB（gzip 125.77）、`maplibre.js` 1 052.94 kB（gzip 284.54）、`react.js` 50.95 kB（gzip 18.03）、CSS 87.27 kB（gzip 14.20） |
-| 写路径跑在独立库上 | 契约自检与浏览器实测都指向 `SQLITE_PATH=<绝对路径>/work/phase0-reaccept.sqlite`（空库由合成种子初始化并落库）；默认演示库 `apps/api/data/demo.sqlite` 时间戳未变，逐 `kind` 计数仍等于种子基线（`collection=28 media=117 meta=1 publication=1 report=2 restaurant=24 user=9 visit=71`），9 个账号状态未变 |
-| 孤儿快照排查 | 两个库都过：每条 `publication` 都能找到归属 `collection`（孤儿 0），`PUBLISHED` 且无 token 的记录 0 |
-| Pages 构建预演（`MSYS_NO_PATHCONV=1 VITE_BASE=/repo/ npm run build` + 404 替换） | 资源前缀与深链接回退值都正确；顺带发现 Windows Git Bash 会把 `VITE_BASE` 当路径转换的坑，已写进 runbook |
-| 浏览器实测（内嵌 Chromium，静态模式 + `VITE_API_BASE=/api` 走后端各一遍） | 三条闭环全部走通并看到预期文案，控制台无报错：见下节 |
-| 工作树完整性（`git ls-files --others --ignored`） | 源码全部被跟踪。**曾发现 `.gitignore` 的裸 `data/` 规则连 `apps/web/src/data/` 一起吞掉**（3 个数据层文件不在提交里），已锚定为 `/data/` + `apps/api/data/` |
+| `npm run typecheck` | 3 个 workspace 全绿（`strict` + `noUncheckedIndexedAccess` + `noUnusedLocals`），退出码 0 |
+| `npm test -w @qianwei/contracts` / `-w @qianwei/web` / `-w @qianwei/api` | **125 项通过，0 失败**：contracts 82（2 个文件：store 61 + candidates 21）/ web 14 / api 29（三条命令各自退出码 0） |
+| `npx tsx scripts/http-contract-check.mts` | **47 项断言通过**（前端真实 `Http` 客户端 × 已监听后端，带 Cookie Jar；本轮为建店链路加了 18 项，见脚本"阶段 1A"三段注释） |
+| `npm run build` | 退出码 0，3.24s。`index.js` 438.09 kB（gzip 133.11）、`maplibre.js` 1 052.94 kB（gzip 284.54）、`react.js` 50.95 kB（gzip 18.03）、CSS 87.27 kB（gzip 14.20） |
+| 写路径跑在独立库上 | 契约自检与浏览器实测都指向 `work/gate-1b.sqlite` / `work/gate-1a.sqlite`（空库由合成种子初始化）。**默认演示库 `apps/api/data/` 在本机根本不存在**（交接包不含它，本轮也没生成），所以种子基线计数无从被污染 |
+| 待验证图层口径 | `GET /map/items?...&layer=pending_verification` → `total_matched=6`，含种子里 4 家 PENDING（R02/R07/R19/R24）与两条待核验候选，**不含**已核验通过的 `R0029`；`query_key` 里的合同版本已是 `2.0-demo-2` |
+| 浏览器实测 · HTTP 模式（`VITE_API_BASE=/api` + vite 代理） | 建店闭环全部走通，看到的确切文案见下节 |
+| 浏览器实测 · 静态模式（5174，无后端） | 匿名点"提交建店申请"→ 显示"需要先登录才能申请新增门店"与去登录入口；U01 登录后建店得到 `RC0004 → R0003（待核验）`；**刷新页面后** `/me` 仍列"我的建店申请（1）· RC0004 · 待核验"，`localStorage['qianwei.state'].candidates` 长度 1 —— 新实体确实随快照落本机并读回 |
+| 控制台 | 整轮实测只有 vite 连接与 React DevTools 提示两条 debug/info，应用自身没有 error/warning |
+| 工作树完整性（`git ls-files --others --exclude-standard`） | 空 —— 新增的 `apps/web/src/features/candidates/`、`docs/design/`、`packages/contracts/test/candidates.test.ts` 都在待提交清单里，`work/` 与 `*.log` 已被忽略 |
 
 ### 浏览器实测看到的（不是代码推断）
+
+**本轮新增 · 阶段 1A 建店与地点核验（HTTP 模式）**
+
+- 投稿页搜"浏览器实测新建店"→「平台收录（0）」下面出现申请入口，「地图地点候选（1）」显示 `候选地点（未入库）·浏览器实测新建店`、`demo-provider 候选 POI-DEMO-942 · 演示合成坐标，非真实门店位置`，并有"以此候选新建门店"按钮。
+- 点它打开表单：店名已预填为去掉演示前缀的检索词、地址与坐标从候选带入（`116.47700, 39.88400`）；表单里写明"当前部署没有地图选点，也没有真实供应商地点检索（缺高德 Key），所以需要手填坐标"。
+- 提交后回执原文：`建店申请 RC0030 已提交，门店 R0029 的地点状态为「待核验」，需人工核验后才可能进入好店地图。现在可以继续填写实吃投稿。` 同时这家新店自动成为投稿对象，卡片上标"地点待核验"与"演示数据 #R0029"。
+- 再搜同一个词：这次「平台收录（1）」能搜到它（标"地点核验：待核验"），候选分区变成「地图地点候选（0）」—— 候选只在自有库没命中时出现，符合"供应商候选只进入建店流程"。
+- M01 进 `/admin` 的「地点核验」：卡片列出店名/地址/来源（`地图地点候选 demo-provider/POI-DEMO-942`）/来源说明/提交人/坐标/菜系/`RC0030 · 第 1 版 · v1`/`门店地点 待核验`，带"地点核验通过""驳回"和（admin 才有的）"并入已有门店"。
+- **自审边界在界面上就写明**：M01 自己提交的 `RC0019` 卡片显示"这条是你本人提交的申请：按规则不能自审，引擎会以 403 拒绝，请交给其他审核人员"，且没有操作按钮。
+- M01 核验 `RC0030` 后卡片变 `已核验通过 · v2`，尾部提示"该申请已处理完成，状态不可回退；需要改地点请在「门店状态」里操作并写明理由"。
+- 门店页 `/restaurants/R0029` 原文：`这家店暂不在默认好店图层。` `社区：尚未达标。近 180 天窗口 2026-03-29 ~ 2026-09-24，推荐0 / 一般 0 / 不推荐 0，共 0 张有效独立票` `地点核验：已核验 2026-09-24` `不符合项：无有效推荐来源` —— 核验通过 ≠ 好店达标，这条在产品上必须看得见。
+- `/me` 的「我的建店申请（1）」显示 `已核验通过 · 第 1 版 · RC0030 · 门店地点：已核验`，并写明"申请通过只代表地点核验通过，能不能进好店地图仍取决于社区票或编辑背书"。
+- 待验证图层：切到该图层后列表出现 4 家 PENDING 门店与 2 条待核验候选，已核验的 R0029 不在其中。
+
+**本轮实测抓到并修掉的 2 个缺陷**（都在界面上，代码审阅没看出来）
+- `/me` 的建店卡片把枚举原样输出成 `门店地点：VERIFIED` → 改用 `enums.ts` 的 `PLACE_STATUS_LABEL`，现在显示"已核验"。这是上一轮同类问题（`社区：QUALIFIED`）的复发点。
+- 投稿页的建店错误提示渲染条件是"表单已关闭"，所以匿名提交时的"需要先登录"、以及任何非字段级错误在表单打开状态下**永远看不到** → 改为始终显示，并给 401 补上去登录入口。
+
+**上一轮（2026-09-23/24 阶段 0）已记录的闭环**
 
 - **地图闭环**：真实 OpenFreeMap 瓦片渲染出北京城区，聚合点徽标计数、缩放到档、筛选片、预算与菜名搜索、抽屉三档（点按与拖动都能换档）、"回到北京全图"复位、点标记平移出遮挡区。
 - **投稿闭环**：U02 改一条已有反馈 → 预填原内容（实吃日期保持 2026-08-31，不会被顶成今天）→ 提交生成 `VF002#v2` 待审、旧版继续公开计票 → M01 在 `内容后台` 通过 → 门店页显示"第 2 版"，审计日志留下 `— → 2`、`2 → 2` 两条。
@@ -47,6 +68,8 @@
 - **法律页**：EXIF 与注销两段措辞与实现一致（只声明演示版真正做到的部分）。
 
 覆盖到的关键行为（分布在三套测试与契约自检里，都是断言不是"看起来对"）：地图聚合与快照过期 409、媒体可见性、搜索、登录限流 429、投稿幂等键、审核写穿后旧快照 409、撤回不复活、清单发布/撤销换发 token、作者不能自审、门店合并、注销后数据处置、审计日志权限。本轮新增：会话 Cookie 的签名/篡改拒绝/TTL 与 `Secure` 独立开关（`apps/api/test/session.test.ts`）、进程重启后继续完成未跑完的注销清除且旧分享永久失效（`apps/api/test/handover.test.ts`）、举报队列的角色把关与门店摘要（api 测试 + 契约自检第 21 项）。
+本轮（阶段 1A）新增：`packages/contracts/test/candidates.test.ts` 21 项 + `apps/api/test/api.test.ts` 4 项 + 契约自检 18 项，钉住"建店落 PENDING 门店且只进待验证层""候选可立刻被真实投稿并回执待核验原因""**核验通过仍不等于好店达标**""同名近距/远距两种重复提示且都不自动合并""同作者重复提交复用候选（门店数不变）""驳回必填理由并回传到详情页与我的页""被驳回的门店退出两个图层""补材料 revision+1 回到待核验""只有作者能补材料且受版本锁""作者自审在 `decideCandidate` 与 `PATCH /admin/restaurants/:id/status` 两处都 403""并入走门店合并（仅 admin、旧 ID 永久重定向、反馈迁移）""候选随 dumpState/loadState 往返""注销后候选显示已注销用户"。
+另有一条**特征锁定测试**（`特征锁定（存疑）`）钉住一个既有行为：核验状态翻转会递增 `location_version`，从而把该门店已有社区票留在历史版本里、状态从 `QUALIFIED` 掉到 `LAPSED`（实测 R07：3-0-0 → 0-0-0）。这是既有规则且 `apps/api/test/api.test.ts` 有断言要求它，不是本轮引入；但是否属于规格原意存疑，见 `docs/questions-for-next-review.md` Q3。
 
 ## not verified（不要当成已交付）
 
@@ -54,11 +77,13 @@
 - **真实底图**：高德 Key 与安全密钥未配置，双适配器只在 MapLibre 公共瓦片上跑通过，高德那条路径只有纯函数单测，没有在真实高德地图上渲染过点位。
 - **Docker 镜像**：本机无 Docker，`Dockerfile` 未构建过。
 - **第三方托管**：后端未部署，`render.yaml` 未在任何账号上导入过。仓库已本地 `git init` 并提交，目标远端已确认为 `Serennity007/beijing-food-map`（public），**尚未推送** —— 这台机器上 `gh` 登录的不是该账号，需要你本人先 `gh auth login`。
-- **无障碍**：未跑过键盘遍历与读屏。
-- **迁移演练**：`database/migrations/*.sql` 只在空库上跑过，没有从旧版本升级的路径可验（尚未上线）。
+- **无障碍**：未跑过键盘遍历与读屏。新增的建店表单只有 `aria-label`/`aria-pressed` 这类基本标注，没做过遍历验证。
+- **迁移演练**：`database/migrations/*.sql` 只在空库上跑过，没有从旧版本升级的路径可验（尚未上线）。本轮新增 `candidate` 这个 documents kind **没有也不需要**新迁移（文档表是 `kind/id/body` 的通用形状），但"旧库读回时没有 candidates 行"只由 `parseDump` 的 `?? []` 兜住，没有真实旧库可验。
+- **建店的两条尾巴**：没有地图选点交互（坐标手填）；没有真实供应商 POI 检索（地点候选是内置合成点）。两者都已在界面上写明，不是隐藏缺陷，但意味着"手动选点"这条产品路径还没真正跑通。
+- **窄屏下的建店表单**：`CandidateForm` 与后台「地点核验」卡片只在桌面视口看过，抽屉、软键盘顶起、长地址换行都没验。
 
 ## release_ready：否
 
-差距按性质分三类，详见 [blockers.md](./blockers.md)：数据（合成门店不是真实核验数据）、凭据（地图 Key、短信、云账号需你授权与提供）、能力缺口（真实对象存储、可水平扩展的持久化、举报工单的状态流转、第三方候选点的建店核验流程）。
+差距按性质分三类，详见 [blockers.md](./blockers.md)：数据（合成门店不是真实核验数据）、凭据（地图 Key、短信、云账号需你授权与提供）、能力缺口（真实对象存储、可水平扩展的持久化、举报工单的状态流转）。
 
-签名会话与注销的后台清除任务本轮已闭合（见上表），不再是能力缺口。
+签名会话与注销的后台清除任务在阶段 0 闭合；**第三方候选点的建店与地点核验流程（C11）本轮闭合**，只剩"地图选点"和"真实 POI 数据源"两条依赖外部条件的尾巴。仍开着的能力缺口是真实对象存储（B6）、持久化架构（B7）与举报工单处置闭环（C9 的写侧）。

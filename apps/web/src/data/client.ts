@@ -2,6 +2,8 @@ import {
   CONTRACT_VERSION,
   Store,
   type Bounds,
+  type CandidateFacts,
+  type CandidateStatus,
   type Collection,
   type Disclosure,
   type FeedbackAttitude,
@@ -14,9 +16,11 @@ import {
   type RiskStatus,
   type ModerationQueueEntry,
   type Page,
+  type ProviderCandidate,
   type ReportTicket,
   type ReportQueueEntry,
   type Restaurant,
+  type RestaurantCandidate,
   type RestaurantDetail,
   type SessionUser,
   type SharedCollectionSnapshot,
@@ -42,7 +46,20 @@ export interface MapQueryInput {
 
 export interface SearchResult {
   own: Restaurant[];
-  provider_candidates: Array<{ provider: string; poi_id: string; name: string; address: string }>;
+  provider_candidates: ProviderCandidate[];
+}
+
+/** 建店申请：创建时全量提供，补材料时只给要改的字段。 */
+export interface CandidateCreateInput extends CandidateFacts {
+  idempotency_key?: string;
+}
+
+export interface CandidateDecision {
+  id: string;
+  action: 'verify' | 'reject' | 'merge';
+  reason?: string;
+  target_restaurant_id?: string;
+  expected_version: number;
 }
 
 export interface SubmitInput {
@@ -80,6 +97,12 @@ export interface ApiClient {
   submit(input: SubmitInput): Promise<Submission>;
   mySubmissions(): Promise<Submission[]>;
   withdrawFeedback(restaurantId: string): Promise<void>;
+  /** 新门店候选（阶段 1A）：建店只得到"地点待核验"，不自动进好店层。 */
+  createCandidate(input: CandidateCreateInput): Promise<RestaurantCandidate>;
+  myCandidates(): Promise<RestaurantCandidate[]>;
+  resubmitCandidate(id: string, patch: Partial<CandidateFacts>, expectedVersion: number): Promise<RestaurantCandidate>;
+  candidateQueue(status?: CandidateStatus | null): Promise<RestaurantCandidate[]>;
+  decideCandidate(input: CandidateDecision): Promise<RestaurantCandidate>;
   collections(): Promise<Collection[]>;
   createCollection(title: string, description: string | null): Promise<Collection>;
   updateCollection(collectionId: string, patch: { title?: string; description?: string | null }): Promise<Collection>;
@@ -232,6 +255,32 @@ export class StaticClient implements ApiClient {
   async withdrawFeedback(restaurantId: string) {
     this.store.withdrawMyFeedback(restaurantId, this.sid());
     this.persist();
+  }
+
+  async createCandidate(input: CandidateCreateInput) {
+    const r = this.store.createCandidate(input, this.sid());
+    this.persist();
+    return r;
+  }
+
+  async myCandidates() {
+    return this.store.myCandidates(this.sid());
+  }
+
+  async resubmitCandidate(id: string, patch: Partial<CandidateFacts>, expectedVersion: number) {
+    const r = this.store.resubmitCandidateMaterials({ id, patch, expected_version: expectedVersion }, this.sid());
+    this.persist();
+    return r;
+  }
+
+  async candidateQueue(status?: CandidateStatus | null) {
+    return this.store.candidateQueue(this.sid(), status ?? null);
+  }
+
+  async decideCandidate(input: CandidateDecision) {
+    const r = this.store.decideCandidate(input, this.sid());
+    this.persist();
+    return r;
   }
 
   async collections() {

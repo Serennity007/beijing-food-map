@@ -1,6 +1,6 @@
 # 决策记录
 
-记录与本任务原始说明书（MASTER_SPEC 第 4 节默认栈）不同或需要解释的选择。D01–D13 记于 2026-09-22，D14–D16 记于 2026-09-23。
+记录与本任务原始说明书（MASTER_SPEC 第 4 节默认栈）不同或需要解释的选择。D01–D13 记于 2026-09-22，D14–D15 记于 2026-09-23，D16–D18 记于 2026-09-24（阶段 1A 新门店提交核验）。
 
 ## D01 包管理器用 npm workspaces，不用 pnpm
 仓库所在机器没有 `pnpm`，说明书要求“命名可依仓库兼容调整并记录”。影响：锁文件为 `package-lock.json`，CI 用 `npm ci` + `actions/setup-node@v4` 的 npm 缓存。业务合同不依赖包管理器。
@@ -51,3 +51,15 @@ CI（`setup-node`）、`Dockerfile` 与本机验证统一到 Node 24。`engines`
 `Store.processDeletionJobs()` 幂等，`status='deleting'` 的行就是待办任务，因此不需要新增任务表或定时器持久化，也不会出现"内存里排着、进程一死就丢"的中间态。后端在 `listen()` 时排空一次、之后每秒一次（`hasPendingDeletions()` 先短路，避免为了一次注销每秒把整库 `dumpState()` 序列化一遍），某次落库失败就把 store 回滚到本轮之前的快照等下次重试；静态模式在 `StaticClient` 构造时排空一次，注销后再 `setTimeout(0)` 排一次。
 种子账号 U06 直接以 `status='deleted'` 落库（不是 `deleting`），所以启动时的排空不会把演示库里那个"已注销"示例用例反复扫成噪声。
 `deletion_job_id` 因此是真的任务编号，不再只是回执 —— 这是"我的"页与隐私页敢写"后台会自动继续完成清除"的唯一原因（见 D11）。
+
+## D16 建店申请是独立实体，不与投稿版本混用
+候选（`RestaurantCandidate`）与投稿（`Visit`/`Revision`）各有状态机、各有审核人。原始说明书的产品规划里写明"投稿是用餐内容，餐馆是地点实体，两者不能做成一次上传就新增一家店"，所以没有把 `candidate_id` 塞进反馈记录里复用。代价：多一个集合、多 5 条接口、`dumpState`/`loadState` 与 `documents` 的 kind 都要连带加。
+候选创建时**同时**落一家 `place_status=PENDING` 的门店，这样 SUB-02（"手动点→投稿→内容过审但地点未核验"）才可能为真：投稿要有可挂靠的门店 ID。默认层谓词 `evaluatePublicMapEligibility` 一个字都没改就把它挡在外面 —— 刻意不新增第二套资格判断。
+
+## D17 待验证图层只显示 PENDING，不显示核验未通过
+`Store.visibleFor` 的待验证分支从 `place_status !== 'VERIFIED'` 收紧为 `place_status === 'PENDING'`。被驳回的门店继续挂在"待验证"名义下会误导用户：审核员已经判定它的位置不成立。种子里没有 REJECTED 门店，所以这条改动不影响既有断言（R07/R02/R19/R24 都是 PENDING，仍在图层内，已实测）。
+
+## D18 地点核验的自审禁令扩展到"作者审自己的建店申请"
+既有第 6 条不变量是"作者不能审核自己的内容或发布申请，即使他同时是管理员"。建店申请也是作者提交的内容，所以 `decideCandidate` 与 `patchRestaurantStatus`（针对候选来源的门店）两处都加了同一道把关：本人提交的候选，审核员角色也不能自审；`PATCH /admin/restaurants/:id/status` 直接改地点状态同样被拒。
+把关只针对 `place_status` 的变更，营业与风险状态的复核不在此列 —— 那两项不是作者提交的内容。
+

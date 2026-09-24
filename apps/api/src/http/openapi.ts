@@ -1,7 +1,12 @@
 import {
   ATTITUDES,
   BUSINESS_STATUSES,
+  CANDIDATE_SOURCES,
+  CANDIDATE_STATUSES,
+  CUISINES,
+  CONTRACT_VERSION,
   DISCLOSURES,
+  DUPLICATE_REASONS,
   ERROR_CODES,
   LAYERS,
   PLACE_STATUSES,
@@ -359,6 +364,82 @@ const QUEUE_ENTRY = obj(
 const MODERATION_RESULT = obj({ ok: { type: 'boolean', enum: [true] }, community: enumOf(['PENDING', 'QUALIFIED', 'LAPSED']), in_default_layer: bool(), restaurant: nullable(ref('Restaurant')) }, ['ok', 'community', 'in_default_layer']);
 
 /** 查询参数：/map/items 与 /restaurants 共用同一份规范化解析。 */
+const CANDIDATE_DUPLICATE = obj(
+  {
+    kind: enumOf(['restaurant', 'candidate']),
+    matched_id: str(),
+    name: str(),
+    branch: nullable(str()),
+    reason: enumOf(DUPLICATE_REASONS),
+    /** 近似直线距离（米），不是行走距离；按地点数据源 ID 命中时为 null。 */
+    distance_m: nullable(num()),
+  },
+  ['kind', 'matched_id', 'name', 'reason', 'distance_m'],
+);
+
+const RESTAURANT_CANDIDATE: Schema = obj(
+  {
+    id: str(),
+    revision: int(1),
+    name: str(),
+    branch: nullable(str()),
+    address: str(),
+    floor_info: nullable(str()),
+    cuisines: arr(enumOf(CUISINES)),
+    lng: num(),
+    lat: num(),
+    coord_system: { type: 'string', enum: ['GCJ02'] },
+    source: enumOf(CANDIDATE_SOURCES),
+    provider: nullable(str()),
+    poi_id: nullable(str()),
+    evidence_note: str(),
+    status: enumOf(CANDIDATE_STATUSES),
+    restaurant_id: nullable(str()),
+    duplicates: arr(ref('CandidateDuplicate')),
+    submitted_by: str(),
+    author_display_name: str(),
+    is_author_self: bool(),
+    place_status: enumOf(PLACE_STATUSES, 'nullable'),
+    reject_reason: nullable(str()),
+    decided_by: nullable(str()),
+    decided_at: nullable(str()),
+    version: int(1),
+    created_at: str(),
+    updated_at: str(),
+    is_test_data: { type: 'boolean', enum: [true] },
+  },
+  ['id', 'revision', 'name', 'address', 'cuisines', 'lng', 'lat', 'source', 'evidence_note', 'status', 'duplicates', 'submitted_by', 'is_author_self', 'version', 'created_at', 'updated_at', 'is_test_data'],
+);
+
+const PROVIDER_CANDIDATE = obj(
+  {
+    provider: str(),
+    poi_id: str(),
+    name: str(),
+    address: str(),
+    lng: num(),
+    lat: num(),
+    coord_system: { type: 'string', enum: ['GCJ02'] },
+    coord_note: str(),
+  },
+  ['provider', 'poi_id', 'name', 'address', 'lng', 'lat', 'coord_system', 'coord_note'],
+);
+
+/** 建店事实：创建时全部必填（由 required 列指出），补材料时只带想改的字段。 */
+const CANDIDATE_FACT_PROPS: Record<string, Schema> = {
+  name: str(),
+  branch: nullable(str()),
+  address: str(),
+  floor_info: nullable(str()),
+  cuisines: arr(enumOf(CUISINES)),
+  lng: num(),
+  lat: num(),
+  source: enumOf(CANDIDATE_SOURCES),
+  provider: nullable(str()),
+  poi_id: nullable(str()),
+  evidence_note: str(),
+};
+
 const MAP_QUERY_PARAMS: Schema[] = [
   q('west', 'number', '视野西边界（GCJ-02 经度）；与其余三个边界同时提供，缺省用北京默认视野', false),
   q('south', 'number', '视野南边界（GCJ-02 纬度）', false),
@@ -461,7 +542,7 @@ function documentOperations(): Record<string, Record<string, unknown>> {
       security: [],
       parameters: [q('q', 'string', '查询词，最长 50 字符', true)],
       responses: {
-        '200': ok(obj({ own: arr(ref('Restaurant')), provider_candidates: arr(obj({ provider: str(), poi_id: str(), name: str(), address: str() })) }, ['own', 'provider_candidates'])),
+        '200': ok(obj({ own: arr(ref('Restaurant')), provider_candidates: arr(ref('ProviderCandidate')) }, ['own', 'provider_candidates'])),
         '400': err(400, 'VALIDATION_ERROR', '缺少或过长的 q'),
       },
     },
@@ -635,6 +716,73 @@ function documentOperations(): Record<string, Record<string, unknown>> {
       responses: { '200': ok(ref('SharedCollectionSnapshot')), '404': err(404, 'NOT_FOUND', '链接无效或已撤销') },
     },
 
+    'POST /restaurant-candidates': {
+      tags: ['candidates'],
+      summary: '提交新门店候选（建店流程入口）',
+      description:
+        '返回候选 ID、它新建的门店 ID 与重复提示；新建门店的地点状态一律 PENDING，不自动入库为推荐、' +
+        '也不自动合并。坐标 GCJ-02 且必须在北京范围内。支持 Idempotency-Key 头。',
+      requestBody: body(
+        obj(CANDIDATE_FACT_PROPS, ['name', 'address', 'cuisines', 'lng', 'lat', 'source', 'evidence_note']),
+      ),
+      responses: {
+        '201': ok(ref('RestaurantCandidate')),
+        '400': err(400, 'VALIDATION_ERROR', '字段缺失/越界，或同一作者已有被驳回的相同申请（应去补材料）'),
+        '401': err(401, 'UNAUTHORIZED', '需要登录'),
+        '409': err(409, 'IDEMPOTENCY_CONFLICT', '相同幂等键提交了不同内容'),
+      },
+    },
+    'GET /me/restaurant-candidates': {
+      tags: ['candidates'],
+      summary: '我的建店申请进度',
+      description: '含待核验原因与驳回理由；只返回本人提交的候选。',
+      responses: { '200': ok(arr(ref('RestaurantCandidate'))), '401': err(401, 'UNAUTHORIZED', '需要登录') },
+    },
+    'POST /restaurant-candidates/{id}/materials': {
+      tags: ['candidates'],
+      summary: '被驳回的建店申请补充材料',
+      description: '同一条候选 revision 递增并回到 PENDING，不新开一条；换坐标会递增 location_version。',
+      parameters: [p('id', '候选 ID')],
+      requestBody: body(obj({ ...CANDIDATE_FACT_PROPS, expected_version: int(1) }, ['expected_version'])),
+      responses: {
+        '200': ok(ref('RestaurantCandidate')),
+        '400': err(400, 'VALIDATION_ERROR', '当前状态不需要补材料，或字段非法'),
+        '401': err(401, 'UNAUTHORIZED', '需要登录'),
+        '403': err(403, 'FORBIDDEN', '只能补自己提交的候选'),
+        '404': err(404, 'NOT_FOUND', '候选不存在或无权查看'),
+        '409': err(409, 'VERSION_CONFLICT', '版本冲突，请重载'),
+      },
+    },
+    'GET /admin/candidates': {
+      tags: ['admin'],
+      summary: '地点核验队列',
+      description: '需要 moderator 或 admin；待核验的排在前面，上限 200；可选 status 过滤。',
+      parameters: [q('status', 'string', `按候选状态过滤：${CANDIDATE_STATUSES.join(' | ')}`, false)],
+      responses: { '200': ok(arr(ref('RestaurantCandidate'))), '401': err(401, 'UNAUTHORIZED', '需要登录'), '403': err(403, 'FORBIDDEN', '权限不足') },
+    },
+    'POST /admin/candidates/{id}/actions': {
+      tags: ['admin'],
+      summary: '核验通过 / 驳回 / 并入已有门店',
+      description:
+        '本人提交的候选不能自审，即使同时是审核人员；驳回与并入必须写理由；并入走门店合并规则（仅 admin）。' +
+        '核验通过只解决"地点"，进默认好店层仍需社区票或编辑背书。',
+      parameters: [p('id', '候选 ID')],
+      requestBody: body(
+        obj(
+          { action: enumOf(['verify', 'reject', 'merge']), reason: nullable(str()), target_restaurant_id: nullable(str()), expected_version: int(1) },
+          ['action', 'expected_version'],
+        ),
+      ),
+      responses: {
+        '200': ok(ref('RestaurantCandidate')),
+        '400': err(400, 'VALIDATION_ERROR', 'action 非法、缺理由或该状态不可执行此操作'),
+        '401': err(401, 'UNAUTHORIZED', '需要登录'),
+        '403': err(403, 'FORBIDDEN', '权限不足，或作者自审'),
+        '404': err(404, 'NOT_FOUND', '候选不存在或无权查看'),
+        '409': err(409, 'VERSION_CONFLICT', '版本冲突，请重载后再操作'),
+      },
+    },
+
     'POST /reports': {
       tags: ['reports'],
       summary: '举报门店',
@@ -729,7 +877,7 @@ export function buildOpenApi(routes: RouteDef[]): Record<string, unknown> {
     openapi: '3.0.3',
     info: {
       title: '京城黔味地图 API',
-      version: '2.0-demo-1',
+      version: CONTRACT_VERSION,
       description:
         '北京贵州菜与西南美食地图 demo 的 HTTP 外壳。全部业务规则由 @qianwei/contracts 的 Store 实现，' +
         '本 API 只做参数校验、权限会话与持久化。数据为合成测试数据（is_test_data 恒为 true），不代表任何真实门店、真实探店或真实票数。',
@@ -743,6 +891,7 @@ export function buildOpenApi(routes: RouteDef[]): Record<string, unknown> {
       { name: 'feedback', description: '实吃投稿与撤回' },
       { name: 'collections', description: '清单、分享与发布' },
       { name: 'reports', description: '举报' },
+      { name: 'candidates', description: '新门店候选与地点核验' },
       { name: 'admin', description: '审核与门店治理' },
     ],
     security: [{ cookieAuth: [] }],
@@ -777,6 +926,9 @@ export function buildOpenApi(routes: RouteDef[]): Record<string, unknown> {
         Collection: COLLECTION,
         SharedCollectionSnapshot: SHARED_SNAPSHOT,
         ReportTicket: REPORT,
+        RestaurantCandidate: RESTAURANT_CANDIDATE,
+        CandidateDuplicate: CANDIDATE_DUPLICATE,
+        ProviderCandidate: PROVIDER_CANDIDATE,
         ReportQueueEntry: { allOf: [ref('ReportTicket'), obj({ restaurant_name: { type: 'string', nullable: true } }, ['restaurant_name'])] },
         ModerationQueueEntry: QUEUE_ENTRY,
         ModerationResult: MODERATION_RESULT,

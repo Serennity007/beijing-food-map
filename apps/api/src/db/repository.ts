@@ -9,6 +9,7 @@ import { stableHash } from '@qianwei/contracts';
 
 export const ENTITY_KINDS = [
   'restaurant',
+  'candidate',
   'user',
   'visit',
   'media',
@@ -33,6 +34,7 @@ export interface DumpedState {
   seq: number;
   last_computed_day: string | null;
   restaurants: JsonRecord[];
+  candidates: JsonRecord[];
   users: JsonRecord[];
   visits: JsonRecord[];
   media: JsonRecord[];
@@ -80,6 +82,11 @@ function rowsFor(kind: DocKind, state: DumpedState, at: string): Row[] {
       break;
     case 'user':
       for (const u of state.users) push(requiredId('user', u, str(u, 'id')), u, str(u, 'id'), null, at);
+      break;
+    case 'candidate':
+      for (const c of state.candidates) {
+        push(requiredId('candidate', c, str(c, 'id')), c, optStr(c, 'submitted_by'), optStr(c, 'restaurant_id'), str(c, 'updated_at'));
+      }
       break;
     case 'visit':
       for (const v of state.visits) {
@@ -146,6 +153,7 @@ function emptyState(): DumpedState {
     seq: 1,
     last_computed_day: null,
     restaurants: [],
+    candidates: [],
     users: [],
     visits: [],
     media: [],
@@ -166,6 +174,7 @@ export function parseDump(json: string): DumpedState {
     seq: typeof raw.seq === 'number' ? raw.seq : 1,
     last_computed_day: typeof raw.last_computed_day === 'string' ? raw.last_computed_day : null,
     restaurants: raw.restaurants ?? [],
+    candidates: raw.candidates ?? [],
     users: raw.users ?? [],
     visits: raw.visits ?? [],
     media: raw.media ?? [],
@@ -219,6 +228,10 @@ export class DocumentRepository {
           break;
         case 'user':
           state.users.push(rec);
+          seen += 1;
+          break;
+        case 'candidate':
+          state.candidates.push(rec);
           seen += 1;
           break;
         case 'visit':

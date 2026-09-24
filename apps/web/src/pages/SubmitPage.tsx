@@ -1,24 +1,30 @@
 /**
  * 投稿页。所有校验与票数规则都在引擎/服务端执行：这里只提交表单、显示返回结果与错误，
- * 绝不因为前端判断而伪造状态；第三方地点候选没有建店能力，所以不提供提交入口。
+ * 绝不因为前端判断而伪造状态。第三方地点候选与手动坐标都只进入建店申请流程，
+ * 新建门店的地点状态由引擎固定为待核验，页面不参与任何资格判定。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   ATTITUDES,
   ATTITUDE_LABEL,
+  CANDIDATE_STATUS_LABEL,
   DISCLOSURES,
   DISCLOSURE_LABEL,
+  DUPLICATE_REASON_LABEL,
   RULE_VERSION,
+  type CandidateFacts,
   type ContentVersionStatus,
   type Disclosure,
   type FeedbackAttitude,
   type Restaurant,
+  type RestaurantCandidate,
   type RestaurantDetail,
   type Submission,
 } from '@qianwei/contracts';
 import { useApi } from '../data/api';
 import { LS_DRAFT_PREFIX, type SearchResult } from '../data/client';
+import { CandidateForm } from '../features/candidates/CandidateForm';
 import { StatusBlock } from '../components/ui';
 
 const MAX_MEDIA = 6;
@@ -133,9 +139,15 @@ export function SubmitPage() {
   const [done, setDone] = useState<Submission | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const [candidateForm, setCandidateForm] = useState<Partial<CandidateFacts> | null>(null);
+  const [candidate, setCandidate] = useState<RestaurantCandidate | null>(null);
+  const [candidateBusy, setCandidateBusy] = useState(false);
+  const [candidateFailure, setCandidateFailure] = useState<ApiFailure | null>(null);
+
   const searchSeq = useRef(0);
   const detailSeq = useRef(0);
   const idemRef = useRef<string | null>(null);
+  const candIdemRef = useRef<string | null>(null);
   const restoredFor = useRef<string | null>(null);
   const hadDraft = useRef(false);
   const prefilledFor = useRef<string | null>(null);
@@ -286,6 +298,37 @@ export function SubmitPage() {
     setDone(null);
     setFailure(null);
     setNotice(null);
+  }
+
+  /** 建店申请：引擎返回什么状态就显示什么，页面不推断"是否已收录"。 */
+  async function sendCandidate(facts: CandidateFacts): Promise<void> {
+    if (!user) {
+      setCandidateFailure({ code: 'UNAUTHORIZED', message: '需要先登录才能申请新增门店', fields: {} });
+      return;
+    }
+    setCandidateBusy(true);
+    setCandidateFailure(null);
+    if (candIdemRef.current === null) candIdemRef.current = newIdempotencyKey();
+    try {
+      const created = await api.createCandidate({ ...facts, idempotency_key: candIdemRef.current });
+      setCandidate(created);
+      setCandidateForm(null);
+      const reused = created.duplicates.some((d) => d.reason === 'same_author_pending');
+      setNotice(
+        reused
+          ? `已有相同的待核验申请（${created.id}），这次没有重复建店。可以继续对这家店投稿。`
+          : `建店申请 ${created.id} 已提交，门店 ${created.restaurant_id ?? ''} 的地点状态为「${CANDIDATE_STATUS_LABEL[created.status]}」，需人工核验后才可能进入好店地图。现在可以继续填写实吃投稿。`,
+      );
+      if (created.restaurant_id) {
+        setRestaurantId(created.restaurant_id);
+        setTerm('');
+        setFound(null);
+      }
+    } catch (e) {
+      setCandidateFailure(readFailure(e));
+    } finally {
+      setCandidateBusy(false);
+    }
   }
 
   function addDish(): void {
@@ -515,7 +558,24 @@ export function SubmitPage() {
           <>
             <h3 style={{ marginTop: 12 }}>平台收录（{found.own.length}）</h3>
             {found.own.length === 0 ? (
-              <p className="hint">没有匹配的已收录门店。收录由平台建立，投稿只能针对已收录门店。</p>
+              <div className="card">
+                <p className="hint">
+                  没有匹配的已收录门店。如果这家店确实还没被收录，可以提交建店申请；审核员核验地点之后它才会进入待验证图层。
+                </p>
+                <div className="btn-row">
+                  <button
+                    className="btn small"
+                    type="button"
+                    disabled={candidateForm !== null}
+                    onClick={() => {
+                      setCandidateFailure(null);
+                      setCandidateForm({ name: term.trim(), source: 'manual_point' });
+                    }}
+                  >
+                    申请新增这家门店
+                  </button>
+                </div>
+              </div>
             ) : (
               <div className="list">
                 {found.own.slice(0, 6).map((r) => (
@@ -546,27 +606,115 @@ export function SubmitPage() {
               <p className="hint">没有第三方地点候选结果。</p>
             ) : (
               <>
-                <p className="hint">候选来自第三方地点数据，存在不等于好吃，也不等于平台收录。</p>
+                <p className="hint">
+                  候选来自地点数据，存在不等于好吃，也不等于平台收录；选中它只是把坐标和来源带进建店申请。
+                </p>
                 <ul className="pin-list">
                   {found.provider.slice(0, 4).map((c) => (
                     <li key={`${c.provider}-${c.poi_id}-${c.name}`}>
                       <div>
                         <strong>{c.name}</strong>
                         <div className="hint">
-                          {c.address}（{c.provider} 候选 {c.poi_id}）
+                          {c.address}（{c.provider} 候选 {c.poi_id} · {c.coord_note}）
                         </div>
                       </div>
+                      <button
+                        className="btn small"
+                        type="button"
+                        disabled={candidateForm !== null}
+                        onClick={() => {
+                          setCandidateFailure(null);
+                          setCandidateForm({
+                            name: c.name.replace(/^候选地点（未入库）·/, ''),
+                            address: c.address,
+                            lng: c.lng,
+                            lat: c.lat,
+                            source: 'provider_poi',
+                            provider: c.provider,
+                            poi_id: c.poi_id,
+                          });
+                        }}
+                      >
+                        以此候选新建门店
+                      </button>
                     </li>
                   ))}
                 </ul>
-                <p className="hint">
-                  本演示里没有建店与位置核验的自助入口，候选要先由工作人员收录并实地铁核验，才能被推荐，所以这里不提供提交按钮。
-                </p>
               </>
             )}
           </>
         )}
       </section>
+
+      {candidateFailure && (
+        <div className="alert bad" role="alert">
+          <strong>{candidateFailure.message}</strong>
+          {candidateFailure.code === 'UNAUTHORIZED' && (
+            <Link className="btn small" to="/login?next=/submit" style={{ marginLeft: 8 }}>
+              去登录
+            </Link>
+          )}
+        </div>
+      )}
+
+      {candidateForm && (
+        <CandidateForm
+          initial={candidateForm}
+          busy={candidateBusy}
+          submitLabel={user ? '提交建店申请' : '登录后提交建店申请'}
+          fieldErrors={candidateFailure?.fields ?? {}}
+          onSubmit={(facts) => void sendCandidate(facts)}
+          onCancel={() => setCandidateForm(null)}
+        />
+      )}
+
+      {candidate && (
+        <section className="panel">
+          <h2>我提交的建店申请</h2>
+          <div className="card">
+            <h3>
+              {candidate.name}
+              {candidate.branch ? <small>（{candidate.branch}）</small> : null}
+            </h3>
+            <p className="card-dishes">{candidate.address}</p>
+            <div className="card-row">
+              <span className={candidate.status === 'PENDING' ? 'badge warn' : 'badge ok'}>
+                地点核验：{CANDIDATE_STATUS_LABEL[candidate.status]}
+              </span>
+              <span className="badge muted">
+                {candidate.id} · 第 {candidate.revision} 版
+              </span>
+            </div>
+            {candidate.reject_reason && <p>驳回原因：{candidate.reject_reason}</p>}
+            {candidate.duplicates.length > 0 && (
+              <ul className="pin-list">
+                {candidate.duplicates.map((d) => (
+                  <li key={`${d.kind}-${d.matched_id}-${d.reason}`}>
+                    <div>
+                      <strong>{d.name}</strong>
+                      <div className="hint">
+                        {DUPLICATE_REASON_LABEL[d.reason]}
+                        {d.distance_m !== null ? ` · 约 ${d.distance_m} 米（直线）` : ''} · {d.matched_id}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="hint">重复提示只是给人看的线索：引擎不据此自动合并，也不自动驳回。</p>
+            <div className="btn-row">
+              <Link className="btn small plain" to="/me">
+                看我的申请进度
+              </Link>
+              {candidate.restaurant_id && (
+                <Link className="btn small plain" to={`/restaurants/${candidate.restaurant_id}`}>
+                  看这家新店
+                </Link>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="panel">
         <h2>{revise ? '新版本内容' : '实吃内容'}</h2>

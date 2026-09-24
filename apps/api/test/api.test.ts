@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Client, QUERY, REASON, serverToday, start, submitBody, type Harness } from './helpers';
 import { normalizeTarget } from '../src/http/handlers';
 import { routeKeys } from '../src/app';
-import type { MapItemsResponse, Page, Restaurant, Submission } from '@qianwei/contracts';
+import type { MapItemsResponse, Page, Restaurant, RestaurantCandidate, RestaurantDetail, Submission } from '@qianwei/contracts';
 
 const openers: Array<() => Promise<void>> = [];
 async function withServer(): Promise<Harness> {
@@ -544,6 +544,180 @@ describe('文档与安全边界', () => {
 
     const arrayBody = await fetch(`${h.base}/collections`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '[]' });
     assert.equal(arrayBody.status, 400);
+  });
+});
+
+describe('新门店候选与地点核验', () => {
+  const CAND = {
+    name: '测试·接口新建候选店',
+    branch: '望京店',
+    address: '朝阳区望京接口路 3 号（合成地址）',
+    floor_info: '2 层',
+    cuisines: ['guizhou'],
+    lng: 116.4788,
+    lat: 39.9931,
+    source: 'manual_point',
+    provider: null,
+    poi_id: null,
+    evidence_note: '接口测试（合成场景）：验证建店申请、地点核验与补材料的 HTTP 角色边界',
+  };
+
+  test('未登录 401；形状与领域边界各自 400；幂等键换内容 409', async () => {
+    const h = await withServer();
+    const anon = new Client(h.base);
+    assert.equal((await anon.req('POST', '/restaurant-candidates', { body: CAND })).status, 401);
+    assert.equal((await anon.get('/me/restaurant-candidates')).status, 401);
+
+    const u = new Client(h.base);
+    await u.login('U01');
+    const created = await u.req<RestaurantCandidate>('POST', '/restaurant-candidates', {
+      body: CAND,
+      headers: { 'idempotency-key': 'cand-1' },
+    });
+    assert.equal(created.status, 201);
+    assert.equal(created.data?.status, 'PENDING');
+    assert.ok(created.data?.restaurant_id, '建店申请要同时落一家待核验门店');
+    assert.equal(created.data?.is_author_self, true);
+    assert.equal(created.data?.is_test_data, true);
+
+    const same = await u.req<RestaurantCandidate>('POST', '/restaurant-candidates', {
+      body: CAND,
+      headers: { 'idempotency-key': 'cand-1' },
+    });
+    assert.equal(same.data?.id, created.data?.id, '同键同内容返回同一条');
+    assert.equal(
+      (await u.req('POST', '/restaurant-candidates', { body: { ...CAND, name: '测试·换了内容' }, headers: { 'idempotency-key': 'cand-1' } }))
+        .status,
+      409,
+    );
+
+    // 形状由 HTTP 层判（类型/长度），业务边界由引擎判，两层的 400 都带字段
+    const badType = await u.req('POST', '/restaurant-candidates', { body: { ...CAND, lat: 'north' } });
+    assert.equal(badType.status, 400);
+    assert.equal(badType.error?.code, 'VALIDATION_ERROR');
+    const badEnum = await u.req('POST', '/restaurant-candidates', { body: { ...CAND, source: 'google' } });
+    assert.equal(badEnum.status, 400);
+    const outside = await u.req<{ fieldErrors?: Record<string, string> }>('POST', '/restaurant-candidates', {
+      body: { ...CAND, lng: 121.47, lat: 31.23 },
+    });
+    assert.equal(outside.status, 400);
+    assert.match(JSON.stringify(outside.error?.fieldErrors ?? outside.error), /北京/);
+    const shortName = await u.req('POST', '/restaurant-candidates', { body: { ...CAND, name: '短' } });
+    assert.equal(shortName.status, 400);
+  });
+
+  test('队列角色边界、作者不能自审、驳回要有理由、补材料回到待核验', async () => {
+    const h = await withServer();
+    const u = new Client(h.base);
+    await u.login('U01');
+    const created = await u.req<RestaurantCandidate>('POST', '/restaurant-candidates', { body: CAND });
+    const cid = created.data!.id;
+    const rid = created.data!.restaurant_id!;
+
+    assert.equal((await new Client(h.base).get('/admin/candidates')).status, 401);
+    const peer = new Client(h.base);
+    await peer.login('U02');
+    assert.equal((await peer.get('/admin/candidates')).status, 403);
+    assert.deepEqual((await peer.get<RestaurantCandidate[]>('/me/restaurant-candidates')).data, []);
+
+    const mod = new Client(h.base);
+    await mod.login('M01');
+    const queue = await mod.get<RestaurantCandidate[]>('/admin/candidates');
+    assert.equal(queue.status, 200);
+    const row = queue.data?.find((c) => c.id === cid);
+    assert.ok(row && row.is_author_self === false && row.author_display_name.length > 0);
+    assert.equal((await mod.get('/admin/candidates?status=NOPE')).status, 400);
+
+    assert.equal((await mod.req('POST', `/admin/candidates/${cid}/actions`, { body: { action: 'verify', expected_version: 9 } })).status, 409);
+    assert.equal((await mod.req('POST', `/admin/candidates/${cid}/actions`, { body: { action: 'reject', expected_version: created.data!.version } })).status, 400);
+    const rejected = await mod.req<RestaurantCandidate>('POST', `/admin/candidates/${cid}/actions`, {
+      body: { action: 'reject', reason: '坐标需要复核', expected_version: created.data!.version },
+    });
+    assert.equal(rejected.status, 200);
+    assert.equal(rejected.data?.status, 'REJECTED');
+    assert.equal(rejected.data?.reject_reason, '坐标需要复核');
+    const store = await u.get<RestaurantDetail>(`/restaurants/${rid}`);
+    assert.equal(store.data?.place_status, 'REJECTED');
+    assert.ok((store.data?.verification_note ?? '').includes('坐标需要复核'), '详情页要回传驳回原因');
+
+    const amended = await u.req<RestaurantCandidate>('POST', `/restaurant-candidates/${cid}/materials`, {
+      body: { address: '朝阳区望京接口路 3 号 2 层 208（补充门牌）', expected_version: rejected.data!.version },
+    });
+    assert.equal(amended.status, 200);
+    assert.equal(amended.data?.status, 'PENDING');
+    assert.equal(amended.data?.revision, 2);
+    assert.equal(amended.data?.reject_reason, null);
+    assert.equal(
+      (await peer.req('POST', `/restaurant-candidates/${cid}/materials`, {
+        body: { address: '海淀区别人的地址（合成）', expected_version: amended.data!.version },
+      })).status,
+      403,
+    );
+  });
+
+  test('审核员本人的候选不能自审；他人照常核验', async () => {
+    const h = await withServer();
+    const mod = new Client(h.base);
+    await mod.login('M01');
+    const own = await mod.req<RestaurantCandidate>('POST', '/restaurant-candidates', {
+      body: { ...CAND, name: '测试·审核员自己提的店', lng: 116.41, lat: 39.91 },
+    });
+    assert.equal(own.status, 201);
+    const self = await mod.req('POST', `/admin/candidates/${own.data!.id}/actions`, {
+      body: { action: 'verify', expected_version: own.data!.version },
+    });
+    assert.equal(self.status, 403);
+    // 直接改门店地点状态也不行：同一条把关在两处入口都生效
+    const patch = await mod.req('PATCH', `/admin/restaurants/${own.data!.restaurant_id}/status`, {
+      body: { place_status: 'VERIFIED', reason: '自审尝试' },
+    });
+    assert.equal(patch.status, 403);
+
+    const admin = new Client(h.base);
+    await admin.login('A01');
+    const byOther = await admin.req<RestaurantCandidate>('POST', `/admin/candidates/${own.data!.id}/actions`, {
+      body: { action: 'verify', reason: '另一人复核通过', expected_version: own.data!.version },
+    });
+    assert.equal(byOther.status, 200);
+    assert.equal(byOther.data?.status, 'VERIFIED');
+  });
+
+  test('并入已有门店走合并规则：仅 admin，旧 ID 重定向', async () => {
+    const h = await withServer();
+    const u = new Client(h.base);
+    await u.login('U01');
+    const today = await serverToday(h);
+    const created = await u.req<RestaurantCandidate>('POST', '/restaurant-candidates', {
+      body: { ...CAND, name: '测试·黔江酸汤粉', branch: '望京同实体重复候选', lng: 116.4702, lat: 39.9962 },
+    });
+    assert.ok(created.data!.duplicates.some((d) => d.matched_id === 'R02' && d.reason === 'name_nearby'), '重复提示应指向 R02');
+    const fb = await u.req<Submission>('POST', '/submissions', {
+      body: submitBody(today, { restaurant_id: created.data!.restaurant_id, media_ids: [], require_media_for_recommend: false, attitude: 'neutral' }),
+    });
+    assert.equal(fb.status, 201);
+
+    const mod = new Client(h.base);
+    await mod.login('M01');
+    assert.equal(
+      (await mod.req('POST', `/admin/candidates/${created.data!.id}/actions`, {
+        body: { action: 'merge', reason: '与 R02 同一家', target_restaurant_id: 'R02', expected_version: created.data!.version },
+      })).status,
+      403,
+      'moderator 不能执行合并',
+    );
+
+    const admin = new Client(h.base);
+    await admin.login('A01');
+    const merged = await admin.req<RestaurantCandidate>('POST', `/admin/candidates/${created.data!.id}/actions`, {
+      body: { action: 'merge', reason: '与 R02 同一家', target_restaurant_id: 'R02', expected_version: created.data!.version },
+    });
+    assert.equal(merged.status, 200);
+    assert.equal(merged.data?.status, 'MERGED');
+    assert.equal(merged.data?.restaurant_id, 'R02');
+    const redirected = await admin.get<RestaurantDetail>(`/restaurants/${created.data!.restaurant_id}`);
+    assert.equal(redirected.data?.id, 'R02', '旧门店 ID 永久重定向到 canonical');
+    const audit = await admin.get<Array<{ action: string; target: string }>>('/admin/audit-log');
+    assert.ok(audit.data?.some((a) => a.action === 'candidate_merge'));
   });
 });
 

@@ -2,11 +2,13 @@ import {
   ATTITUDES,
   type BusinessStatus,
   type CommunityQualification,
+  type DuplicateReason,
   type EndorsementStatus,
   type FeedbackAttitude,
   type PlaceVerificationStatus,
   type RiskStatus,
 } from './enums';
+import { straightLineMeters } from './geo';
 
 /** 可注入时钟，180 天边界测试用它，不通过改机器时间。 */
 export interface Clock {
@@ -220,4 +222,89 @@ export const CONTENT_TRANSITIONS: TransitionRule[] = [
 
 export function canTransition(from: string, to: string, actor: TransitionRule['actor']): boolean {
   return CONTENT_TRANSITIONS.some((r) => r.from === from && r.to === to && (r.actor === actor || actor === 'system'));
+}
+
+// -------------------------------------------------------------- 新门店候选
+
+/** 名称相同且近似直线距离在这个半径内才算"可能是同一家"；超出只提示可能是不同分店。 */
+export const CANDIDATE_DUP_RADIUS_M = 150;
+export const CANDIDATE_MAX_DUP_HINTS = 5;
+export const CANDIDATE_MIN_EVIDENCE_CHARS = 10;
+export const CANDIDATE_MAX_EVIDENCE_CHARS = 300;
+
+export const CANDIDATE_TRANSITIONS: TransitionRule[] = [
+  { from: 'PENDING', to: 'VERIFIED', actor: 'moderator' },
+  { from: 'PENDING', to: 'REJECTED', actor: 'moderator' },
+  { from: 'PENDING', to: 'MERGED', actor: 'moderator' },
+  { from: 'REJECTED', to: 'PENDING', actor: 'author' },
+];
+
+export function canTransitionCandidate(from: string, to: string, actor: TransitionRule['actor']): boolean {
+  return CANDIDATE_TRANSITIONS.some((r) => r.from === from && r.to === to && r.actor === actor);
+}
+
+/** 去掉空白与全角括号差异，只用于"是否可能同一家"的粗筛，不做 fuzzy 匹配。 */
+export function normalizeStoreName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[（）]/g, (c) => (c === '（' ? '(' : ')'))
+    .replace(/[\s·・．.\-_—]/g, '');
+}
+
+/** 分店为空按"无分店"归一，避免 '' 与 null 被当成两家。 */
+export function branchKey(branch: string | null | undefined): string {
+  return normalizeStoreName(branch ?? '');
+}
+
+export interface DedupePoint {
+  name: string;
+  branch: string | null;
+  lng: number;
+  lat: number;
+  provider: string | null;
+  poi_id: string | null;
+}
+
+export interface DedupeTarget extends DedupePoint {
+  id: string;
+}
+
+export interface DedupeHit<T extends DedupeTarget> {
+  match: T;
+  reason: DuplicateReason;
+  distance_m: number | null;
+}
+
+/**
+ * 人工合并候选提示：先 provider+poi_id，再名称/分店/距离。
+ * 只产出线索，是否合并由审核员决定 —— 近距离同品牌不同分店不能被自动并掉。
+ */
+export function matchDuplicates<T extends DedupeTarget>(
+  cand: DedupePoint,
+  existing: T[],
+  opts: { excludeId?: string; radiusM?: number } = {},
+): DedupeHit<T>[] {
+  const radius = opts.radiusM ?? CANDIDATE_DUP_RADIUS_M;
+  const name = normalizeStoreName(cand.name);
+  const branch = branchKey(cand.branch);
+  const hits: DedupeHit<T>[] = [];
+  for (const e of existing) {
+    if (opts.excludeId && e.id === opts.excludeId) continue;
+    if (cand.provider && cand.poi_id && e.provider === cand.provider && e.poi_id === cand.poi_id) {
+      hits.push({ match: e, reason: 'same_poi_id', distance_m: null });
+      continue;
+    }
+    if (!name || normalizeStoreName(e.name) !== name) continue;
+    const distance = Math.round(straightLineMeters(cand, e));
+    if (branchKey(e.branch) === branch && distance <= radius) {
+      hits.push({ match: e, reason: 'name_nearby', distance_m: distance });
+    } else {
+      hits.push({ match: e, reason: 'same_name_far', distance_m: distance });
+    }
+  }
+  const rank: Record<DuplicateReason, number> = { same_poi_id: 0, name_nearby: 1, same_name_far: 2, same_author_pending: 3 };
+  return hits
+    .sort((a, b) => rank[a.reason] - rank[b.reason] || (a.distance_m ?? 0) - (b.distance_m ?? 0))
+    .slice(0, CANDIDATE_MAX_DUP_HINTS);
 }

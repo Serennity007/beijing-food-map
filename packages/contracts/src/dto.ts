@@ -1,9 +1,12 @@
 import type {
   BusinessStatus,
+  CandidateSource,
+  CandidateStatus,
   CommunityQualification,
   ContentVersionStatus,
   Cuisine,
   Disclosure,
+  DuplicateReason,
   EndorsementStatus,
   FeedbackAttitude,
   LAYERS,
@@ -308,4 +311,74 @@ export interface ModerationQueueEntry {
   submitted_at: string | null;
   /** 独立核验要求：作者不能自审自己的内容。 */
   is_author_self: boolean;
+}
+
+/**
+ * 搜索返回的第三方地点候选。没有地图 Key 时它是内置的合成候选，坐标明确标注为演示值；
+ * 选中后只进入建店流程，不自动入库、更不自动推荐。
+ */
+export interface ProviderCandidate {
+  provider: string;
+  poi_id: string;
+  name: string;
+  address: string;
+  lng: number;
+  lat: number;
+  coord_system: 'GCJ02';
+  coord_note: string;
+}
+
+export interface SearchResult {
+  own: Restaurant[];
+  provider_candidates: ProviderCandidate[];
+}
+
+/** 重复提示：给人看的线索，引擎不据此自动合并或自动驳回。 */
+export interface CandidateDuplicate {
+  /** 命中的是已有门店还是另一条候选。 */
+  kind: 'restaurant' | 'candidate';
+  matched_id: string;
+  name: string;
+  branch: string | null;
+  reason: DuplicateReason;
+  /** 近似直线距离（米），不是行走距离；按 poi_id 命中时为 null。 */
+  distance_m: number | null;
+}
+
+/** 新门店候选：地点实体，与投稿（内容版本）分属两套状态机。 */
+export interface RestaurantCandidate {
+  id: string;
+  /** 作者补材料会递增，旧驳回理由随新版失效。 */
+  revision: number;
+  name: string;
+  branch: string | null;
+  address: string;
+  floor_info: string | null;
+  cuisines: Cuisine[];
+  lng: number;
+  lat: number;
+  coord_system: 'GCJ02';
+  source: CandidateSource;
+  provider: string | null;
+  poi_id: string | null;
+  /** "你从哪知道这家店"，审核员判断依据之一。 */
+  evidence_note: string;
+  status: CandidateStatus;
+  /** 候选创建时就落的门店记录，地点状态为 PENDING；驳回后退出图层。 */
+  restaurant_id: string | null;
+  duplicates: CandidateDuplicate[];
+  submitted_by: string;
+  author_display_name: string;
+  /** 审核队列用：即使审核员有权限，本人的候选也不能自审。 */
+  is_author_self: boolean;
+  /** 门店当前的地点状态，核验后与候选状态同源。 */
+  place_status: PlaceVerificationStatus | null;
+  reject_reason: string | null;
+  decided_by: string | null;
+  decided_at: string | null;
+  /** 乐观锁：审核与补材料都要带 expected_version。 */
+  version: number;
+  created_at: string;
+  updated_at: string;
+  is_test_data: true;
 }

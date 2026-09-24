@@ -4,6 +4,7 @@
  * 会写入演示库，跑完用 `npm run seed:test` 回到基线。
  */
 import { Http } from '../apps/web/src/data/http';
+import type { CandidateFacts } from '@qianwei/contracts';
 
 const BASE = 'http://127.0.0.1:8787/api/v1';
 const jar = new Map<string, string>();
@@ -49,6 +50,16 @@ const q = {
   dish_or_tag: null,
   layer: 'qualified' as const,
 };
+
+/** 期望被拒：只关心"是否被拒"，具体 code 由后端与引擎保证。 */
+async function rejects(fn: () => Promise<unknown>): Promise<boolean> {
+  try {
+    await fn();
+    return false;
+  } catch {
+    return true;
+  }
+}
 
 const map = await api.mapItems(q);
 step('mapItems', map.items.length > 0, `${map.mode} ${map.items.length} 点 / 匹配 ${map.total_matched}`);
@@ -108,8 +119,37 @@ step('uploadTestPhoto', mediaId.startsWith('MM'), mediaId);
 const afterMedia = await api.mediaUrls([mediaId]);
 step('未过审图片对作者可解析', Object.keys(afterMedia).length === 1);
 
-const cols = await api.collections();
-step('collections', cols.length >= 1, `${cols.length} 个清单`);
+// ---------------------------------------------- 新门店候选与地点核验（阶段 1A，U02 提交）
+const CAND_A: CandidateFacts = {
+  name: '测试·自检新建店A',
+  branch: null,
+  address: '朝阳区望京自检路 8 号（合成地址）',
+  floor_info: '2 层',
+  cuisines: ['guizhou'],
+  lng: 116.4788,
+  lat: 39.9931,
+  source: 'manual_point',
+  provider: null,
+  poi_id: null,
+  evidence_note: 'HTTP 契约自检（合成场景）：验证建店申请到地点核验的写路径',
+};
+const CAND_B: CandidateFacts = { ...CAND_A, name: '测试·自检待驳回店B', address: '海淀区自检路 9 号（合成地址）', lng: 116.3402, lat: 39.9781 };
+
+const candA = await api.createCandidate({ ...CAND_A, idempotency_key: 'http-check-cand-a' });
+step('createCandidate', candA.status === 'PENDING' && !!candA.restaurant_id, `${candA.id} → ${candA.restaurant_id}`);
+const candAStore = await api.detail(candA.restaurant_id!);
+step('新建门店地点 PENDING 且不在默认层', candAStore.place_status === 'PENDING' && !candAStore.in_default_layer, candAStore.verification_note);
+const pendLayer = await api.mapItems({ ...q, layer: 'pending_verification' });
+const pendIds = pendLayer.items.flatMap((i) => (i.kind === 'cluster' ? i.restaurant_ids : [i.id]));
+step('新门店只出现在待验证图层', pendIds.includes(candA.restaurant_id!), `待验证 ${pendIds.length} 家`);
+const candARetry = await api.createCandidate({ ...CAND_A, idempotency_key: 'http-check-cand-a' });
+step('建店幂等：同键同内容返回同一条', candARetry.id === candA.id);
+const candB = await api.createCandidate({ ...CAND_B, idempotency_key: 'http-check-cand-b' });
+step('第二条候选独立存在', candB.id !== candA.id && candB.duplicates.every((d) => d.matched_id !== candA.restaurant_id));
+const candListU02 = await api.myCandidates();
+step('myCandidates 只列本人的', candListU02.length >= 2 && candListU02.every((c) => c.is_author_self), `${candListU02.length} 条`);
+
+const cols = await api.collections();step('collections', cols.length >= 1, `${cols.length} 个清单`);
 const col = await api.createCollection('HTTP 自检清单', null);
 step('createCollection', col.title === 'HTTP 自检清单', col.id);
 const upd = await api.updateCollection(col.id, { title: 'HTTP 自检清单（改名）', description: '前端→后端契约自检' });
@@ -127,6 +167,33 @@ await api.logout();
 await api.login('M01', '888888');
 const adminReports = await api.reportQueue();
 step('reportQueue 审核员可见且带门店摘要', adminReports.length > 0 && adminReports.every(r => 'restaurant_name' in r));
+
+// ---------------------------------------------- 地点核验（M01）
+const candQueue = await api.candidateQueue();
+step(
+  'candidateQueue 待核验优先且带提交人',
+  candQueue.length >= 2 && candQueue[0]?.status === 'PENDING' && candQueue.every((c) => c.author_display_name.length > 0),
+  `${candQueue.length} 条`,
+);
+const verifiedA = await api.decideCandidate({ id: candA.id, action: 'verify', reason: '自检：坐标与地址一致', expected_version: candA.version });
+step('decideCandidate 核验通过', verifiedA.status === 'VERIFIED' && verifiedA.place_status === 'VERIFIED', verifiedA.id);
+const afterVerify = await api.detail(candA.restaurant_id!);
+step(
+  '核验通过仍不等于好店达标',
+  afterVerify.place_status === 'VERIFIED' && !afterVerify.in_default_layer,
+  afterVerify.ineligibility_reasons.join('；'),
+);
+const ownCand = await api.createCandidate({ ...CAND_A, name: '测试·自检自审店C', lng: 116.41, lat: 39.91, idempotency_key: 'http-check-cand-c' });
+step(
+  '作者不能自审本人候选（403）',
+  await rejects(() => api.decideCandidate({ id: ownCand.id, action: 'verify', expected_version: ownCand.version })),
+);
+step('驳回必须写理由（400）', await rejects(() => api.decideCandidate({ id: candB.id, action: 'reject', expected_version: candB.version })));
+const rejectedB = await api.decideCandidate({ id: candB.id, action: 'reject', reason: '自检：坐标落在路口中央，需重新选点', expected_version: candB.version });
+step('驳回并回传原因', rejectedB.status === 'REJECTED' && (rejectedB.reject_reason ?? '').includes('路口中央'));
+step('被驳回的门店退出待验证图层', !(await api.detail(candB.restaurant_id!)).in_default_layer && (await api.detail(candB.restaurant_id!)).place_status === 'REJECTED');
+step('版本冲突被拒（409）', await rejects(() => api.decideCandidate({ id: candA.id, action: 'verify', expected_version: 9999 })));
+
 const queue = await api.moderationQueue();
 step('moderationQueue 含待审发布', queue.some((e) => e.id === pub.id), `${queue.length} 条`);
 const mod = await api.moderate({ target: pub.id, action: 'approve', expected_version: pub.generation });
@@ -150,10 +217,24 @@ step('deleteCollection', !(await api.collections()).some((c) => c.id === col.id)
 
 const reports = await api.myReports();
 step('myReports 可读', Array.isArray(reports), `${reports.length} 条`);
+
+// ---------------------------------------------- 补材料（U02 在被驳回的申请上改）
+const lvBeforeAmend = (await api.detail(candB.restaurant_id!)).location_version;
+const amended = await api.resubmitCandidate(
+  candB.id,
+  { address: '海淀区自检路 9 号 1 层 101（补充门牌）', lng: 116.3412, lat: 39.9789 },
+  rejectedB.version,
+);
+step('补材料回到待核验', amended.status === 'PENDING' && amended.revision === 2, `${amended.id} 第 ${amended.revision} 版`);
+step('补材料后驳回理由清空', amended.reject_reason === null);
+const lvAfterAmend = (await api.detail(candB.restaurant_id!)).location_version;
+step('换坐标后 location_version 递增', lvAfterAmend > lvBeforeAmend, `${lvBeforeAmend} → ${lvAfterAmend}`);
+
 await api.logout();
 await api.login('M01', '888888');
 const audit = await api.auditLog();
 step('auditLog', audit.length > 0, `${audit.length} 条`);
+step('审计留下建店与核验动作', audit.some((a) => a.action === 'candidate_create') && audit.some((a) => a.action === 'candidate_reject'));
 
 console.log(ok.join('\n'));
 if (failed) {

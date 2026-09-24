@@ -1,5 +1,6 @@
 import type {
   Bounds,
+  CandidateDuplicate,
   Collection,
   CollectionItemRecord,
   FeedbackPublic,
@@ -10,20 +11,28 @@ import type {
   ModerationQueueEntry,
   MyFeedback,
   Page,
+  ProviderCandidate,
   RecommendationBasis,
   Restaurant,
+  RestaurantCandidate,
   RestaurantDetail,
   ReportTicket,
   ReportQueueEntry,
+  SearchResult,
   SessionUser,
   SharedCollectionSnapshot,
   Submission,
   SystemCollectionKind,
 } from './dto';
 import {
+  CANDIDATE_SOURCES,
+  CANDIDATE_STATUS_LABEL,
+  CUISINES,
   CONTRACT_VERSION,
   RULE_VERSION,
   SOUTHWEST_CUISINES,
+  type CandidateSource,
+  type CandidateStatus,
   type CommunityQualification,
   type ContentVersionStatus,
   type Cuisine,
@@ -34,6 +43,7 @@ import {
 } from './enums';
 import {
   BEIJING_BOUNDS,
+  BEIJING_CENTER,
   clusterPoints,
   isValidGcj02,
 } from './geo';
@@ -47,15 +57,23 @@ import {
   type SeedRestaurant,
 } from './seed';
 import {
+  CANDIDATE_MAX_DUP_HINTS,
+  CANDIDATE_MAX_EVIDENCE_CHARS,
+  CANDIDATE_MIN_EVIDENCE_CHARS,
   RuleViolation,
+  SCORING_WINDOW_DAYS,
   assertVisitDate,
   addDays,
+  canTransitionCandidate,
   communityQualification,
   endorsementStatusOn,
   evaluatePublicMapEligibility,
+  matchDuplicates,
   shanghaiToday,
   tallyCommunity,
   type Clock,
+  type DedupePoint,
+  type DedupeTarget,
 } from './rules';
 
 export const MAX_ENTITIES_PER_RESPONSE = 200;
@@ -211,6 +229,38 @@ export interface SnapshotRec {
   created_at: string;
 }
 
+/** 新门店候选：地点实体，与投稿的内容版本各走各的状态机。 */
+export interface CandidateRec extends DedupeTarget {
+  revision: number;
+  address: string;
+  floor_info: string | null;
+  cuisines: Cuisine[];
+  source: CandidateSource;
+  evidence_note: string;
+  status: CandidateStatus;
+  restaurant_id: string | null;
+  submitted_by: string;
+  reject_reason: string | null;
+  decided_by: string | null;
+  decided_at: string | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 建店申请与补材料共用的事实字段，校验只在这一处。 */
+export interface CandidateFacts extends DedupePoint {
+  address: string;
+  floor_info: string | null;
+  cuisines: Cuisine[];
+  source: CandidateSource;
+  evidence_note: string;
+}
+
+export interface CandidateInput extends CandidateFacts {
+  idempotency_key?: string;
+}
+
 interface StoreOptions {
   /** production 下拒绝装载测试种子与演示登录后门。 */
   env?: 'development' | 'test' | 'demo_static' | 'production';
@@ -231,6 +281,7 @@ export class Store {
   readonly env: StoreOptions['env'];
   private clock: Clock;
   restaurants = new Map<string, RestaurantRec>();
+  candidates = new Map<string, CandidateRec>();
   users = new Map<string, UserRec>();
   visits: Visit[] = [];
   media = new Map<string, MediaRec>();
@@ -764,14 +815,15 @@ export class Store {
     return [term, ...aliasTerms].some((t) => hay.includes(t));
   }
 
-  private inBounds(rec: RestaurantRec, b: Bounds): boolean {
+  private inBounds(rec: { lng: number; lat: number }, b: Bounds): boolean {
     return rec.lng >= b.west && rec.lng <= b.east && rec.lat >= b.south && rec.lat <= b.north;
   }
 
   /** 默认可见层：符合公共谓词；待验证层：显式开启后显示未验证候选。 */
   visibleFor(rec: RestaurantRec, layer: MapQuery['layer']): boolean {
     if (rec.deleted || rec.merged_into || !rec.profile_public) return false;
-    if (layer === 'pending_verification') return !rec.in_default_layer && rec.place_status !== 'VERIFIED';
+    // 核验未通过的门店不是"待验证"，不该继续以候选名义出现在公开地图上
+    if (layer === 'pending_verification') return !rec.in_default_layer && rec.place_status === 'PENDING';
     return rec.in_default_layer;
   }
 
@@ -935,7 +987,7 @@ export class Store {
     };
   }
 
-  search(q: string): { own: Restaurant[]; provider_candidates: Array<{ provider: string; poi_id: string; name: string; address: string }> } {
+  search(q: string): SearchResult {
     const term = q.trim();
     if (!term) return { own: [], provider_candidates: [] };
     const terms = [term, ...(ALIASES[term] ?? [])];
@@ -948,16 +1000,7 @@ export class Store {
       .slice(0, 20)
       .map((rec) => this.toDto(rec));
     // 供应商候选：demo 不联网调用第三方，明确标注为需人工核验的候选，不自动入库。
-    const provider_candidates = own.length === 0 && term.length >= 2
-      ? [
-          {
-            provider: 'demo-provider',
-            poi_id: 'POI-DEMO-1',
-            name: `候选地点（未入库）·${term}`,
-            address: '北京市（供应商候选，仅用于创建门店流程）',
-          },
-        ]
-      : [];
+    const provider_candidates = own.length === 0 && term.length >= 2 ? [demoProviderCandidate(term)] : [];
     return { own, provider_candidates };
   }
 
@@ -970,7 +1013,9 @@ export class Store {
       verification_note:
         rec.place_status === 'VERIFIED'
           ? `地点已核验（${rec.place_verified_date ?? '日期未知'}）`
-          : '地点尚未核验：这是候选门店，不代表平台推荐',
+          : rec.place_status === 'REJECTED'
+            ? `地点核验未通过：${this.candidateRejectReason(rec.id) ?? '审核员未填写具体原因'}`
+            : '地点尚未核验：这是候选门店，不代表平台推荐',
       business_status_note:
         rec.business_status === 'UNKNOWN'
           ? '营业状态未核实'
@@ -1189,7 +1234,11 @@ export class Store {
       status: rev.status,
       reject_reason: rev.reject_reason,
       pending_verify_reason:
-        rec.place_status !== 'VERIFIED' ? '门店地点尚未核验，通过后才会进入好店地图' : null,
+        rec.place_status === 'PENDING'
+          ? '门店地点尚未核验，通过后才会进入好店地图'
+          : rec.place_status === 'REJECTED'
+            ? `门店地点核验未通过：${this.candidateRejectReason(rec.id) ?? '审核员未填写具体原因'}`
+            : null,
       version: rev.revision,
       created_at: rev.submitted_at,
     };
@@ -1681,6 +1730,13 @@ export class Store {
   patchRestaurantStatus(input: { id: string; place_status?: RestaurantRec['place_status']; business_status?: RestaurantRec['business_status']; risk_status?: RestaurantRec['risk_status']; reason?: string }, sessionId: string | null): Restaurant {
     const actor = this.requireRole(sessionId, ['moderator', 'admin']);
     const rec = this.requireRestaurant(input.id);
+    if (input.place_status && input.place_status !== rec.place_status) {
+      // 候选门店的地点核验就是对本人提交内容的审核，作者即使身兼审核角色也不能自审
+      const authorId = this.candidateAuthorOfRestaurant(rec.id);
+      if (authorId && authorId === actor.id) {
+        throw new ApiError('FORBIDDEN', '本人提交的门店候选不能自审，请交给其他审核人员', 403);
+      }
+    }
     if (input.place_status) {
       if (input.place_status !== rec.place_status) {
         rec.location_version += 1;
@@ -1735,6 +1791,324 @@ export class Store {
     this.recompute(target.id);
     this.touch();
     return { canonical: target.id };
+  }
+
+  // ------------------------------------------------- 新门店候选与地点核验（阶段 1A）
+
+  /** 门店是否由某条候选建出来：决定"作者不能自审地点"这条把关是否生效。 */
+  private candidateOfRestaurant(restaurantId: string): CandidateRec | null {
+    for (const c of this.candidates.values()) if (c.restaurant_id === restaurantId) return c;
+    return null;
+  }
+
+  private candidateAuthorOfRestaurant(restaurantId: string): string | null {
+    return this.candidateOfRestaurant(restaurantId)?.submitted_by ?? null;
+  }
+
+  private candidateRejectReason(restaurantId: string): string | null {
+    const c = this.candidateOfRestaurant(restaurantId);
+    return c && c.status === 'REJECTED' ? c.reject_reason : null;
+  }
+
+  private requireCandidate(id: string): CandidateRec {
+    const c = this.candidates.get(id);
+    // 别人的申请与不存在的申请给同一句文案，不泄露存在性
+    if (!c) throw new ApiError('NOT_FOUND', '该建店申请不存在或你无权查看', 404);
+    return c;
+  }
+
+  /** 建店事实的唯一校验处 —— 静态模式与后端模式必须走同一段代码。 */
+  private checkCandidateFacts(i: CandidateFacts): CandidateFacts {
+    const err = (field: string, msg: string) => new ApiError('VALIDATION_ERROR', msg, 400, { [field]: msg });
+    const name = i.name?.trim() ?? '';
+    if (name.length < 2 || name.length > 40) throw err('name', '门店名需要 2—40 个字');
+    const branch = i.branch?.trim() ?? '';
+    if (branch.length > 30) throw err('branch', '分店名最多 30 个字');
+    const address = i.address?.trim() ?? '';
+    if (address.length < 5 || address.length > 120) throw err('address', '地址需要 5—120 个字');
+    const floor = i.floor_info?.trim() ?? '';
+    if (floor.length > 40) throw err('floor_info', '楼层信息最多 40 个字');
+    if (!Array.isArray(i.cuisines) || i.cuisines.length === 0) throw err('cuisines', '至少选择一个菜系');
+    if (i.cuisines.length > 3) throw err('cuisines', '菜系标签最多 3 个');
+    for (const c of i.cuisines) if (!CUISINES.includes(c)) throw err('cuisines', '菜系标签不在允许值内');
+    if (!Number.isFinite(i.lng) || !Number.isFinite(i.lat) || !isValidGcj02(i.lng, i.lat)) {
+      throw err('lng_lat', '坐标缺失或不在 GCJ-02 合法范围');
+    }
+    if (!this.inBounds({ lng: i.lng, lat: i.lat }, BEIJING_BOUNDS)) throw err('lng_lat', '首版只收录北京境内餐馆');
+    if (!CANDIDATE_SOURCES.includes(i.source)) throw err('source', '请选择地点来源');
+    if (i.source === 'provider_poi' && (!i.provider || !i.poi_id)) throw err('poi_id', '选择地图地点候选时必须带来源 ID');
+    const note = i.evidence_note?.trim() ?? '';
+    if (note.length < CANDIDATE_MIN_EVIDENCE_CHARS || note.length > CANDIDATE_MAX_EVIDENCE_CHARS) {
+      throw err('evidence_note', `请写明信息来源（${CANDIDATE_MIN_EVIDENCE_CHARS}—${CANDIDATE_MAX_EVIDENCE_CHARS} 字）`);
+    }
+    return {
+      ...i,
+      name,
+      branch: branch || null,
+      address,
+      floor_info: floor || null,
+      cuisines: [...new Set(i.cuisines)],
+      source: i.source,
+      provider: i.provider?.trim() || null,
+      poi_id: i.poi_id?.trim() || null,
+      evidence_note: note,
+    };
+  }
+
+  /** 重复提示在读取时重算：门店库会增长，落库的提示会过期。 */
+  private candidateDuplicates(c: CandidateRec): CandidateDuplicate[] {
+    const stores: DedupeTarget[] = [...this.restaurants.values()]
+      .filter((r) => !r.deleted && !r.merged_into && r.id !== c.restaurant_id)
+      // 自有门店目前没有任何 provider/poi_id 来源，poi_id 那条规则只对候选之间生效
+      .map((r) => ({ id: r.id, name: r.name, branch: r.branch, lng: r.lng, lat: r.lat, provider: null, poi_id: null }));
+    const others = [...this.candidates.values()].filter((x) => x.id !== c.id && x.status !== 'MERGED');
+    const hits: CandidateDuplicate[] = [];
+    for (const h of matchDuplicates(c, stores)) {
+      hits.push({ kind: 'restaurant', matched_id: h.match.id, name: h.match.name, branch: h.match.branch, reason: h.reason, distance_m: h.distance_m });
+    }
+    for (const h of matchDuplicates(c, others)) {
+      hits.push({ kind: 'candidate', matched_id: h.match.id, name: h.match.name, branch: h.match.branch, reason: h.reason, distance_m: h.distance_m });
+    }
+    return hits.slice(0, CANDIDATE_MAX_DUP_HINTS);
+  }
+
+  private toCandidateDto(c: CandidateRec, sessionId: string | null, extraHints: CandidateDuplicate[] = []): RestaurantCandidate {
+    const actor = this.userIdOfSession(sessionId);
+    const rest = c.restaurant_id ? this.restaurants.get(c.restaurant_id) : null;
+    return {
+      id: c.id,
+      revision: c.revision,
+      name: c.name,
+      branch: c.branch,
+      address: c.address,
+      floor_info: c.floor_info,
+      cuisines: [...c.cuisines],
+      lng: c.lng,
+      lat: c.lat,
+      coord_system: 'GCJ02',
+      source: c.source,
+      provider: c.provider,
+      poi_id: c.poi_id,
+      evidence_note: c.evidence_note,
+      status: c.status,
+      restaurant_id: c.restaurant_id,
+      duplicates: [...extraHints, ...this.candidateDuplicates(c)],
+      submitted_by: c.submitted_by,
+      author_display_name: this.users.get(c.submitted_by)?.display_name ?? '已注销用户',
+      is_author_self: actor !== null && actor === c.submitted_by,
+      place_status: rest && !rest.deleted && !rest.merged_into ? rest.place_status : null,
+      reject_reason: c.reject_reason,
+      decided_by: c.decided_by,
+      decided_at: c.decided_at,
+      version: c.version,
+      created_at: c.created_at,
+      updated_at: c.updated_at,
+      is_test_data: true,
+    };
+  }
+
+  /**
+   * 建店申请：落一条候选 + 一家地点状态为 PENDING 的门店。
+   * 门店能立刻被投稿（SUB-02 要求投稿状态真实），但默认层谓词一个字都没改就把它挡在外面。
+   */
+  createCandidate(input: CandidateInput, sessionId: string | null): RestaurantCandidate {
+    const user = this.requireUser(sessionId);
+    return this.idempotent(input.idempotency_key, user.id, 'createCandidate', input, () => {
+      const facts = this.checkCandidateFacts(input);
+      const mine = [...this.candidates.values()].filter((c) => c.submitted_by === user.id && c.status !== 'MERGED');
+      const hit = matchDuplicates(facts, mine)[0];
+      if (hit) {
+        if (hit.match.status === 'PENDING') {
+          // 不新建门店，也不新建候选：重复提交不该无限产生重复店
+          return this.toCandidateDto(hit.match, sessionId, [
+            {
+              kind: 'candidate',
+              matched_id: hit.match.id,
+              name: hit.match.name,
+              branch: hit.match.branch,
+              reason: 'same_author_pending',
+              distance_m: hit.distance_m,
+            },
+          ]);
+        }
+        throw new ApiError('VALIDATION_ERROR', '这家店你之前提交的候选已被驳回，请在原申请上补充材料', 400, {
+          candidate_id: hit.match.id,
+        });
+      }
+      const rid = this.nextId('R');
+      const rec: RestaurantRec = {
+        id: rid,
+        name: facts.name,
+        branch: facts.branch,
+        cuisines: [...facts.cuisines],
+        address: facts.address,
+        floor_info: facts.floor_info,
+        lng: facts.lng,
+        lat: facts.lat,
+        price_avg: null,
+        price_reports: 0,
+        dish_highlights: [],
+        taste_tags: [],
+        photo_media_ids: [],
+        profile_public: true,
+        place_status: 'PENDING',
+        place_verified_date: null,
+        business_status: 'UNKNOWN',
+        risk_status: 'CLEAR',
+        location_version: 1,
+        ever_qualified: false,
+        editorial: null,
+        merged_into: null,
+        deleted: false,
+        version: 1,
+        updated_at: this.stamp(),
+        note: '用户提交的新门店候选：地点待人工核验，不代表平台推荐',
+        tally: { recommend: 0, neutral: 0, not_recommend: 0, total: 0 },
+        window_start: addDays(this.today(), -(SCORING_WINDOW_DAYS - 1)),
+        window_end: this.today(),
+        community: 'PENDING',
+        endorsement: 'NONE',
+        sources: [],
+        in_default_layer: false,
+        ineligibility_reasons: [],
+      };
+      this.restaurants.set(rid, rec);
+      this.recompute(rid);
+      const cand: CandidateRec = {
+        id: this.nextId('RC'),
+        revision: 1,
+        ...facts,
+        cuisines: [...facts.cuisines],
+        status: 'PENDING',
+        restaurant_id: rid,
+        submitted_by: user.id,
+        reject_reason: null,
+        decided_by: null,
+        decided_at: null,
+        version: 1,
+        created_at: this.stamp(),
+        updated_at: this.stamp(),
+      };
+      this.candidates.set(cand.id, cand);
+      this.logAudit(user.id, 'candidate_create', `${cand.id}->${rid}`, facts.evidence_note, null, 1);
+      this.touch(rid);
+      return this.toCandidateDto(cand, sessionId);
+    });
+  }
+
+  myCandidates(sessionId: string | null): RestaurantCandidate[] {
+    const user = this.requireUser(sessionId);
+    return [...this.candidates.values()]
+      .filter((c) => c.submitted_by === user.id)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id))
+      .slice(0, MAX_ENTITIES_PER_RESPONSE)
+      .map((c) => this.toCandidateDto(c, sessionId));
+  }
+
+  /** 地点核验队列：待核验的排在前面，上限与其他列表一致。 */
+  candidateQueue(sessionId: string | null, status: CandidateStatus | null = null): RestaurantCandidate[] {
+    this.requireRole(sessionId, ['moderator', 'admin']);
+    return [...this.candidates.values()]
+      .filter((c) => (status ? c.status === status : true))
+      .sort(
+        (a, b) =>
+          (a.status === 'PENDING' ? 0 : 1) - (b.status === 'PENDING' ? 0 : 1) ||
+          b.created_at.localeCompare(a.created_at) ||
+          b.id.localeCompare(a.id),
+      )
+      .slice(0, MAX_ENTITIES_PER_RESPONSE)
+      .map((c) => this.toCandidateDto(c, sessionId));
+  }
+
+  /** 核验 / 驳回 / 并入已有门店。作者不能自审本人的候选，即使他同时是管理员。 */
+  decideCandidate(input: { id: string; action: 'verify' | 'reject' | 'merge'; reason?: string; target_restaurant_id?: string; expected_version: number }, sessionId: string | null): RestaurantCandidate {
+    const actor = this.requireRole(sessionId, ['moderator', 'admin']);
+    const c = this.requireCandidate(input.id);
+    if (c.submitted_by === actor.id) {
+      throw new ApiError('FORBIDDEN', '本人提交的门店候选不能自审，请交给其他审核人员', 403);
+    }
+    if (c.version !== input.expected_version) throw new ApiError('VERSION_CONFLICT', '版本冲突，请重载后再操作', 409);
+    const to: CandidateStatus = input.action === 'verify' ? 'VERIFIED' : input.action === 'reject' ? 'REJECTED' : 'MERGED';
+    if (!canTransitionCandidate(c.status, to, 'moderator')) {
+      throw new ApiError('VALIDATION_ERROR', `该候选当前为「${CANDIDATE_STATUS_LABEL[c.status]}」，不能执行此操作`, 400);
+    }
+    const reason = input.reason?.trim() ?? '';
+    if (input.action !== 'verify' && !reason) {
+      throw new ApiError('VALIDATION_ERROR', '驳回或并入都必须写明理由', 400, { reason: '必填' });
+    }
+    if (!c.restaurant_id) throw new ApiError('NOT_FOUND', '该候选没有关联门店记录', 404);
+    const rec = this.requireRestaurant(c.restaurant_id);
+    if (input.action === 'verify') {
+      this.patchRestaurantStatus({ id: rec.id, place_status: 'VERIFIED', reason: reason || `核验建店申请 ${c.id}` }, sessionId);
+    } else if (input.action === 'reject') {
+      this.patchRestaurantStatus({ id: rec.id, place_status: 'REJECTED', reason }, sessionId);
+      c.reject_reason = reason;
+    } else {
+      const targetId = input.target_restaurant_id?.trim() ?? '';
+      if (!targetId) throw new ApiError('VALIDATION_ERROR', '请选择要并入的已有门店', 400, { target_restaurant_id: '必填' });
+      const target = this.requireRestaurant(targetId);
+      if (target.id === rec.id) throw new ApiError('VALIDATION_ERROR', '不能并入自己', 400, { target_restaurant_id: '同一门店' });
+      // 合并的权限与迁移规则只有一处实现：管理员确认 + 反馈迁移 + 旧 ID 永久重定向
+      this.mergeRestaurants({ source_id: rec.id, target_id: target.id, reason, expected_version: rec.version }, sessionId);
+      c.restaurant_id = target.id;
+    }
+    c.status = to;
+    c.decided_by = actor.id;
+    c.decided_at = this.stamp();
+    c.version += 1;
+    c.updated_at = c.decided_at;
+    this.logAudit(actor.id, `candidate_${input.action}`, c.id, reason || null, c.version - 1, c.version);
+    this.touch();
+    return this.toCandidateDto(c, sessionId);
+  }
+
+  /** 被驳回的候选由作者补材料重新回到待核验：同一条记录递增 revision，不新开一条。 */
+  resubmitCandidateMaterials(input: { id: string; patch: Partial<CandidateFacts>; expected_version: number }, sessionId: string | null): RestaurantCandidate {
+    const user = this.requireUser(sessionId);
+    const c = this.requireCandidate(input.id);
+    if (c.submitted_by !== user.id) throw new ApiError('FORBIDDEN', '只能在本人提交的候选上补充材料', 403);
+    if (c.version !== input.expected_version) throw new ApiError('VERSION_CONFLICT', '版本冲突，请重载后再操作', 409);
+    if (!canTransitionCandidate(c.status, 'PENDING', 'author')) {
+      throw new ApiError('VALIDATION_ERROR', `当前状态「${CANDIDATE_STATUS_LABEL[c.status]}」不需要补充材料`, 400);
+    }
+    const facts = this.checkCandidateFacts({ ...c, ...input.patch, source: input.patch.source ?? c.source });
+    const fromVersion = c.version;
+    Object.assign(c, facts);
+    c.revision += 1;
+    c.status = 'PENDING';
+    c.reject_reason = null;
+    c.decided_by = null;
+    c.decided_at = null;
+    c.version = fromVersion + 1;
+    c.updated_at = this.stamp();
+    const rec = c.restaurant_id ? this.restaurants.get(c.restaurant_id) : null;
+    if (rec && !rec.deleted && !rec.merged_into) {
+      const moved = rec.lng !== facts.lng || rec.lat !== facts.lat;
+      rec.name = facts.name;
+      rec.branch = facts.branch;
+      rec.address = facts.address;
+      rec.floor_info = facts.floor_info;
+      rec.cuisines = [...facts.cuisines];
+      rec.lng = facts.lng;
+      rec.lat = facts.lat;
+      if (moved) {
+        // 只有坐标真的变了才等于换地点实体：旧址上的记录只作历史，不能替新址计票。
+        // 状态从"核验未通过"回到"待核验"不是换址，不再叠加一次递增（驳回那一步已按既有规则递增）。
+        rec.location_version += 1;
+      }
+      if (rec.place_status !== 'PENDING') {
+        rec.place_status = 'PENDING';
+        rec.place_verified_date = null;
+      }
+      rec.version += 1;
+      rec.updated_at = c.updated_at;
+      this.recompute(rec.id);
+      this.logAudit(user.id, 'candidate_resubmit', `${c.id}->${rec.id}${moved ? '（坐标变化，location_version 递增）' : ''}`, null, fromVersion, c.version);
+    } else {
+      this.logAudit(user.id, 'candidate_resubmit', c.id, '关联门店已不存在，仅候选本身回到待核验', fromVersion, c.version);
+    }
+    this.touch(rec?.id);
+    return this.toCandidateDto(c, sessionId);
   }
 
   /** 注销：立即撤销会话、撤销本人分享、隐藏 UGC、移除计票。 */
@@ -1854,6 +2228,7 @@ export class Store {
       seq: this.seq,
       last_computed_day: this.lastComputedDay,
       restaurants: [...this.restaurants.values()],
+      candidates: [...this.candidates.values()],
       users: [...this.users.values()],
       visits: this.visits,
       media: [...this.media.values()],
@@ -1872,6 +2247,7 @@ export class Store {
       seq?: number;
       last_computed_day?: string | null;
       restaurants?: RestaurantRec[];
+      candidates?: CandidateRec[];
       users?: UserRec[];
       visits?: Visit[];
       media?: MediaRec[];
@@ -1883,6 +2259,7 @@ export class Store {
       sessions?: Array<[string, { user_id: string; created_at: string }]>;
     };
     this.restaurants = new Map((s.restaurants ?? []).map((r) => [r.id, r]));
+    this.candidates = new Map((s.candidates ?? []).map((c) => [c.id, c]));
     this.users = new Map((s.users ?? []).map((u) => [u.id, u]));
     this.visits = s.visits ?? [];
     this.media = new Map((s.media ?? []).map((m) => [m.id, m]));
@@ -1902,6 +2279,25 @@ export class Store {
 
 function ATTITUDE_TEXT(a: FeedbackAttitude): string {
   return a === 'recommend' ? '推荐' : a === 'neutral' ? '一般' : '不推荐';
+}
+
+/**
+ * 内置的"地图地点候选"。没有高德 Key 时它也承担建店流程的可测性：
+ * 坐标由检索词稳定推导（同一词条每次结果一致），并在 DTO 里明确标注是演示合成值，
+ * 不代表任何真实餐馆的位置。真实供应商接入后由 ProviderCandidate 的同一形状承载。
+ */
+function demoProviderCandidate(term: string): ProviderCandidate {
+  const h = [...stableHash(term)].reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  return {
+    provider: 'demo-provider',
+    poi_id: `POI-DEMO-${(h % 977) + 1}`,
+    name: `候选地点（未入库）·${term}`,
+    address: '北京市（供应商候选，仅用于创建门店流程）',
+    lng: Number((BEIJING_CENTER.lng + (((h % 21) - 10) / 100)).toFixed(5)),
+    lat: Number((BEIJING_CENTER.lat + (((Math.floor(h / 7) % 21) - 10) / 100)).toFixed(5)),
+    coord_system: 'GCJ02',
+    coord_note: '演示合成坐标，非真实门店位置',
+  };
 }
 
 function revAuthor(v: Visit): string {
