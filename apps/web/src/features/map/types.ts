@@ -24,6 +24,11 @@ export interface MapAdapterEvents {
   onViewportChange(viewport: MapViewportState): void;
   onSelectRestaurant(id: string): void;
   onSelectCluster(cluster: MapClusterItem): void;
+  /**
+   * 点到底图空白处：上报该点的 **GCJ-02** 坐标（MapLibre 内部是 WGS84，
+   * 必须在出 SDK 的边界转回来，页面层永远只见 GCJ-02）。用于「在这里新增门店」的选点。
+   */
+  onMapPoint(point: { lng: number; lat: number }): void;
   onReady(): void;
   /** SDK 或瓦片失败：页面层必须回退到列表，不阻塞逛地图（MAP-06）。 */
   onError(message: string): void;
@@ -55,6 +60,8 @@ export interface MapViewProps {
   fitSignal: number;
   onSelectRestaurant(id: string | null): void;
   onSelectCluster(cluster: MapClusterItem): void;
+  /** 点空白选点（GCJ-02），用于把坐标带进建店申请。 */
+  onMapPoint(point: { lng: number; lat: number }): void;
   onViewportChange(viewport: MapViewportState): void;
   onRequestLocation(): void;
   onRetry(): void;

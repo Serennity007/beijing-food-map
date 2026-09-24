@@ -152,6 +152,14 @@ export class AmapAdapter implements MapAdapter {
       map.on('moveend', this.onCameraSettled);
       map.on('zoomend', this.onCameraSettled);
       map.on('complete', this.onComplete);
+      // 点空白处 = 选点。高德本身就是 GCJ-02，原样上报，不做转换。
+      map.on('click', (ev?: unknown) => {
+        const p = (ev as { lnglat?: { lng?: unknown; lat?: unknown } } | undefined)?.lnglat;
+        const lng = typeof p?.lng === 'number' ? p.lng : null;
+        const lat = typeof p?.lat === 'number' ? p.lat : null;
+        if (lng === null || lat === null) return;
+        this.events?.onMapPoint({ lng: Number(lng.toFixed(5)), lat: Number(lat.toFixed(5)) });
+      });
     } catch (error) {
       console.warn('[map/amap] JSAPI 加载失败', error);
       this.reportFailure(BASEMAP_ERROR);

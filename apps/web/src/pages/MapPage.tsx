@@ -132,6 +132,12 @@ export function MapPage() {
   const zoomLabel = d.viewport.zoom.toFixed(1);
   const spanLabel = spanMeters >= 1000 ? `${(spanMeters / 1000).toFixed(1)} 公里` : `${spanMeters} 米`;
 
+  /**
+   * 点底图空白处选一个点，把 GCJ-02 坐标带进建店申请 —— 之前只能手填经纬度。
+   * 相机一动就作废：选点表达的是"就是这儿"，平移之后那个屏幕位置已经不是它了。
+   */
+  const [picked, setPicked] = useState<{ lng: number; lat: number } | null>(null);
+
   return (
     <div className="map-page">
       <div className="map-host">
@@ -149,7 +155,11 @@ export function MapPage() {
             if (id) focusList(id);
           }}
           onSelectCluster={expandCluster}
-          onViewportChange={d.setViewport}
+          onMapPoint={(p) => setPicked(p)}
+          onViewportChange={(v) => {
+            setPicked(null);
+            d.setViewport(v);
+          }}
           onRequestLocation={requestLocation}
           onRetry={() => setMapError(null)}
           onChangeEngine={(e) => {
@@ -167,6 +177,17 @@ export function MapPage() {
           {d.stale && <span className="pill warn">数据未刷新，显示上次结果</span>}
           {locating === 'denied' && <span className="pill warn">未获得定位，仍可手动逛地图</span>}
           {locating === 'unsupported' && <span className="pill warn">该浏览器不支持定位</span>}
+          {picked && (
+            <span className="pill">
+              已选点 {picked.lng.toFixed(4)}, {picked.lat.toFixed(4)}（GCJ-02）
+              <Link className="btn small" to={`/submit?lng=${picked.lng}&lat=${picked.lat}`} style={{ marginLeft: 8 }}>
+                在这里新增门店
+              </Link>
+              <button className="btn small plain" type="button" style={{ marginLeft: 4 }} onClick={() => setPicked(null)}>
+                取消
+              </button>
+            </span>
+          )}
         </div>
 
         {/* 定位与切换底图由 MapView 的覆盖层提供，这里只放页面层独有的复位操作 */}

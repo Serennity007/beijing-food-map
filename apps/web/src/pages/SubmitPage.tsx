@@ -117,6 +117,9 @@ export function SubmitPage() {
   const [params] = useSearchParams();
   const revise = params.get('revise') === '1';
   const presetId = params.get('restaurant');
+  // 地图选点带进来的坐标（GCJ-02）：有就默认打开建店表单，省掉手填经纬度。
+  const pickedLng = Number(params.get('lng'));
+  const pickedLat = Number(params.get('lat'));
 
   const [term, setTerm] = useState('');
   const [found, setFound] = useState<{ own: Restaurant[]; provider: SearchResult['provider_candidates'] } | null>(null);
@@ -208,6 +211,16 @@ export function SubmitPage() {
     },
     [api],
   );
+
+  /** 从地图选点带进来时自动展开建店表单并预填坐标，只认第一次渲染。 */
+  const pickedApplied = useRef(false);
+  useEffect(() => {
+    if (pickedApplied.current) return;
+    pickedApplied.current = true;
+    if (!Number.isFinite(pickedLng) || !Number.isFinite(pickedLat)) return;
+    if (pickedLng === 0 && pickedLat === 0) return;
+    setCandidateForm({ lng: pickedLng, lat: pickedLat, source: 'manual_point' });
+  }, [pickedLng, pickedLat]);
 
   useEffect(() => {
     if (restaurantId === null) {

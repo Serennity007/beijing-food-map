@@ -28,6 +28,7 @@ import {
   createUserLocationEl,
   DEFAULT_ZOOM,
   entitySignature,
+  fromRender,
   markerView,
   readEnv,
   shouldEmitViewport,
@@ -174,6 +175,11 @@ export class MaplibreAdapter implements MapAdapter {
     map.on('moveend', this.onCameraSettled);
     map.on('zoomend', this.onCameraSettled);
     map.on('webglcontextlost', this.onContextLost);
+    // 点空白处 = 选点。底图是 WGS84，出 SDK 前必须转回 GCJ-02，页面层永远只见业务坐标。
+    map.on('click', (ev) => {
+      const g = fromRender(ev.lngLat.lng, ev.lngLat.lat, this.engine);
+      this.events?.onMapPoint({ lng: Number(g.lng.toFixed(5)), lat: Number(g.lat.toFixed(5)) });
+    });
     this.armWatchdog(STYLE_TIMEOUT_MS);
   }
 

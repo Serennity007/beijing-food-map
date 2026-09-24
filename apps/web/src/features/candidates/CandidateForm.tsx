@@ -125,8 +125,8 @@ export function CandidateForm({ initial, fieldErrors = {}, busy = false, title =
           />
         </div>
         <p className="hint">
-          当前部署没有地图选点，也没有真实供应商地点检索（缺高德 Key），所以需要手填坐标；
-          坐标只用于演示核验流程，不是任何真实门店的位置。
+          可以从地图页点一下空白处带进来（推荐），也可以手填。坐标口径是 GCJ-02；
+          第三方真实地点检索还没接（缺高德 Key），所以这里的坐标只用于演示核验流程，不是任何真实门店的位置。
         </p>
         <Err msg={coordErr} />
       </div>

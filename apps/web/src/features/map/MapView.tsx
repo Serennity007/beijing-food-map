@@ -68,6 +68,7 @@ export function MapView(props: MapViewProps) {
       },
       onSelectRestaurant: (id) => latest.current.onSelectRestaurant(id),
       onSelectCluster: (cluster) => latest.current.onSelectCluster(cluster),
+      onMapPoint: (point) => latest.current.onMapPoint(point),
       onReady: () => {
         /* 页面层不需要：ready 只影响本组件的错误提示 */
       },
