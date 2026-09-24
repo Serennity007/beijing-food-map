@@ -1,0 +1,123 @@
+{
+  "_meta": {
+    "title": "京城黔味地图 · 真实门店候选清单（网页检索来源，未核验）",
+    "retrieved_at": "2026-09-24",
+    "retrieval_method": "通用网页检索（WebSearch），仅取检索结果标题与条目名自带的位置线索",
+    "status": "unverified_candidates",
+    "why_not_in_seed": "packages/contracts/src/seed.ts 的合同是「这里全是合成数据、is_test_data=true、production 拒绝装载」。把真实商家写进合成种子会让水印变成假标签，也会让「生产环境拒绝装载种子」这道防线失去意义。",
+    "why_not_loaded": [
+      "缺 GCJ-02 坐标与门牌地址：检索结果只给到商圈级线索（如「望京店」「三里屯店」），没有精确坐标。建店接口要求坐标且必须在北京范围内，缺坐标就无法进入任何图层，也不该用商圈中心点冒充。",
+      "缺人工核验：地点核验要求确认坐标、营业状态与风险三态，必须由人实地或凭可靠来源完成，AI 不能代替。",
+      "缺在营确认：第三方美食站点的条目可能已闭店或搬迁，检索快照不等于当前事实。",
+      "第三方内容许可未确认：说明书要求「供应商 POI 数据的保存与使用条款确认完成」，并明确「不能把技术可读取等同于允许永久保存」。因此本文件只保留店名与来源指针，未搬运任何评论、评分、榜单文字、菜单或图片。"
+    ],
+    "next_step": "人工逐条核验（门牌地址 + 高德坐标 + 是否在营业 + 菜系归类），通过后走「建店候选 → 地点核验」流程或直接进导入脚本；未核验前不得进任何公开图层。",
+    "field_contract": {
+      "name": "检索结果里出现的店名（含分店后缀），未做任何美化或补全",
+      "area_hint": "仅来自店名后缀或条目标题的商圈级线索，不是地址",
+      "cuisine_guess": "按说明书的菜系分类猜测，需人工确认",
+      "address": "null = 未获得，禁止用商圈中心点冒充",
+      "lng_lat": "null = 未获得，需地理编码或实地选点",
+      "source": "可回溯的原始链接与检索日期",
+      "verified": "一律 false"
+    }
+  },
+  "candidates": [
+    {
+      "name": "贵州箩箩酸汤鱼（朝阳公园店）",
+      "area_hint": "朝阳区 朝阳公园一带",
+      "cuisine_guess": "guizhou",
+      "address": null,
+      "lng": null,
+      "lat": null,
+      "verified": false,
+      "source": { "site": "Tripadvisor", "url": "https://cn.tripadvisor.com/Restaurant_Review-g294212-d3268462-Reviews-GuiZhou_Luo_Luo_SuanTang_Yu_ChaoYang_Park-Beijing.html", "retrieved_at": "2026-09-24" }
+    },
+    {
+      "name": "贵州酸汤鱼（十里河店）",
+      "area_hint": "十里河一带",
+      "cuisine_guess": "guizhou",
+      "address": null,
+      "lng": null,
+      "lat": null,
+      "verified": false,
+      "source": { "site": "百度百科", "url": "https://baike.baidu.com/item/%E8%B4%B5%E5%B7%9E%E9%85%B8%E6%B1%A4%E9%B1%BC%EF%BC%88%E5%8D%81%E9%87%8C%E6%B2%B3%E5%BA%97%EF%BC%89/14285254", "retrieved_at": "2026-09-24" }
+    },
+    {
+      "name": "不老溪贵州菜（广安门总店）",
+      "area_hint": "广安门一带",
+      "cuisine_guess": "guizhou",
+      "address": null,
+      "lng": null,
+      "lat": null,
+      "verified": false,
+      "source": { "site": "携程", "url": "https://gs.ctrip.com/html5/you/foods/fooddetail/1/4936541.html", "retrieved_at": "2026-09-24" }
+    },
+    {
+      "name": "西南官话贵州菜（望京店）",
+      "area_hint": "望京 / 酒仙桥 / 798 地区",
+      "cuisine_guess": "guizhou",
+      "address": null,
+      "lng": null,
+      "lat": null,
+      "verified": false,
+      "source": [
+        { "site": "携程", "url": "https://you.ctrip.com/food/1/78375660.html", "retrieved_at": "2026-09-24" },
+        { "site": "Trip.com", "url": "https://tw.trip.com/restaurant/china/beijing/detail/restaurant-78375660/", "retrieved_at": "2026-09-24" },
+        { "site": "大众点评（仅记指针，未抓取内容）", "url": "http://m.dianping.com/shop/131789473", "retrieved_at": "2026-09-24" }
+      ]
+    },
+    {
+      "name": "贵凤凰·贵州民族味",
+      "area_hint": "未知（品牌官网列出的门店页，检索结果未给具体分店）",
+      "cuisine_guess": "guizhou",
+      "address": null,
+      "lng": null,
+      "lat": null,
+      "verified": false,
+      "source": { "site": "品牌官网", "url": "http://www.guifenghuang.cn/h-col-101.html", "retrieved_at": "2026-09-24" }
+    },
+    {
+      "name": "域上兰餐厅（贵州酸汤鱼火锅）",
+      "area_hint": "未知（检索结果标题未含位置线索）",
+      "cuisine_guess": "guizhou",
+      "address": null,
+      "lng": null,
+      "lat": null,
+      "verified": false,
+      "source": { "site": "潮新闻", "url": "https://tidenews.com.cn/tmh_news.html?id=699c4136cb72b000019b0d54", "retrieved_at": "2026-02-23" }
+    },
+    {
+      "name": "一坐一忘云南菜（三里屯店）",
+      "area_hint": "朝阳区 三里屯",
+      "cuisine_guess": "yunnan",
+      "address": null,
+      "lng": null,
+      "lat": null,
+      "verified": false,
+      "source": { "site": "携程", "url": "https://gs.ctrip.com/html5/you/foods/fooddetail/2015081/4938566.html", "retrieved_at": "2026-09-24" }
+    },
+    {
+      "name": "云之南过桥米线",
+      "area_hint": "未知（条目名为通用店名，需确认是否为北京具体门店）",
+      "cuisine_guess": "yunnan",
+      "address": null,
+      "lng": null,
+      "lat": null,
+      "verified": false,
+      "confidence": "low",
+      "source": { "site": "百度百科", "url": "https://baike.baidu.com/item/%E4%BA%91%E4%B9%8B%E5%8D%97%E8%BF%87%E6%A1%A5%E7%B1%B3%E7%BA%BF/14280988", "retrieved_at": "2026-09-24" }
+    },
+    {
+      "name": "云南过桥米线（北京市）",
+      "area_hint": "北京市（粒度过粗，需确认具体门店）",
+      "cuisine_guess": "yunnan",
+      "address": null,
+      "lng": null,
+      "lat": null,
+      "verified": false,
+      "confidence": "low",
+      "source": { "site": "Tripadvisor", "url": "https://cn.tripadvisor.com/Restaurant_Review-g294212-d3352181-Reviews-YunNan_GuoQiao_MiXian-Beijing.html", "retrieved_at": "2026-09-24" }
+    }
+  ]
+}
