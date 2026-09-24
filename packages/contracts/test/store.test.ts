@@ -248,7 +248,7 @@ describe('地图查询：聚合、快照与筛选', () => {
     const res = s.search('测试候选词');
     expect(res.own.length).toBe(0);
     expect(res.provider_candidates[0]?.provider).toBe('demo-provider');
-    expect(s.restaurants.size).toBe(42);
+    expect(s.restaurants.size).toBe(49);
   });
 });
 

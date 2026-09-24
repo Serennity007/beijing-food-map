@@ -53,7 +53,7 @@ Vite dev server 把 `/api` 代理到 `VITE_API_PROXY`（默认 `http://127.0.0.1
 SQLITE_PATH="C:/…/56aa730c/work/verify-$(date +%m%d).sqlite" npm run dev
 ```
 
-空库会自己跑迁移并由合成种子初始化，日志里能看到"由合成测试种子初始化并落库"。要确认默认库没被写过：它的逐 `kind` 计数应等于种子基线（`collection=28 media=195 meta=1 publication=1 report=2 restaurant=42 user=9 visit=113`）。
+空库会自己跑迁移并由合成种子初始化，日志里能看到"由合成测试种子初始化并落库"。要确认默认库没被写过：它的逐 `kind` 计数应等于种子基线（`collection=28 media=224 meta=1 publication=1 report=2 restaurant=49 user=9 visit=128`）。
 
 ## 改了什么要跑什么
 
