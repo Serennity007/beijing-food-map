@@ -556,12 +556,67 @@ main:focus {
 
 .searchbar input {
   flex: 1;
-  padding: 10px 12px;
+  padding: 10px 12px 10px 34px;
   border: 1px solid var(--line);
   border-radius: 10px;
   font: inherit;
-  background: var(--surface);
+  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='%238a8379' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.8-3.8'/%3E%3C/svg%3E") no-repeat 11px center;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* 表单内嵌选点小地图（B3 完全体）：不用离开表单就能选位置 */
+.picker-map {
+  height: 260px;
+  margin: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+/* 选中一家店后从标记/搜索进入列表，焦点管理用的屏幕阅读器专用文本 */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 抽屉加载骨架屏：形状与真实卡片一致，数据到达后无跳变 */
+.skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeleton-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 12px;
+}
+
+.skeleton-card span {
+  display: block;
+  height: 12px;
+  margin: 7px 0;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-2) 25%, #f6f1e8 45%, var(--surface-2) 65%);
+  background-size: 220% 100%;
+  animation: skeleton-shimmer 1.3s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -80% 0;
+  }
 }
 
 /* 输入类控件的焦点改为色环提示，弱化生硬的描边 */

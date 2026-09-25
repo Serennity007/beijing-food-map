@@ -101,7 +101,7 @@ export class AmapAdapter implements MapAdapter {
   private ready = false;
   private errorReported = false;
 
-  mount(container: HTMLElement, initial: MapViewportState | null, events: MapAdapterEvents): void {
+  mount(container: HTMLElement, initial: MapViewportState | null, events: MapAdapterEvents, _opts?: { canvasLabel?: string }): void {
     if (this.destroyed || this.map) return;
     this.events = events;
     const key = readEnv('VITE_AMAP_KEY');

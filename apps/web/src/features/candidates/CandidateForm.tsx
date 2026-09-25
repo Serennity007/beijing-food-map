@@ -5,8 +5,17 @@
  * B3：传入 draftKey 时（建店流程），已填内容会存本机 —— 跳去地图选点再回来不丢店名与说明；
  * initial 里非空的字段（刚选的点、第三方候选）优先于草稿。补材料不传 draftKey，行为不变。
  */
-import { useEffect, useRef, useState } from 'react';
-import { CUISINES, CUISINE_LABEL, type CandidateFacts, type Cuisine } from '@qianwei/contracts';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  BEIJING_BOUNDS,
+  BEIJING_CENTER,
+  CUISINES,
+  CUISINE_LABEL,
+  isValidGcj02,
+  type CandidateFacts,
+  type Cuisine,
+} from '@qianwei/contracts';
+import { MapView } from '../map/MapView';
 
 interface Props {
   initial: Partial<CandidateFacts>;
@@ -32,6 +41,8 @@ interface FormDraft {
   floor: string;
   cuisines: Cuisine[];
   evidence: string;
+  lng: string;
+  lat: string;
 }
 
 function readDraft(key: string): FormDraft | null {
@@ -47,6 +58,8 @@ function readDraft(key: string): FormDraft | null {
       floor: typeof o.floor === 'string' ? o.floor : '',
       cuisines: Array.isArray(o.cuisines) ? o.cuisines.filter((c): c is Cuisine => typeof c === 'string') : [],
       evidence: typeof o.evidence === 'string' ? o.evidence : '',
+      lng: typeof o.lng === 'string' ? o.lng : '',
+      lat: typeof o.lat === 'string' ? o.lat : '',
     };
   } catch {
     return null;
@@ -66,6 +79,29 @@ export function CandidateForm({ initial, fieldErrors = {}, busy = false, title =
   const [lat, setLat] = useState(initial.lat === undefined ? '' : String(initial.lat));
   const [evidence, setEvidence] = useState(initial.evidence_note ?? '');
   const [local, setLocal] = useState<string | null>(null);
+  /* 内嵌选点小地图：没带坐标进来时默认展开，把"选位置"变成主路径（B3 的完全体）。 */
+  const [mapOpen, setMapOpen] = useState(
+    () => !(typeof initial.lng === 'number' && typeof initial.lat === 'number' && isValidGcj02(initial.lng, initial.lat)),
+  );
+  const pickerViewport = useMemo(
+    () =>
+      typeof initial.lng === 'number' && typeof initial.lat === 'number' && isValidGcj02(initial.lng, initial.lat)
+        ? {
+            bounds: { west: initial.lng - 0.008, south: initial.lat - 0.006, east: initial.lng + 0.008, north: initial.lat + 0.006 },
+            zoom: 15,
+            center: { lng: initial.lng, lat: initial.lat },
+          }
+        : { bounds: { ...BEIJING_BOUNDS }, zoom: 11, center: { ...BEIJING_CENTER } },
+    // 仅按挂载时的初值决定初始视野；之后由用户在地图上自行移动。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  function pickOnMap(point: { lng: number; lat: number }): void {
+    setLng(point.lng.toFixed(5));
+    setLat(point.lat.toFixed(5));
+    setLocal(null);
+  }
 
   /* 只在首次挂载时用草稿补 initial 没有的字段；initial 非空值（刚选的点/候选）永远优先。 */
   useEffect(() => {
@@ -79,20 +115,30 @@ export function CandidateForm({ initial, fieldErrors = {}, busy = false, title =
     if (!initial.floor_info && d.floor) setFloor(d.floor);
     if ((!initial.cuisines || initial.cuisines.length === 0) && d.cuisines.length > 0) setCuisines(d.cuisines);
     if (!initial.evidence_note && d.evidence) setEvidence(d.evidence);
+    if (initial.lng === undefined && d.lng !== '') setLng(d.lng);
+    if (initial.lat === undefined && d.lat !== '') setLat(d.lat);
   }, [draftKey, initial]);
 
   /* 有 draftKey 才落草稿，每次输入同步写（与投稿草稿同一做法），跳去地图选点的路上不丢字。 */
   useEffect(() => {
     if (!draftKey || closed.current) return;
-    const d: FormDraft = { name, branch, address, floor, cuisines, evidence };
-    const hasAny = d.name !== '' || d.branch !== '' || d.address !== '' || d.floor !== '' || d.cuisines.length > 0 || d.evidence !== '';
+    const d: FormDraft = { name, branch, address, floor, cuisines, evidence, lng, lat };
+    const hasAny =
+      d.name !== '' ||
+      d.branch !== '' ||
+      d.address !== '' ||
+      d.floor !== '' ||
+      d.cuisines.length > 0 ||
+      d.evidence !== '' ||
+      d.lng !== '' ||
+      d.lat !== '';
     try {
       if (hasAny) localStorage.setItem(draftKey, JSON.stringify(d));
       else localStorage.removeItem(draftKey);
     } catch {
       /* 本机没有存储权限时只是不能恢复，不影响提交 */
     }
-  }, [draftKey, name, branch, address, floor, cuisines, evidence]);
+  }, [draftKey, name, branch, address, floor, cuisines, evidence, lng, lat]);
 
   function clearDraft(): void {
     closed.current = true;
@@ -177,7 +223,41 @@ export function CandidateForm({ initial, fieldErrors = {}, busy = false, title =
         <Err msg={fieldErrors.cuisines} />
       </div>
       <div className="field">
-        <span className="label">坐标（GCJ-02 经纬度）</span>
+        <span className="label">位置（GCJ-02 经纬度）</span>
+        <button
+          type="button"
+          className="btn small plain"
+          aria-expanded={mapOpen}
+          aria-controls="candidate-picker-map"
+          onClick={() => setMapOpen((o) => !o)}
+        >
+          {mapOpen ? '收起选点地图' : '在地图上选点'}
+        </button>
+        {mapOpen && (
+          <div className="picker-map" id="candidate-picker-map">
+            <MapView
+              engine="maplibre"
+              variant="picker"
+              canvasLabel="选点地图：聚焦后可用方向键移动、加号与减号缩放；选点请用鼠标或触屏点击地图，坐标会自动填入下方输入框。"
+              entities={[]}
+              loading={false}
+              error={null}
+              selectedId={null}
+              userLocation={null}
+              insets={{ bottom: 0 }}
+              initialViewport={pickerViewport}
+              fitSignal={0}
+              focusRequest={null}
+              onSelectRestaurant={() => {}}
+              onSelectCluster={() => {}}
+              onMapPoint={pickOnMap}
+              onViewportChange={() => {}}
+              onRequestLocation={() => {}}
+              onRetry={() => {}}
+              onChangeEngine={() => {}}
+            />
+          </div>
+        )}
         <div className="btn-row">
           <input
             type="number"
@@ -199,8 +279,10 @@ export function CandidateForm({ initial, fieldErrors = {}, busy = false, title =
           />
         </div>
         <p className="hint">
-          推荐做法：去地图页点一下空白处，选「在这里新增门店」把坐标带进来（跳走再回来，这里已填的店名和说明不会丢）。
-          手填坐标是备选入口，坐标口径为 GCJ-02。第三方真实地点检索还没接（缺高德 Key），所以这里的坐标只用于演示核验流程，
+          {lng.trim() !== '' && lat.trim() !== ''
+            ? `已选位置 ${lng}, ${lat}，可直接在输入框微调，或再次点击地图更换。`
+            : '点击地图任意位置，坐标会自动填进输入框；也可以直接手填。'}
+          坐标口径为 GCJ-02；第三方真实地点检索还没接（缺高德 Key），这里的坐标只用于演示核验流程，
           不是任何真实门店的位置。
         </p>
         <Err msg={coordErr} />

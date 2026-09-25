@@ -121,6 +121,19 @@ export function RestaurantPage() {
     requestAnimationFrame(() => reportBox.current?.scrollIntoView({ block: 'center' }));
   }
 
+  function copyLink(): void {
+    const url = window.location.href;
+    const done = () => setNotice('链接已复制，可以粘贴给朋友（演示数据链接，对方打开看到的也是合成门店）');
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(url)
+        .then(done)
+        .catch(() => setNotice('复制失败，请手动复制浏览器地址栏的链接'));
+    } else {
+      setNotice('当前浏览器不支持一键复制，请手动复制地址栏的链接');
+    }
+  }
+
   async function sendReport() {
     setBusy(true);
     setError(null);
@@ -199,6 +212,9 @@ export function RestaurantPage() {
           <a className="btn small" href={navUrl(d)} target="_blank" rel="noreferrer">
             外部导航
           </a>
+          <button className="btn small plain" type="button" onClick={copyLink}>
+            复制链接
+          </button>
           <Link className="btn small ghost" to={`/submit?restaurant=${d.id}`}>
             我吃过，写反馈
           </Link>

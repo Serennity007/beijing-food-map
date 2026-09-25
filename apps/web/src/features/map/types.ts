@@ -36,7 +36,7 @@ export interface MapAdapterEvents {
 
 export interface MapAdapter {
   readonly engine: MapEngine;
-  mount(container: HTMLElement, initial: MapViewportState | null, events: MapAdapterEvents): void;
+  mount(container: HTMLElement, initial: MapViewportState | null, events: MapAdapterEvents, opts?: { canvasLabel?: string }): void;
   setItems(items: MapEntity[]): void;
   select(id: string | null): void;
   setCenterOn(id: string | null, insets: MapInsets): void;
@@ -64,6 +64,10 @@ export interface MapViewProps {
   initialViewport: MapViewportState | null;
   /** >0 时请求把相机复位到北京全图；复位后的真实视野经 onViewportChange 回流到页面状态。 */
   fitSignal: number;
+  /** 'picker'：嵌入表单的选点小地图——隐藏切底图/定位覆盖层，画布提示语可定制。 */
+  variant?: 'page' | 'picker';
+  /** 覆盖画布默认的读屏提示（选点场景的指引与整页地图不同）。 */
+  canvasLabel?: string;
   onSelectRestaurant(id: string | null): void;
   onSelectCluster(cluster: MapClusterItem): void;
   /** 点空白选点（GCJ-02），用于把坐标带进建店申请。 */

@@ -128,7 +128,7 @@ export class MaplibreAdapter implements MapAdapter {
 
   // ---------------------------------------------------------------- 生命周期
 
-  mount(container: HTMLElement, initial: MapViewportState | null, events: MapAdapterEvents): void {
+  mount(container: HTMLElement, initial: MapViewportState | null, events: MapAdapterEvents, opts?: { canvasLabel?: string }): void {
     if (this.destroyed || this.map) return;
     this.events = events;
     const style = primaryStyle();
@@ -172,7 +172,12 @@ export class MaplibreAdapter implements MapAdapter {
 
     this.map = map;
     // SDK 默认给画布的标签是英文 "Map"，只说"这是地图"没告诉人怎么用键盘走。
-    map.getCanvas().setAttribute('aria-label', '地图画布：聚焦后可用方向键平移、加号与减号缩放；回车不在这里选点，新增门店请在下方表单填写坐标');
+    // 整页地图与表单内嵌选点图的指引不同，标签由调用方传入。
+    map.getCanvas().setAttribute(
+      'aria-label',
+      opts?.canvasLabel ??
+        '地图画布：聚焦后可用方向键平移、加号与减号缩放；回车不在这里选点，新增门店请在下方表单填写坐标',
+    );
     this.debouncer = createDebouncer(() => this.emitViewport(), VIEWPORT_DEBOUNCE_MS);
     this.nav = new NavigationControl({ showCompass: false, visualizePitch: false });
     map.addControl(this.nav, 'bottom-right');

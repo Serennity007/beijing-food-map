@@ -32,6 +32,7 @@ const ENGINE_LABEL: Record<MapEngine, string> = {
 export function MapView(props: MapViewProps) {
   const { engine, entities, selectedId, userLocation, insets } = props;
 
+  const { canvasLabel, variant = 'page' } = props;
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const adapterRef = useRef<MapAdapter | null>(null);
@@ -73,7 +74,7 @@ export function MapView(props: MapViewProps) {
         /* 页面层不需要：ready 只影响本组件的错误提示 */
       },
       onError: (message) => setAdapterError(message),
-    });
+    }, { canvasLabel });
     const observer = new ResizeObserver(() => {
       adapterRef.current?.resize();
     });
@@ -90,7 +91,7 @@ export function MapView(props: MapViewProps) {
       adapterRef.current = null;
       adapter.destroy();
     };
-  }, [engine, attempt]);
+  }, [engine, attempt, canvasLabel]);
 
   // 页面层递增 fitSignal 即"把相机复位到北京全图"；复位后的真实视野会经 onViewportChange 回流到页面状态。
   const fitSignal = props.fitSignal;
@@ -165,7 +166,7 @@ export function MapView(props: MapViewProps) {
   const visibleError = props.error ?? adapterError;
 
   return (
-    <div className="qm-map" ref={rootRef} onClick={handleRootClick}>
+    <div className={variant === 'picker' ? 'qm-map qm-map--picker' : 'qm-map'} ref={rootRef} onClick={handleRootClick}>
       <div className="qm-map__canvas" ref={canvasRef} />
 
       {props.loading ? <div className="qm-map__shimmer" aria-hidden="true" /> : null}
@@ -175,14 +176,16 @@ export function MapView(props: MapViewProps) {
         </div>
       ) : null}
 
-      <div className="qm-map__overlay">
-        <button type="button" className="qm-btn" aria-label={`切换底图，当前为${ENGINE_LABEL[engine]}`} onClick={handleToggleEngine}>
-          {ENGINE_LABEL[OTHER_ENGINE[engine]]}
-        </button>
-        <button type="button" className="qm-btn" aria-label="定位到我的位置" onClick={handleRequestLocation}>
-          我的位置
-        </button>
-      </div>
+      {variant === 'page' && (
+        <div className="qm-map__overlay">
+          <button type="button" className="qm-btn" aria-label={`切换底图，当前为${ENGINE_LABEL[engine]}`} onClick={handleToggleEngine}>
+            {ENGINE_LABEL[OTHER_ENGINE[engine]]}
+          </button>
+          <button type="button" className="qm-btn" aria-label="定位到我的位置" onClick={handleRequestLocation}>
+            我的位置
+          </button>
+        </div>
+      )}
 
       {visibleError ? (
         <div className="qm-map__error" role="alert">

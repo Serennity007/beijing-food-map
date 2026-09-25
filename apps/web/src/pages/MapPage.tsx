@@ -444,7 +444,7 @@ export function MapPage() {
                       search.phase === 'done' && (
                         <div>
                           <p className="hint">没有匹配的已收录门店。换个词再搜，或直接申请把它补进地图。</p>
-                          <Link className="btn small" to="/submit">
+                          <Link className="btn small" to={`/submit?q=${encodeURIComponent(search.term)}`}>
                             申请新增门店
                           </Link>
                         </div>
@@ -502,7 +502,25 @@ export function MapPage() {
               }
             />
           )}
-          {d.loading && d.list.length === 0 && <StatusBlock kind="loading" message="正在读取当前视野的门店…" />}
+          {d.loading && d.list.length === 0 && (
+            <div className="skeleton-list" aria-hidden="true">
+              <div className="skeleton-card">
+                <span style={{ width: '42%' }} />
+                <span style={{ width: '88%' }} />
+                <span style={{ width: '70%' }} />
+              </div>
+              <div className="skeleton-card">
+                <span style={{ width: '36%' }} />
+                <span style={{ width: '80%' }} />
+                <span style={{ width: '56%' }} />
+              </div>
+              <div className="skeleton-card">
+                <span style={{ width: '48%' }} />
+                <span style={{ width: '84%' }} />
+              </div>
+            </div>
+          )}
+          {d.loading && d.list.length === 0 && <span className="visually-hidden" role="status">正在读取当前视野的门店…</span>}
           {!d.loading && d.list.length === 0 && !d.error && (
             <StatusBlock
               kind="empty"

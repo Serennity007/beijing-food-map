@@ -124,8 +124,10 @@ export function SubmitPage() {
   // 地图选点带进来的坐标（GCJ-02）：有就默认打开建店表单，省掉手填经纬度。
   const pickedLng = Number(params.get('lng'));
   const pickedLat = Number(params.get('lat'));
+  // 从地图页"搜不到 → 申请新增"带过来的关键词：直接放进搜索框，让"申请新增这家门店"预填店名。
+  const prefillQ = params.get('q') ?? '';
 
-  const [term, setTerm] = useState('');
+  const [term, setTerm] = useState(prefillQ);
   const [found, setFound] = useState<{ own: Restaurant[]; provider: SearchResult['provider_candidates'] } | null>(null);
   const [restaurantId, setRestaurantId] = useState<string | null>(presetId);
   const [detail, setDetail] = useState<RestaurantDetail | null>(null);
