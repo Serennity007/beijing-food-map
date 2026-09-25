@@ -122,6 +122,14 @@ export function MapView(props: MapViewProps) {
     adapterRef.current?.setUserLocation(userLocation);
   }, [userLocation]);
 
+  // 页面层要求按坐标定位（搜索结果跨视野定位）：不等目标出现在点位集合里，直接驱动相机。
+  // signal 递增表达新请求；连续快速选择时后到的请求覆盖先到的。
+  const focusRequest = props.focusRequest;
+  useEffect(() => {
+    if (!focusRequest || focusRequest.signal <= 0) return;
+    adapterRef.current?.centerOnPoint(focusRequest.point, latest.current.insets);
+  }, [focusRequest]);
+
   const handleRetry = useCallback(() => {
     setAdapterError(null);
     latest.current.onRetry();

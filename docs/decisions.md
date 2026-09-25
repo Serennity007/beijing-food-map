@@ -76,3 +76,31 @@ CI（`setup-node`）、`Dockerfile` 与本机验证统一到 Node 24。`engines`
 动机不是美观：计票窗口本来就是上海日，而 `created_at` 是 UTC ISO —— 上海 00:53 提交的工单，截前 10 位会显示成**昨天**。演示里"提交 2026-09-24"配上"今天"的窗口末日 2026-09-25 就是自相矛盾的证据。
 队列与审计用带时分的 `shanghaiDateTime`（要能比先后），用户侧列表用 `shanghaiDay`。非时间戳字符串（历史数据缺时间）退回原来的截断行为，不抛错 —— 展示层不该因为一条脏数据把页面弄崩。
 
+
+## D21 【建议规则 · 待人确认，未实施】地点核验与搬迁分开建模
+
+来源：修改指导意见（2026-09-25）A1，对应 NEXT.md N1。**本条只是把建议的规则与回归场景写下来，代码未改**；下面的规则在有人拍板之前不实施，`store.ts:1812 patchRestaurantStatus()` 的现状行为与 `candidates.test.ts` 的特征锁定测试保持原样。
+
+**问题回顾**：现状是 `place_status` 一变就 `location_version += 1`，计票按 `location_version === 当前版本` 过滤，于是"审核员给一家店核验通过"会让它此前攒下的社区票全部留在历史版本上（实测 R07：核验通过后 3-0-0 → 0-0-0，community 从 QUALIFIED 掉到 LAPSED）。"终于确认这家店就在这里"和"这家店搬走了"被混成了同一件事。
+
+**建议采纳的规则**（分四种情形）：
+
+1. **仅核验状态变化、地点实体未变**（PENDING→VERIFIED、VERIFIED→PENDING 等）：保留 `location_version`，按现有资格谓词重新计算上榜资格。已批准的反馈继续计入当前版本的票。
+2. **确认搬迁或地点实体变更**（坐标真实变化、审核员标注"已搬迁"）：递增 `location_version`，旧址反馈作为历史保留，不自动用于新址推荐；新址从零攒票。
+3. **小幅坐标纠偏与真实搬迁要区分**：写清"坐标修正"的业务语义（例如：纠偏指同一家店的位置精度改进，由审核动作显式标记，不清票；搬迁指地点实体指向另一地址）。不做"经纬度只要变一点就清票"的隐式阈值。
+4. `rec.version` 继续承担数据更新版本职责，与地点版本分开，两者语义不混用。
+
+**影响面（确认后实施时要一起改）**：
+- `packages/contracts/src/store.ts`：`patchRestaurantStatus()`、`decideCandidate()`（store.ts:2124/2126 的两个调用点）、`resubmitCandidateMaterials()`（N1 子问题：驳回→补材料不动坐标时 `location_version` 从 1 变 2 的不对称，规则 1/3 落地后应自动一致，但要一起验）。
+- 测试：`packages/contracts/test/candidates.test.ts:275` 的特征锁定测试要改写成新语义的断言（不是删除）；`apps/api/test/api.test.ts` 里依赖旧行为的断言一并改。
+- 两种模式回归都要跑：静态（StaticClient）与 HTTP（`scripts/http-contract-check.mts`）。
+
+**确认后要补的回归场景**（两种模式各跑一遍）：
+- 同址 PENDING→VERIFIED：保留符合条件的票；若门店因此满足默认层谓词，进入默认层。
+- 同址 VERIFIED→PENDING：暂时退出默认层（资格谓词要求 VERIFIED），但**不**因状态翻转清票；恢复 VERIFIED 后票仍在。
+- 同址驳回→补材料（坐标不变）：不重复清票，`location_version` 全程不变。
+- 真实搬迁：递增地点版本，旧址票不沿用；旧址反馈历史可查。
+- 自审限制不变：本人提交的候选在 `decideCandidate` 与 `patchRestaurantStatus` 两处仍 403。
+- 静态与 HTTP 一致性：`http-contract-check.mts` 相关断言同步更新。
+
+**未确认期间的临时口径**：第一条批次（本轮）不依赖此规则的搜索与 UI 修复已先行交付；N1 的现状行为继续由特征锁定测试钉住，防止无人拍板期间被无声改动。

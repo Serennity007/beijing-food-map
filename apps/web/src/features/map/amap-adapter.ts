@@ -299,7 +299,22 @@ export class AmapAdapter implements MapAdapter {
     if (!map || this.destroyed || !id) return;
     const rec = this.records.get(id);
     if (!rec) return;
-    const pos = this.renderPosition(rec.entity.longitude, rec.entity.latitude);
+    this.panToGcjPoint(rec.entity.longitude, rec.entity.latitude, insets);
+  }
+
+  centerOnPoint(point: { lng: number; lat: number }, insets: MapInsets): void {
+    const map = this.map;
+    if (!map || this.destroyed) return;
+    // 不查 records：目标可能根本不在当前点位集合里（搜索结果跨视野定位）。
+    if (!Number.isFinite(point.lng) || !Number.isFinite(point.lat)) return;
+    this.panToGcjPoint(point.lng, point.lat, insets);
+  }
+
+  /** 纯像素推导的平移：让目标点落在「抽屉/顶栏之上的可视区」中心，保持当前缩放。 */
+  private panToGcjPoint(lng: number, lat: number, insets: MapInsets): void {
+    const map = this.map;
+    if (!map || this.destroyed) return;
+    const pos = this.renderPosition(lng, lat);
     const visible = this.centerOfVisibleArea(insets);
     const width = this.canvasWidth();
     const height = this.canvasHeight();
@@ -307,7 +322,6 @@ export class AmapAdapter implements MapAdapter {
       map.setCenter([pos.lng, pos.lat]);
       return;
     }
-    // 纯像素推导，不依赖任何「平移正负号」约定：
     // O 为容器中心、P 为标记当前像素位置，要让标记落在可视区中心 V，
     // 新地理中心 = containerToLngLat(V + (O - P))。
     const p = toPixel(map.lngLatToContainer([pos.lng, pos.lat]));

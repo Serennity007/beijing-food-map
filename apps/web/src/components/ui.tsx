@@ -107,9 +107,10 @@ export function RestaurantCard({
 /**
  * 手机三档抽屉：手柄拖动/点击换档，与地图手势分离（MAP-08）。
  * onInsets 把当前遮挡高度告诉地图，用于把选中标记平移出遮挡区。
+ * B1：默认停在最低档，把首屏留给地图；hint 在最低档时显示门店数量，作为显式的「展开列表」入口。
  */
-export function Drawer({ children, onInsets }: { children: ReactNode; onInsets: (bottom: number) => void }) {
-  const [snap, setSnap] = useState(1);
+export function Drawer({ children, onInsets, hint }: { children: ReactNode; onInsets: (bottom: number) => void; hint?: string }) {
+  const [snap, setSnap] = useState(0);
   const [drag, setDrag] = useState(0);
   const start = useRef<number | null>(null);
   const moved = useRef(false);
@@ -182,6 +183,7 @@ export function Drawer({ children, onInsets }: { children: ReactNode; onInsets: 
         }}
       >
         <span className="grip" aria-hidden="true" />
+        {snap === 0 && hint && <span className="drawer-hint">{hint}</span>}
       </div>
       <div className="drawer-body">{children}</div>
     </div>

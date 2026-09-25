@@ -397,10 +397,26 @@ export class MaplibreAdapter implements MapAdapter {
     if (!map || this.destroyed || !id) return;
     const rec = this.records.get(id);
     if (!rec) return;
-    // 退化成点 + 非对称留白：fitBounds 会把点落在「抽屉之上的可视区」中心；
-    // maxZoom = 当前层级，因此只平移不缩放。
-    const pos = this.renderPosition(rec.entity);
-    map.fitBounds(new LngLatBounds([pos[0], pos[1]], [pos[0], pos[1]]), {
+    this.panToGcjPoint(this.renderPosition(rec.entity), insets);
+  }
+
+  centerOnPoint(point: { lng: number; lat: number }, insets: MapInsets): void {
+    const map = this.map;
+    if (!map || this.destroyed) return;
+    // 不查 records：目标可能根本不在当前点位集合里（搜索结果跨视野定位）。
+    if (!Number.isFinite(point.lng) || !Number.isFinite(point.lat)) return;
+    const g = toRender(point.lng, point.lat, this.engine);
+    this.panToGcjPoint([g.lng, g.lat], insets);
+  }
+
+  /**
+   * 退化成点 + 非对称留白：fitBounds 会把点落在「抽屉之上的可视区」中心；
+   * maxZoom = 当前层级，因此只平移不缩放。
+   */
+  private panToGcjPoint(rendered: [number, number], insets: MapInsets): void {
+    const map = this.map;
+    if (!map || this.destroyed) return;
+    map.fitBounds(new LngLatBounds([rendered[0], rendered[1]], [rendered[0], rendered[1]]), {
       padding: viewportPadding(insets, this.canvasWidth(), this.canvasHeight()),
       maxZoom: clampZoom(map.getZoom()),
       linear: true,

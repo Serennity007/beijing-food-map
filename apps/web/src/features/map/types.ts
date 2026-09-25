@@ -40,6 +40,12 @@ export interface MapAdapter {
   setItems(items: MapEntity[]): void;
   select(id: string | null): void;
   setCenterOn(id: string | null, insets: MapInsets): void;
+  /**
+   * 把相机对准一个坐标（GCJ-02），不要求该点已在当前点位集合里：
+   * 搜索结果可能在当前视野外、聚合点内或被筛选排除，定位必须用结果自带坐标驱动相机，
+   * 不能依赖「目标 marker 已经存在」（A2）。
+   */
+  centerOnPoint(point: { lng: number; lat: number }, insets: MapInsets): void;
   fitBounds(bounds: Bounds, insets?: MapInsets): void;
   setUserLocation(point: { lng: number; lat: number } | null): void;
   getViewport(): MapViewportState;
@@ -62,6 +68,11 @@ export interface MapViewProps {
   onSelectCluster(cluster: MapClusterItem): void;
   /** 点空白选点（GCJ-02），用于把坐标带进建店申请。 */
   onMapPoint(point: { lng: number; lat: number }): void;
+  /**
+   * 页面层要求把相机对准某个坐标（GCJ-02）：搜索结果跨视野定位用。
+   * signal 每次请求递增，连续快速选择时后到的请求覆盖先到的。
+   */
+  focusRequest: { point: { lng: number; lat: number }; signal: number } | null;
   onViewportChange(viewport: MapViewportState): void;
   onRequestLocation(): void;
   onRetry(): void;

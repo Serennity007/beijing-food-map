@@ -212,6 +212,10 @@
 .qm-map .maplibregl-ctrl-bottom-right {
   z-index: 3;
 }
+/* B1: 缩放控件与版权随抽屉实测高度上移，不被抽屉盖住 */
+.qm-map .maplibregl-ctrl-bottom-right {
+  bottom: var(--qm-bottom-inset, 0px);
+}
 .qm-map .maplibregl-ctrl-attrib {
   font-size: 11px;
   background: rgba(255, 254, 251, 0.85);
@@ -224,7 +228,8 @@
 
 .qm-map__overlay {
   position: absolute;
-  top: 10px;
+  /* B1: 覆盖层按钮避开顶部筛选区实测遮挡 */
+  top: calc(10px + var(--qm-top-inset, 0px));
   right: 10px;
   z-index: 4;
   display: flex;

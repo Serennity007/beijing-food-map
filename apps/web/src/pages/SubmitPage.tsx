@@ -678,6 +678,7 @@ export function SubmitPage() {
           fieldErrors={candidateFailure?.fields ?? {}}
           onSubmit={(facts) => void sendCandidate(facts)}
           onCancel={() => setCandidateForm(null)}
+          draftKey={`qianwei.candidate-draft.${user?.id ?? 'anon'}`}
         />
       )}
 

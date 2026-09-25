@@ -1,8 +1,11 @@
 /**
  * 建店与补材料共用的表单。字段上限只是形状提示，真正的边界（北京范围、菜系枚举、
  * 信息来源长度、重复门店判定）全部由引擎判，页面只把返回的字段错误定位回去。
+ *
+ * B3：传入 draftKey 时（建店流程），已填内容会存本机 —— 跳去地图选点再回来不丢店名与说明；
+ * initial 里非空的字段（刚选的点、第三方候选）优先于草稿。补材料不传 draftKey，行为不变。
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CUISINES, CUISINE_LABEL, type CandidateFacts, type Cuisine } from '@qianwei/contracts';
 
 interface Props {
@@ -13,6 +16,8 @@ interface Props {
   submitLabel: string;
   onSubmit: (facts: CandidateFacts) => void;
   onCancel?: () => void;
+  /** 传入后已填字段持久化到本机（按账号分键），跨页面选点往返可恢复。 */
+  draftKey?: string;
 }
 
 function Err({ msg }: { msg: string | null | undefined }) {
@@ -20,7 +25,38 @@ function Err({ msg }: { msg: string | null | undefined }) {
   return <span className="err">{msg}</span>;
 }
 
-export function CandidateForm({ initial, fieldErrors = {}, busy = false, title = '新建门店申请', submitLabel, onSubmit, onCancel }: Props) {
+interface FormDraft {
+  name: string;
+  branch: string;
+  address: string;
+  floor: string;
+  cuisines: Cuisine[];
+  evidence: string;
+}
+
+function readDraft(key: string): FormDraft | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const o = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof o !== 'object' || o === null) return null;
+    return {
+      name: typeof o.name === 'string' ? o.name : '',
+      branch: typeof o.branch === 'string' ? o.branch : '',
+      address: typeof o.address === 'string' ? o.address : '',
+      floor: typeof o.floor === 'string' ? o.floor : '',
+      cuisines: Array.isArray(o.cuisines) ? o.cuisines.filter((c): c is Cuisine => typeof c === 'string') : [],
+      evidence: typeof o.evidence === 'string' ? o.evidence : '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function CandidateForm({ initial, fieldErrors = {}, busy = false, title = '新建门店申请', submitLabel, onSubmit, onCancel, draftKey }: Props) {
+  const restored = useRef(false);
+  // 提交/取消后置位：卸载不再把刚清掉的草稿写回去
+  const closed = useRef(false);
   const [name, setName] = useState(initial.name ?? '');
   const [branch, setBranch] = useState(initial.branch ?? '');
   const [address, setAddress] = useState(initial.address ?? '');
@@ -31,6 +67,43 @@ export function CandidateForm({ initial, fieldErrors = {}, busy = false, title =
   const [evidence, setEvidence] = useState(initial.evidence_note ?? '');
   const [local, setLocal] = useState<string | null>(null);
 
+  /* 只在首次挂载时用草稿补 initial 没有的字段；initial 非空值（刚选的点/候选）永远优先。 */
+  useEffect(() => {
+    if (!draftKey || restored.current) return;
+    restored.current = true;
+    const d = readDraft(draftKey);
+    if (!d) return;
+    if (!initial.name && d.name) setName(d.name);
+    if (!initial.branch && d.branch) setBranch(d.branch);
+    if (!initial.address && d.address) setAddress(d.address);
+    if (!initial.floor_info && d.floor) setFloor(d.floor);
+    if ((!initial.cuisines || initial.cuisines.length === 0) && d.cuisines.length > 0) setCuisines(d.cuisines);
+    if (!initial.evidence_note && d.evidence) setEvidence(d.evidence);
+  }, [draftKey, initial]);
+
+  /* 有 draftKey 才落草稿，每次输入同步写（与投稿草稿同一做法），跳去地图选点的路上不丢字。 */
+  useEffect(() => {
+    if (!draftKey || closed.current) return;
+    const d: FormDraft = { name, branch, address, floor, cuisines, evidence };
+    const hasAny = d.name !== '' || d.branch !== '' || d.address !== '' || d.floor !== '' || d.cuisines.length > 0 || d.evidence !== '';
+    try {
+      if (hasAny) localStorage.setItem(draftKey, JSON.stringify(d));
+      else localStorage.removeItem(draftKey);
+    } catch {
+      /* 本机没有存储权限时只是不能恢复，不影响提交 */
+    }
+  }, [draftKey, name, branch, address, floor, cuisines, evidence]);
+
+  function clearDraft(): void {
+    closed.current = true;
+    if (!draftKey) return;
+    try {
+      localStorage.removeItem(draftKey);
+    } catch {
+      /* 忽略 */
+    }
+  }
+
   const coordErr = fieldErrors.lng_lat ?? fieldErrors.lng ?? fieldErrors.lat ?? local;
 
   function toggle(cuisine: Cuisine): void {
@@ -39,10 +112,11 @@ export function CandidateForm({ initial, fieldErrors = {}, busy = false, title =
 
   function submit(): void {
     if (lng.trim() === '' || lat.trim() === '') {
-      setLocal('请填写经纬度（GCJ-02）。没有地图选点前先手填，坐标可在门店页看到。');
+      setLocal('请先选位置：回地图页点一下空白处，选「在这里新增门店」带坐标进来；确实知道坐标时也可以在下面手填。');
       return;
     }
     setLocal(null);
+    clearDraft();
     onSubmit({
       name: name.trim(),
       branch: branch.trim() === '' ? null : branch.trim(),
@@ -125,8 +199,9 @@ export function CandidateForm({ initial, fieldErrors = {}, busy = false, title =
           />
         </div>
         <p className="hint">
-          可以从地图页点一下空白处带进来（推荐），也可以手填。坐标口径是 GCJ-02；
-          第三方真实地点检索还没接（缺高德 Key），所以这里的坐标只用于演示核验流程，不是任何真实门店的位置。
+          推荐做法：去地图页点一下空白处，选「在这里新增门店」把坐标带进来（跳走再回来，这里已填的店名和说明不会丢）。
+          手填坐标是备选入口，坐标口径为 GCJ-02。第三方真实地点检索还没接（缺高德 Key），所以这里的坐标只用于演示核验流程，
+          不是任何真实门店的位置。
         </p>
         <Err msg={coordErr} />
       </div>
