@@ -1,0 +1,111 @@
+# 下一步与可优化项（交给下一个 AI）
+
+项目：**京城黔味地图**（北京贵州菜与西南美食地图，可运行演示版）。
+先读 [handover.md](./handover.md)（现状、规则唯一实现处、13 条不许回退的不变量、改一处的连带清单、已踩过的坑、验收门禁），再回来看这份。
+
+三条硬约束（来自原始说明书，任何优化都不能违反）：
+
+1. 业务规则只在 `packages/contracts` 的 `Store` 里实现一次，页面不得重算；静态模式（浏览器内引擎 + `localStorage`）与 HTTP 模式（后端）必须行为一致。
+2. 不许虚构门店 / 探店 / 票数 / 核验证据；所有数据带 `is_test_data=true`；`production` 下引擎拒绝装载测试种子。
+3. 汇报分三档 **implemented / verified / release_ready**，只写你真的跑过命令或真的看过页面的部分；"看起来对了"不算证据。
+
+门禁现状（2026-09-25 本机）：typecheck 0 / 135 项测试 0 失败 / 契约自检 61 项 / 演示自检 14 项 ALL GREEN。
+**改任何代码后必须重跑并更新 [status.md](./status.md) 里的数字**，别照抄这里的。
+
+---
+
+## 一、需要人拍板的规则问题（我给不出结论，按影响排序）
+
+### N1 【最高优先 · 影响正确性】核验状态翻转会清零这家店已有的社区票
+
+`Store.patchRestaurantStatus()`（`packages/contracts/src/store.ts:1812`）只要 `place_status` 变了就 `location_version += 1`；而计票用 `location_version === 当前版本` 过滤，所以**递增等于把该门店此前所有已批准反馈移出计票**。`decideCandidate` 通过/驳回都走它（`store.ts:2124`、`store.ts:2126`）。
+
+实测后果（已钉成 `packages/contracts/test/candidates.test.ts:275` 的"特征锁定（存疑）"）：
+
+```
+R07（地点 PENDING、3 推荐 0 一般 0 不推荐、community=QUALIFIED）
+  → 审核员核验通过 → location_version 1 → 2
+  → 票数变 0/0/0，community 变 LAPSED，仍不在默认好店层
+```
+
+也就是说"给一家店核验通过"反而让它**离上榜更远**，要重新攒 3 票。
+选项：(a) 保持现状（把 `location_version` 当"地点变了"的严格语义）；(b) 只有坐标真的变了才递增，状态翻转不递增；(c) 状态翻转时保留票但标记来源版本。
+**注意**：`apps/api/test/api.test.ts` 里有断言依赖现有行为，改之前先看那几条。
+
+**N1 的子问题（一致性瑕疵）**：`resubmitCandidateMaterials()`（`store.ts:2148`）只在**坐标真的变了**时才递增 `location_version`，"REJECTED 回到 PENDING"不递增；但驳回那一步走 `patchRestaurantStatus`，按现状会递增一次。结果一次"驳回 → 补材料（不动坐标）"会让 `location_version` 从 1 变 2，尽管门店一动没动（测试如实断言了这个数：`candidates.test.ts` 里期望 2 的那条）。N1 选 (b)/(c) 的话这里大概率自动一致 —— 但要一起验。
+
+### N2 提交人注销后，他建的门店与待核验候选怎么处理
+
+现状（实测过）：注销清除任务删投稿/图片/清单/快照、显示名改"已注销用户"，但**候选与它创建的门店保留**，队列显示"提交人 已注销用户"。
+未决：待核验候选永远等不到人补材料，要自动标 `REJECTED`（理由"提交人已注销"）还是留给审核员手动处置？
+**并且**：隐私页现在的措辞是"去标识的账号 ID、举报状态与审计记录会保留"，**没提建店申请**。法务文案必须跟实现一致（D11 是硬规矩），要么改实现要么补措辞。
+
+### N3 唯一在岗的审核员自己举报了，那条单就卡死
+
+`decideReport` 对 `reporter_id === 处置人` 一律 403（与"作者不能自审"同形，不可回退）。但演示版只有 M01/A01 两个审核角色，真实运营若只有一人在线，他提的举报没人能处置，系统既不提示也不升级。
+选项：(a) 保持现状，把"审核组 ≥2 人"写成上线前置条件；(b) 加 `NEEDS_SECOND_REVIEWER` 标记并在队列单独成区；(c) 允许 admin 处置 moderator 的自报单（**我不建议**：等于给 admin 开"给自己的举报写结论"的口子，除非强制 admin 与 moderator 不同账号）。
+
+### N4 举报对审核队列也匿名，挡住了恶意举报的识别
+
+`reportQueue` 不返回举报人身份，只返回按请求者计算的 `is_reporter_self`（所以不会向第三方泄露是谁）。卡片上写明"处置依据是说明与现场核实，不是谁提的"。
+代价：审核员看不出"这三条针对同一家店的单是同一个人连发"，也看不出某账号的历史举报命中率。去重只覆盖"同人+同店+同 kind+同 target"，换个 kind 或换个说法就连不上。
+请回答：匿名边界该划在"对举报对象匿名"还是"对审核队列也匿名"？若要保留队列匿名，是否加一个**不指向个人**的聚合信号（"该门店 30 天内被举报 5 次"/"与队列里另 2 条指向同一门店"）？
+另外：举报人只能看到终态结果，中间态（"已进入复核"）要不要给？要给就得先定处理时限口径（SLA）。
+
+### N5 建店申请在提交时就真的落一家门店，是不是太宽
+
+现在的做法：`POST /restaurant-candidates` 创建候选的**同时**新建一条 `place_status=PENDING`、`profile_public=true`、`business_status=UNKNOWN`、`risk_status=CLEAR` 的门店。理由：SUB-02 要求"新店投稿→内容过审但地点未核验"，投稿必须挂在真实门店 ID 上；而默认层谓词（`rules.ts:211 evaluatePublicMapEligibility`）本来就要求 `VERIFIED`，不改一行就把新点挡在默认层外。
+担心的三点：① 未审核内容进了**公开可读**的待验证图层（空心标记 + "不代表平台推荐"），任何登录用户都能往公开地图上放点位；② 没有频控，换名字就能刷；③ 备选方案"审核通过后才建店"会推翻 SUB-02 的投稿时机，候选队列里也看不到门店详情。
+最小改法候选：新候选默认 `profile_public=false`，审核员"受理"后才进待验证图层；或给建店加每账号每日上限（**这是新增规则，说明书没要求，我不确定算不算范围漂移**）。
+
+### N6 重复判定的三个数是我拍的
+
+`packages/contracts/src/rules.ts`：
+- `CANDIDATE_DUP_RADIUS_M = 150`（`rules.ts:262`），用近似直线距离 `straightLineMeters`。北京商场店同商场不同楼层可能 >150 m，同一条街两家不同分店可能 <150 m。要不要按"归一化地址相同"提权？
+- 名称匹配 `normalizeStoreName()`（`rules.ts:301`）：trim + 小写 + 全角括号转半角 + 删空白与 `·・．.-—`；分店名必须完全一致才算"可能同一家"，否则只提示"同名但远"。要不要做包含关系（"凯里酸汤鱼" vs "凯里酸汤鱼(望京店)"）或复用仓库里已有的 `ALIASES` 别名表？
+- provider+poi_id 精确匹配**目前只在候选之间生效**：自有门店记录没有 `provider`/`poi_id` 字段，我没给 `RestaurantRec` 加两个恒为 null 的字段。加了暂时是死字段，不加则规格里"先按 provider+poi_id 去重"永远不成立（属 blockers A3）。
+
+### N7 幂等重放返回的是旧快照
+
+`Store.idempotent()` 缓存**当时的响应对象**，所以同键重放 `createCandidate`（`store.ts:1998`）返回的 `version` 是第一次的值；若这一轮里候选已被审核，紧接着拿它去 `decideCandidate` 必然 409。契约自检在同一库跑第二遍就撞上过一次，当前处理是"每轮验证换一个新 SQLite 文件"（写进了 handover §5）。
+请回答：重放该返回"缓存的原始响应"（幂等的教科书定义）还是"该资源的当前状态"？若保持前者，是否给响应加 `idempotent_replay: true` 让调用方知道版本可能过期？
+
+### N8 合同版本升级的用户可见性
+
+合同版本从 `2.0-demo-1` 升到 `2.0-demo-2` 后，`mapItems` 的 `query_key` 含版本号 → 旧快照 409 `QUERY_EXPIRED`（行为正确）；静态模式 `localStorage` 里旧快照缺 `candidates` 键，由 `loadState` 的 `?? []` 兜住（实测刷新后正常）。
+未决：要不要把 `QUERY_EXPIRED` / 合同版本变化翻译成"页面数据版本已更新，请刷新"？现在的文案"查询快照已过期，请重新拉取地图与列表"对普通用户不可理解。
+
+---
+
+## 二、不需要凭据也不需要设备，现在就能做的优化
+
+按性价比排序。做之前先读 handover §4 的连带清单 —— 这个仓库里改一处通常要动 5–7 个文件。
+
+| # | 可优化项 | 在哪 | 代价 / 收益 |
+| --- | --- | --- | --- |
+| O1 | 后台"并入已有门店"是一个手填门店 ID 的文本框，而仓库里已经有 `StorePicker`（`apps/web/src/pages/AdminPage.tsx:334`，门店状态面板在用）。并入还需要"从重复提示里点选"，两套选择逻辑叠进一个组件要改它的接口 | `AdminPage.tsx` 候选面板 | 小 / 中高（这是后台最容易点错的地方，且组件已存在，纯复用） |
+| O2 | 建店表单是一整块 8 字段长表单，无分步、无预览、错误全内联 | `features/candidates/CandidateForm.tsx` | 中 / 中（投稿转化率相关，但演示版可接受） |
+| O3 | `QUERY_EXPIRED`、版本冲突等错误文案对普通用户不可读（见 N8） | `apps/web/src/pages/*` + `data/client.ts` 的错误映射 | 小 / 中 |
+| O4 | 图片与清单条目没有各自的举报入口：引擎的 `feedback_target` 只认 `visit#vN` 形状（`store.ts` `createReport` 的校验），要指向媒体/清单项得先扩校验与队列展示 | `store.ts` + `openapi.ts` + 门店页/清单页 | 中 / 中（要先定 N4 的匿名与聚合口径，否则入口做了也用不上） |
+| O5 | 举报与建店都没有频控/配额（见 N5）：现在只有"同目标不重复开单"的去重 | `store.ts` | 小 / 取决于 N5 决策 |
+| O6 | 读屏冒烟测试：目前只有键盘遍历的证据，`aria-label` 的措辞与 live region 从没被真实读屏验证过 | 全站 | 小 / 高（但需要你开一次 NVDA 或 VoiceOver，算半外部条件） |
+| O7 | `npm audit` 两个告警：`maplibre-gl <=6.4.0` critical（XSS Sanitizer Bypass，GHSA-jrc7-96c5-q579）与 `@vitest/mocker` moderate（路径穿越）。升级 maplibre 是 breaking（`npm audit fix --force` 会装 6.11.x），且我们自己的 `maplibre-adapter.ts` 会往 popup 里拼 HTML —— 升级前要先审一遍哪些字符串是用户可控的 | `apps/web/src/features/map/maplibre-adapter.ts` | 中 / 高（依赖升级属于"需确认"动作，不要擅自做） |
+| O8 | `Dockerfile` 与 `render.yaml` 从未构建/导入过（本机无 Docker）。任何有 Docker 的机器上先 `docker build -t qw .` 验一遍，比读 YAML 有用 | 仓库根 | 小 / 中 |
+
+**已经不用做的**（曾经的疑问，现已实现并实测）：地图点空白选点（MapLibre 侧，GCJ-02 出 SDK 边界时转换，投稿页据此预填建店表单）；举报工单的处置状态流转（C9 已闭合）。
+
+---
+
+## 三、必须先拿到人类授权 / 凭据，不要自行推进
+
+- 推送到 GitHub（`Serennity007/beijing-food-map`，public）。本机 `gh` 已登录该账号，但**推送要你明确同意**，且要先换掉指向源机器的 `origin`。
+- 后端托管（Render/Fly/Railway）、`VITE_AMAP_KEY` + 安全密钥、短信服务、云账号、对象存储、任何付费开通、任何对真人发消息。
+- 真实门店数据：需要经人工核验的门店库。**虚构门店/探店/票数/截图是硬约束禁止项。** 建店与举报流程都已通，缺的只是数据与核验人力。
+- 依赖升级（O7）与任何 `--force` 类操作。
+- 破坏性动作：部署、`git push --force`、删分支、`rm -rf`、迁移线上库。本地提交和文件编辑可以直接做。
+
+---
+
+## 四、如果只有一件事可做
+
+先解 **N1**。它不是风格问题：现在"审核员给一家店核验通过"这个动作会让这家店从好店地图上消失，而这是产品的核心承诺（谁在凭什么推荐它）。N1 定了以后它自己的子问题（补材料的版本递增不对称）以及 N6/N7 的口径都会跟着变清楚，`candidates.test.ts:275` 那条特征锁定测试和 `apps/api/test/api.test.ts` 的相关断言要一起改。

@@ -65,8 +65,8 @@ packages/contracts/         唯一规则实现处（枚举/DTO/规则/引擎/种
 apps/web/                   Vite + React 19 SPA（含 /admin）
 apps/api/                   node:http + node:sqlite + OpenAPI
 database/migrations/        SQL 迁移（启动时幂等应用）
-docs/                       handover / status / blockers / decisions / 演示动线
-                            design/ 方案 · render-check/ 渲染证据 · questions-for-next-review.md 待决
+docs/                       handover（交接总纲）· status（账本）· NEXT（下一步与可优化）
+                            blockers · decisions · 演示动线 · design/ 方案 · render-check/ 渲染证据 · runbooks/
 ```
 
 ## 不承诺的事（对外讲的时候必须守住）
@@ -79,4 +79,5 @@ docs/                       handover / status / blockers / decisions / 演示动
 ## 给接手改代码的人
 
 先读 `docs/handover.md`：现状口径、规则唯一实现处、不许回退的 13 条业务不变量、改一处的连带清单、已踩过的坑、验收门禁。
-本轮**没定下来**的问题集中在 `docs/questions-for-next-review.md`（13 条：Q1–Q10 出自阶段 1A，Q11–Q13 出自阶段 1B 的接口语义、运营死角与匿名边界；含一条会影响功能实际价值的规则疑问）。
+**接下来做什么**在 `docs/NEXT.md`：8 条需要人拍板的规则问题（N1 影响正确性，优先）、8 条不需要凭据就能做的优化（O1–O8，带文件位置与代价/收益）、以及一律不许自行推进的授权项。
+文档只写"现在的事实"；改动过程看 `git log`，决策理由看 `docs/decisions.md`。
