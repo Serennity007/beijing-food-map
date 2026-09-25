@@ -75,6 +75,28 @@ small {
   outline-offset: 2px;
 }
 
+/* 键盘用户的跳转入口：平时不占位，Tab 到它才出现在页面左上角。 */
+.skip-link {
+  position: absolute;
+  top: 0;
+  left: -9999px;
+  z-index: 90;
+  padding: 10px 14px;
+  border-radius: 0 0 10px 0;
+  background: var(--brand-2);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  left: 0;
+}
+
+main:focus {
+  outline: none;
+}
+
 /* ---------- 外壳 ---------- */
 
 .app {

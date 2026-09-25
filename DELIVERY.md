@@ -44,7 +44,7 @@ node scripts/demo-check.mjs            # 演示自检（后端模式加 --api）
 ## 口径：三档，别混
 
 - **implemented** —— 领域引擎 + 11 个页面 + 演示后端 44 条接口操作（38 个路径）+ OpenAPI + Pages workflow。
-- **verified** —— 本机（Windows + Node 24.18.0）跑出来的：typecheck 3 workspace 全绿；测试 **135 项 0 失败**（contracts 92 / api 29 / web 14）；HTTP 契约自检 **61 项**；`npm run build` 退出码 0；演示自检静态 7 项 / 后端 14 项 ALL GREEN；两种模式浏览器实测闭环走通（**含 `--api` 后端模式下的举报处置全链路**）。逐条证据在 `docs/status.md`。
+- **verified** —— 本机（Windows + Node 24.18.0）跑出来的：typecheck 3 workspace 全绿；测试 **135 项 0 失败**（contracts 92 / api 29 / web 14）；HTTP 契约自检 **61 项**；`npm run build` 退出码 0；演示自检静态 7 项 / 后端 14 项 ALL GREEN；两种模式浏览器实测闭环走通（**含 `--api` 后端模式下的举报处置全链路**）；键盘遍历与焦点可见性实测过（Tab 顺序、跳转链接、方向键平移、回车展开聚合）。逐条证据在 `docs/status.md`。
 - **release_ready：否** —— 数据全是合成的；真实对象存储、可水平扩展的持久化、地图选点与真实 POI 数据源、真机与窄屏适配、后端部署、仓库推送都还没做。分账见 `docs/blockers.md`。
 
 ## 指标口径（讲"凭什么推荐"时用）

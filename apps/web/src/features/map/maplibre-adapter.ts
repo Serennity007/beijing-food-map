@@ -165,6 +165,8 @@ export class MaplibreAdapter implements MapAdapter {
     }
 
     this.map = map;
+    // SDK 默认给画布的标签是英文 "Map"，只说"这是地图"没告诉人怎么用键盘走。
+    map.getCanvas().setAttribute('aria-label', '地图画布：聚焦后可用方向键平移、加号与减号缩放；回车不在这里选点，新增门店请在下方表单填写坐标');
     this.debouncer = createDebouncer(() => this.emitViewport(), VIEWPORT_DEBOUNCE_MS);
     this.nav = new NavigationControl({ showCompass: false, visualizePitch: false });
     map.addControl(this.nav, 'bottom-right');

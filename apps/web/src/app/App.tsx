@@ -26,6 +26,9 @@ export function App() {
 
   return (
     <div className="app">
+      <a className="skip-link" href="#main">
+        跳到主要内容
+      </a>
       <header className="topbar">
         <Link className="brand" to="/map">
           <span className="brand-mark" aria-hidden="true">黔</span>
@@ -55,7 +58,7 @@ export function App() {
         </nav>
       </header>
 
-      <main className="main">
+      <main className="main" id="main" tabIndex={-1}>
         <Suspense fallback={<div className="page-loading">加载中…</div>}>
           <Routes>
             <Route path="/" element={<Navigate to="/map" replace />} />

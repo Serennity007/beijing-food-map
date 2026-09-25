@@ -265,6 +265,7 @@ export function AdminPage() {
             key={t.key}
             type="button"
             className={`chip ${active === t.key ? 'active' : ''}`}
+            aria-pressed={active === t.key}
             onClick={() => setTab(t.key)}
           >
             {t.label}
@@ -1225,7 +1226,7 @@ function ReportsPanel({ onPick }: { onPick: (id: string) => void }) {
     </p>
     <div className="chips" role="group" aria-label="工单状态">
       {FILTERS.map((f) => (
-        <button key={f.label} type="button" className={`chip ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
+        <button key={f.label} type="button" className={`chip ${filter === f.key ? 'active' : ''}`} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
           {f.label}
         </button>
       ))}

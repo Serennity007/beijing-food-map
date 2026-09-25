@@ -17,7 +17,7 @@
 - **举报工单处置闭环**（阶段 1B，见 decisions D19）：`createReport` 对同人+同店+同类型**且同一个 `feedback_target`** 且未结案的重发返回原单；门店页每条公开反馈都有"举报这条内容"入口，工单因此可以精确指向某条反馈的某一版（`VF002#v1` 形状），也可以只举报整店；`reportQueue(sessionId, status?)` 待处理优先、上限 200、带门店名与 `is_reporter_self`；`decideReport` 走 `REPORT_TRANSITIONS`（终态无回退边）、结案与驳回必填处理结果、`expected_version` 不符 409、**举报人不能处置自己的工单**，且处置不改门店状态。`result_note` 只能由处置动作写入。
 - 时间展示统一走 `shanghaiDay` / `shanghaiDateTime`（`rules.ts`，与 `shanghaiToday` 同一套 `Intl` 口径），页面不再截 UTC 字符串（见 decisions D20）。
 
-**网页端（`apps/web`）**：地图首页 + 筛选/搜索 + 详情、投稿（含**建店申请**入口）、我的（清单/反馈/举报/**建店进度与补材料**/注销）、清单编辑与发布/撤回、分享只读页、`/login`、`/admin` 审核台（含举报复核面板与**地点核验队列**）、法律页。地图适配器双实现（MapLibre 公共瓦片 + 高德 JS API 2.0），无 Key 时走瓦片兜底。举报、状态、候选与重复提示的中文标签统一取自 `contracts/enums.ts`，页面里不再各写一份。建店表单在 `features/candidates/CandidateForm.tsx` 只有一份，投稿页与"我的"页共用。「举报复核」面板按状态过滤（全部/待处理/复核中/已处理/已驳回），按引擎给的转移表显示"开始复核/确认并结案/驳回"，自己提交的那条只剩跳转按钮并写明原因，终态卡片显示处理结果与"由谁处置于何时"。门店页每条公开反馈下面有"举报这条内容"，把工单指向该反馈的具体版本（也可改回举报整店），"我的"页与后台队列都显示这个指针。
+**网页端（`apps/web`）**：地图首页 + 筛选/搜索 + 详情、投稿（含**建店申请**入口）、我的（清单/反馈/举报/**建店进度与补材料**/注销）、清单编辑与发布/撤回、分享只读页、`/login`、`/admin` 审核台（含举报复核面板与**地点核验队列**）、法律页。地图适配器双实现（MapLibre 公共瓦片 + 高德 JS API 2.0），无 Key 时走瓦片兜底。举报、状态、候选与重复提示的中文标签统一取自 `contracts/enums.ts`，页面里不再各写一份。建店表单在 `features/candidates/CandidateForm.tsx` 只有一份，投稿页与"我的"页共用。「举报复核」面板按状态过滤（全部/待处理/复核中/已处理/已驳回），按引擎给的转移表显示"开始复核/确认并结案/驳回"，自己提交的那条只剩跳转按钮并写明原因，终态卡片显示处理结果与"由谁处置于何时"。门店页每条公开反馈下面有"举报这条内容"，把工单指向该反馈的具体版本（也可改回举报整店），"我的"页与后台队列都显示这个指针。全站第一个可聚焦元素是「跳到主要内容」（平时移出屏幕，聚焦才出现，目标是带 `tabIndex=-1` 的 `<main id="main">`）；所有 chip 型开关（地图视图/图层、后台分区与工单状态、清单加入、菜系多选）统一带 `aria-pressed`，MapLibre 画布的 `aria-label` 换成中文并写清方向键与缩放、以及回车不选点。
 
 **演示后端（`apps/api`）**：`node:http` 外壳 + `node:sqlite` 文档表持久化 + SQL 迁移 + OpenAPI 3.0 全量覆盖 + HMAC 签名会话 Cookie（`SESSION_SECRET` 缺失时用进程内临时密钥，`SESSION_TTL_SECONDS` 控有效期，`COOKIE_SECURE` 可独立于 `NODE_ENV` 开启）+ 登录限流 + Origin/Sec-Fetch-Site 跨站写拦截 + 图片鉴权直出 + 审计日志 + 注销清除任务排空（启动时与每秒各跑一次，失败自动回滚重试）。新增 1 条举报处置接口后共 **44 条 method+path 操作 / 38 个不同路径**（`openapi.ts` 与路由表由测试强制一一对应），`documents` 表按 kind 多一行 `candidate`，**不需要新迁移**（文档表是通用形状）。
 
@@ -35,6 +35,7 @@
 | 待验证图层口径 | `GET /map/items?...&layer=pending_verification` → `total_matched=6`，含种子里 4 家 PENDING（R02/R07/R19/R24）与两条待核验候选，**不含**已核验通过的 `R0029`；`query_key` 里的合同版本已是 `2.0-demo-2` |
 | 浏览器实测 · HTTP 模式（`node scripts/serve-demo.mjs --api --port=4273`，产物 `VITE_API_BASE=/api` 由演示服务代理到 8787） | 建店闭环与举报处置闭环全部走通，看到的确切文案见下节 |
 | 浏览器实测 · 静态模式（5174，无后端） | 匿名点"提交建店申请"→ 显示"需要先登录才能申请新增门店"与去登录入口；U01 登录后建店得到 `RC0004 → R0003（待核验）`；**刷新页面后** `/me` 仍列"我的建店申请（1）· RC0004 · 待核验"，`localStorage['qianwei.state'].candidates` 长度 1 —— 新实体确实随快照落本机并读回 |
+| 键盘遍历与焦点可达性（内嵌浏览器，531×568） | `/map` 40 个可聚焦控件、`/submit` 25、`/restaurants/R01` 12、`/admin` 32；**无标签缺失**（`input/select/textarea` 全部有 label 或 aria-label，`img` 全部有 alt）。Tab 第一站是新增的「跳到主要内容」（实测 `left=0 width=118`、`:focus-visible` 命中、回车后 `document.activeElement.id === 'main'`）。方向键实测：聚焦画布后连按 →→ 把标记从 369px 推到 169px，结果数从"匹配 4 家"变"匹配 3 家"（键盘驱动的相机变化真的走了视野查询链路）；按 `+` 后 `localStorage['qianwei.mapviewport'].zoom` 变 9.8647。`div[role=button]` 的键盘激活可用：抽屉第 2 档 → 回车 → 第 3 档；聚合标记回车 → 展开成 4 个单店标记 |
 | 控制台 | 整轮实测只有 vite 连接与 React DevTools 提示两条 debug/info，应用自身没有 error/warning |
 | 工作树完整性（`git ls-files --others --exclude-standard`） | 只剩 `packages/contracts/test/reports.test.ts`（本轮新写的测试，待 `git add`）；`work/` 已显式进 `.gitignore`（每轮门禁都新建临时库与日志），`*.log` 与 `*.sqlite` 本来就被忽略 |
 
@@ -101,7 +102,8 @@
 - **真实底图**：高德 Key 与安全密钥未配置，双适配器只在 MapLibre 公共瓦片上跑通过，高德那条路径只有纯函数单测，没有在真实高德地图上渲染过点位。
 - **Docker 镜像**：本机无 Docker，`Dockerfile` 未构建过。
 - **第三方托管**：后端未部署，`render.yaml` 未在任何账号上导入过。仓库已本地提交，目标远端已确认为 `Serennity007/beijing-food-map`（public），**尚未推送**：本机 `gh` 已登录到该账号（handover §7 记了这条），但推送要你明确同意，且 `origin` 现在指向源机器的本地路径，要先换地址。
-- **无障碍**：未跑过键盘遍历与读屏。新增的建店表单与举报复核面板只有 `aria-label`/`aria-pressed` 这类基本标注，没做过遍历验证。
+- **无障碍（一半已验，一半仍没验）**：键盘遍历与焦点可见性在 531px 内嵌浏览器里跑过了，测到的数字与失败点见上面的 verified 行；**读屏软件（NVDA / VoiceOver / 安卓 TalkBack）一次都没跑过**，所以"aria-label 写得好不好、聚合标记展开后屏幕阅读器怎么播报、状态变更有没有 live region 通知"这些都没有证据。颜色对比度也没测过（品牌红字配米色底是设计选择，没算过 WCAG 比值）。
+- **键盘选点没有等价操作**：鼠标/触摸点底图空白处即可选点并预填建店坐标，键盘聚焦画布时回车只做平移缩放（MapLibre 的键盘处理如此），所以键盘用户要新增门店仍然得在表单里手打坐标 —— 功能没被挡住，但便利性不对等。画布的 aria-label 已把这件事写明，没有假装等价。
 - **迁移演练**：`database/migrations/*.sql` 只在空库上跑过，没有从旧版本升级的路径可验（尚未上线）。本轮新增 `candidate` 这个 documents kind **没有也不需要**新迁移（文档表是 `kind/id/body` 的通用形状），但"旧库读回时没有 candidates 行"只由 `parseDump` 的 `?? []` 兜住，没有真实旧库可验。举报工单新增的 4 个字段同理：它们在 `documents` 的 JSON body 里，不需要迁移，但**旧库里已有的工单行没有 `version`/`handled_by`**，读回来靠 `loadState` 的默认值兜住，同样没有真实旧库可验。
 - **建店的两条尾巴（一条已收，一条剩一半）**：地图选点已可用 —— 点底图空白处上报 GCJ-02 坐标，投稿页据此预填建店表单（MapLibre 侧浏览器实测通过）。**高德适配器的选点只写了代码、没有 Key 可验**，与高德底图渲染同属未验项。真实供应商 POI 检索仍未接，地点候选是内置合成点。
 - **窄屏下的建店表单与举报面板**：`CandidateForm`、后台「地点核验」与新的「举报复核」卡片只在 **531px** 这一个视口看过（截图证据 `docs/render-check/8-admin-report-530px.png` 显示筛选片换行、长文本换行都不溢出），但 360/390/430 宽度、软键盘顶起与触摸手势没验。
