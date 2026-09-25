@@ -63,12 +63,12 @@ npm test -w @qianwei/contracts             # vitest：领域引擎与建店候�
 npm test -w @qianwei/web                   # vitest：地图纯函数（本轮 14 项）
 npm test -w @qianwei/api                   # node:test：HTTP 合同与交接项（本轮 29 项，另有临时库的重启续跑用例）
 npm run build                              # apps/web/dist（含 tsc，构建即类型检查）
-npx tsx scripts/http-contract-check.mts    # 用真实前端 Http 客户端打真实后端，逐接口对账（本轮 57 项）
+npx tsx scripts/http-contract-check.mts    # 用真实前端 Http 客户端打真实后端，逐接口对账（本轮 61 项）
 ```
 
 计数只是本轮快照，别当期望值抄：以你真的跑出来的输出为准。
 
-`scripts/http-contract-check.mts` 是前后端联动的回归防线：它 import 前端 `Http` 客户端，带 Cookie Jar（内存 `Map`，不落盘）打 **`127.0.0.1:8787` 上已经在监听的后端**（跑之前先按上一节把后端起在独立库上），57 项断言覆盖地图聚合、快照复用、详情与"我的反馈"身份回填、图片鉴权可见性、搜索别名、会话、投稿幂等、**建店申请→待验证图层→地点核验→驳回→补材料（含作者自审 403）**、清单增删改、发布申请→审核批准→分享快照→撤回失效、举报队列与我的举报、审计日志。它会写库，改了 `packages/contracts/src/store.ts` 或 `apps/api/src/http/handlers.ts` 都应该跑它。
+`scripts/http-contract-check.mts` 是前后端联动的回归防线：它 import 前端 `Http` 客户端，带 Cookie Jar（内存 `Map`，不落盘）打 **`127.0.0.1:8787` 上已经在监听的后端**（跑之前先按上一节把后端起在独立库上），61 项断言覆盖地图聚合、快照复用、详情与"我的反馈"身份回填、图片鉴权可见性、搜索别名、会话、投稿幂等、**建店申请→待验证图层→地点核验→驳回→补材料（含作者自审 403）**、清单增删改、发布申请→审核批准→分享快照→撤回失效、举报队列与我的举报、审计日志。它会写库，改了 `packages/contracts/src/store.ts` 或 `apps/api/src/http/handlers.ts` 都应该跑它。
 **每轮都要换一个新的 `SQLITE_PATH`**：建店走幂等缓存，同一库跑第二遍会拿到第一次的响应快照（`version` 是旧值），后面的 `expected_version` 必然 409 —— 这是幂等语义本身，不是缺陷，但会让自检中断。
 
 `apps/api` 的路由有 OpenAPI 覆盖测试：新增路由必须同时在 `src/http/openapi.ts` 登记，否则 `"openapi.json 覆盖全部路由"` 会失败。

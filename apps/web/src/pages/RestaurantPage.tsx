@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   ATTITUDE_LABEL,
@@ -47,6 +47,8 @@ export function RestaurantPage() {
   const [reportOpen, setReportOpen] = useState(false);
   const [reportKind, setReportKind] = useState<ReportTicket['kind']>('wrong_info');
   const [reportDetail, setReportDetail] = useState('');
+  const [reportTarget, setReportTarget] = useState<FeedbackPublic | null>(null);
+  const reportBox = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -110,13 +112,26 @@ export function RestaurantPage() {
     }
   }
 
+  /** 从某条反馈进来的举报要带着版本指针，否则审核员只知道"这家店有人不满"。 */
+  function openReportFor(target: FeedbackPublic | null) {
+    setReportTarget(target);
+    if (target) setReportKind('abuse');
+    setReportOpen(true);
+    requestAnimationFrame(() => reportBox.current?.scrollIntoView({ block: 'center' }));
+  }
+
   async function sendReport() {
     setBusy(true);
     setError(null);
+    const target = reportTarget ? `${reportTarget.id}#v${reportTarget.revision}` : null;
     try {
-      const t = await api.createReport({ restaurant_id: id, kind: reportKind, detail: reportDetail });
-      setNotice(`工单 ${t.id}（${REPORT_STATUS_LABEL[t.status]}）已记入复核队列：同一门店同一问题重复提交不会新增工单，处理结果会显示在“我的”页面`);
+      const t = await api.createReport({ restaurant_id: id, kind: reportKind, detail: reportDetail, feedback_target: target });
+      setNotice(
+        `工单 ${t.id}（${REPORT_STATUS_LABEL[t.status]}）已记入复核队列${t.feedback_target ? `，关联到第 ${reportTarget?.revision ?? ''} 版反馈 ${t.feedback_target}` : ''}` +
+          '：同一门店同一问题重复提交不会新增工单，处理结果会显示在“我的”页面',
+      );
       setReportOpen(false);
+      setReportTarget(null);
       setReportDetail('');
     } catch (e) {
       setError((e as Error).message);
@@ -295,7 +310,7 @@ export function RestaurantPage() {
             {d.feedback_page.items.length === 0 ? (
               <p className="hint">还没有公开反馈。真实吃过之后可以写第一条。</p>
             ) : (
-              d.feedback_page.items.map((f) => <FeedbackRow key={f.id} f={f} />)
+              d.feedback_page.items.map((f) => <FeedbackRow key={f.id} f={f} onReport={user ? openReportFor : undefined} />)
             )}
           </section>
         </div>
@@ -363,14 +378,30 @@ export function RestaurantPage() {
                   <p className="hint">你还没有记录过这家店。</p>
                 )}
 
-                <div className="feedback">
+                <div className="feedback" ref={reportBox}>
                   <h3>纠错／举报</h3>
                   {!reportOpen ? (
-                    <button className="btn small plain" type="button" onClick={() => setReportOpen(true)}>
+                    <button
+                      className="btn small plain"
+                      type="button"
+                      onClick={() => {
+                        setReportTarget(null);
+                        setReportKind('wrong_info');
+                        setReportOpen(true);
+                      }}
+                    >
                       提交纠错
                     </button>
                   ) : (
                     <>
+                      {reportTarget && (
+                        <p className="hint">
+                          这条工单关联到「{reportTarget.author.display_name} 的第 {reportTarget.revision} 版反馈」
+                          <button className="link-btn" type="button" onClick={() => setReportTarget(null)}>
+                            改为举报整店
+                          </button>
+                        </p>
+                      )}
                       <label className="field">
                         <span className="label">问题类型</span>
                         <select value={reportKind} onChange={(e) => setReportKind(e.target.value as ReportTicket['kind'])}>
@@ -422,7 +453,7 @@ function statusLabel(s: string): string {
   return s === 'PENDING' ? '待审核' : s === 'APPROVED' ? '已公开' : s === 'REJECTED' ? '未通过' : s === 'HIDDEN' ? '已隐藏' : '草稿';
 }
 
-function FeedbackRow({ f }: { f: FeedbackPublic }) {
+function FeedbackRow({ f, onReport }: { f: FeedbackPublic; onReport?: (f: FeedbackPublic) => void }) {
   return (
     <article className="feedback">
       <div className="feedback-head">
@@ -444,6 +475,14 @@ function FeedbackRow({ f }: { f: FeedbackPublic }) {
         {f.disclosure_note ? `（${f.disclosure_note}）` : ''}
         {f.media_ids.length ? ` · ${f.media_ids.length} 张图` : ''}
       </p>
+      {onReport && (
+        <p style={{ margin: '6px 0 0' }}>
+          <button className="link-btn" type="button" onClick={() => onReport(f)}>
+            举报这条内容
+          </button>
+          <span className="hint"> · 工单会带上这条的具体版本，不会自动下架它</span>
+        </p>
+      )}
     </article>
   );
 }

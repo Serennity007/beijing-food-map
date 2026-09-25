@@ -9,7 +9,7 @@
 2. 不许虚构门店 / 探店 / 票数 / 核验证据；所有数据带 `is_test_data=true`；`production` 下引擎拒绝装载测试种子。
 3. 不许回退的业务不变量见 `docs/handover.md` §3（计票 `R≥3 且 4R≥3T`、180 个上海自然日、分享快照不可变、作者不能自审、私有内容判定在服务端、GCJ-02 只在渲染边界转换等）。
 
-本轮改完的门禁状态（这台机器实测，Windows + Node 24.18.0）：typecheck 3 个 workspace 全绿；测试 **134 项 0 失败**（contracts 91 / api 29 / web 14）；HTTP 契约自检 **57 项**；`npm run build` 退出码 0；两种模式的建店与举报闭环都在内嵌浏览器实测过（视口 531×568，命中窄屏断点，不是桌面宽度 —— 之前写成"桌面视口"是错的，已在 status/handover 更正）。
+本轮改完的门禁状态（这台机器实测，Windows + Node 24.18.0）：typecheck 3 个 workspace 全绿；测试 **135 项 0 失败**（contracts 92 / api 29 / web 14）；HTTP 契约自检 **61 项**；`npm run build` 退出码 0；两种模式的建店与举报闭环都在内嵌浏览器实测过（视口 531×568，命中窄屏断点，不是桌面宽度 —— 之前写成"桌面视口"是错的，已在 status/handover 更正）。
 
 ---
 
@@ -144,7 +144,8 @@ maplibre-gl  <=6.4.0   critical  XSS Sanitizer Bypass in DOM.sanitize()  GHSA-jr
 
 ## Q11 【1B · 接口语义】同人同店同类的重复举报，我选了"返回原单"而不是 409，对吗？
 
-**现状**（`Store.createReport`）：查同一 `reporter_id + restaurant_id + kind` 且状态为 `OPEN|IN_REVIEW` 的工单，命中就**把那张原单返回**（HTTP 201，响应里没有"这是复用"的标记，客户端靠 `status` 猜）；只有全部终态之后重发才会新建一张。
+**现状**（`Store.createReport`）：查同一 `reporter_id + restaurant_id + kind + feedback_target` 且状态为 `OPEN|IN_REVIEW` 的工单，命中就**把那张原单返回**（HTTP 201，响应里没有"这是复用"的标记，客户端靠 `status` 猜）；只有全部终态之后重发才会新建一张。
+（本文件初稿写这段时去重键还没有 `feedback_target`；随后补门店页"举报这条内容"入口时才发现必须带上，否则同店第二条反馈的举报会命中第一条的单、关联被静默丢掉。已改并加了测试。）
 
 **为什么这么选**：说明书 REC-07 要求"重复恶意举报不会自动伪造闭店/风险结论"，重点是别把量当成证据；而队列是人工处理的，第二张同内容单只会消耗审核员。409 在这里没有可操作的下一步 —— 用户不会为了"再提醒一次"去撤回自己的观察。
 
@@ -187,5 +188,5 @@ maplibre-gl  <=6.4.0   critical  XSS Sanitizer Bypass in DOM.sanitize()  GHSA-jr
 ## 附：阶段 1B（2026-09-25）实际改动清单
 
 **新增**：`packages/contracts/test/reports.test.ts`（7 项）、`POST /admin/reports/{id}/actions` 一条接口操作、`rules.ts` 的 `REPORT_TRANSITIONS`/`REPORT_ACTION_TARGET`/`canTransitionReport` 与 `shanghaiDay`/`shanghaiDateTime`、`enums.ts` 的 `REPORT_ACTIONS`/`REPORT_ACTION_LABEL`、`Store.decideReport`。
-**改动**：`dto.ts`（`ReportTicket` 加 `feedback_target`/`version`/`handled_by`/`handled_at`，`result_note` 语义改成"只能由处置写入"；`ReportQueueEntry` 加 `is_reporter_self`）、`store.ts`（`createReport` 去重 + 关联反馈、`reportQueue` 状态过滤与待处理优先排序、种子 `result_note` 归 null）、`handlers.ts`+`openapi.ts`（新动作路由、`status` 查询参数、schema）、`client.ts`/`http.ts`（`decideReport` 与带状态的 `reportQueue`）、`AdminPage.tsx`（举报复核面板：状态筛选片、按转移表出按钮、自报单只剩跳转、终态显示处置人与时间）、`RestaurantPage.tsx`/`MePage.tsx`/`CollectionEditPage.tsx`/`App.tsx`（时间展示统一、去重回执文案、页头去掉重复登录入口、门店详情去掉重复日期）、`scripts/http-contract-check.mts`（+10 步）、`scripts/serve-demo.mjs`（代理保留 Host、后端改用非 watch 启动）、`.gitignore`（忽略 `work/`）、五份文档。
+**改动**：`dto.ts`（`ReportTicket` 加 `feedback_target`/`version`/`handled_by`/`handled_at`，`result_note` 语义改成"只能由处置写入"；`ReportQueueEntry` 加 `is_reporter_self`）、`store.ts`（`createReport` 去重 + 关联反馈、`reportQueue` 状态过滤与待处理优先排序、种子 `result_note` 归 null）、`handlers.ts`+`openapi.ts`（新动作路由、`status` 查询参数、schema）、`client.ts`/`http.ts`（`decideReport` 与带状态的 `reportQueue`）、`AdminPage.tsx`（举报复核面板：状态筛选片、按转移表出按钮、自报单只剩跳转、终态显示处置人与时间）、`RestaurantPage.tsx`/`MePage.tsx`/`CollectionEditPage.tsx`/`App.tsx`（时间展示统一、去重回执文案、页头去掉重复登录入口、门店详情去掉重复日期、**每条反馈的"举报这条内容"入口与关联徽标**）、`scripts/http-contract-check.mts`（+14 步）、`scripts/serve-demo.mjs`（代理保留 Host、后端改用非 watch 启动）、`.gitignore`（忽略 `work/`）、五份文档。
 **实测抓到并当场修掉的 4 处**：见 `docs/status.md` 的"本轮实测与复核抓到并修掉的 4 处"。其中第一条（代理改写 `Host` 导致后端模式所有写操作 403）说明上一轮 DELIVERY 里"两种模式浏览器实测闭环走通"那句被过度延伸了：那次的 HTTP 模式实测走的是 **vite dev 代理**（`status.md` 的 verified 表原话），而 `一键演示-后端模式.bat` → `serve-demo.mjs --api` 这条自带代理的链路**从没写过数据**，这轮第一次真跑就撞上 403。口径已改：DELIVERY 现在明确写"含 `--api` 后端模式下的举报处置全链路"，并指出那是另一条代码路径。

@@ -284,6 +284,7 @@ export function MePage() {
                     {REPORT_STATUS_LABEL[r.status]}
                   </span>
                   <span className="badge muted">工单 {r.id}</span>
+                  {r.feedback_target && <span className="badge">关联 {r.feedback_target}</span>}
                 </div>
                 <p className="card-dishes">
                   <Link to={`/restaurants/${r.restaurant_id}`}>门店 {r.restaurant_id}</Link> · 提交 {shanghaiDay(r.created_at)}

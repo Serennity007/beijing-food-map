@@ -107,6 +107,29 @@ describe('阶段 1B 举报工单处置闭环', () => {
     expect(() => s.createReport({ restaurant_id: 'R21', kind: 'abuse', detail: '指向不存在的反馈', feedback_target: 'V9999#v1' }, sid)).toThrow(ApiError);
   });
 
+  it('去重按"同一件事"算：同一门店级重复举报合并，指向不同反馈的各留一张', () => {
+    const sid = u01();
+    const fb = s.detail('R01', sid).feedback_page.items;
+    expect(fb.length).toBeGreaterThanOrEqual(2);
+    const [a, b] = fb as [typeof fb[number], typeof fb[number]];
+    const ta = `${a.id}#v${a.revision}`;
+    const tb = `${b.id}#v${b.revision}`;
+
+    const first = s.createReport({ restaurant_id: 'R01', kind: 'abuse', detail: '测试举报（合成）：这条内容与实吃不符。', feedback_target: ta }, sid);
+    expect(first.feedback_target).toBe(ta);
+    // 同一条反馈再报一次 → 复用同一张单
+    const again = s.createReport({ restaurant_id: 'R01', kind: 'abuse', detail: '测试举报（合成）：再报一次同一条。', feedback_target: ta }, sid);
+    expect(again.id).toBe(first.id);
+    // 换一条反馈 → 是另一件事，必须新开一张，且不能把关联丢掉
+    const other = s.createReport({ restaurant_id: 'R01', kind: 'abuse', detail: '测试举报（合成）：另一条内容有问题。', feedback_target: tb }, sid);
+    expect(other.id).not.toBe(first.id);
+    expect(other.feedback_target).toBe(tb);
+    // 门店级举报（无关联）与它们互不合并
+    const storeLevel = s.createReport({ restaurant_id: 'R01', kind: 'abuse', detail: '测试举报（合成）：整店内容都有问题。' }, sid);
+    expect(storeLevel.feedback_target).toBeNull();
+    expect(storeLevel.id).not.toBe(first.id);
+  });
+
   it('处置动作进审计日志，队列按待处理优先', () => {
     const a = openTicket();
     const b = s.createReport({ restaurant_id: 'R22', kind: 'wrong_location', detail: '测试举报（合成）：点位在马路对面。' }, u01());

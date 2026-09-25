@@ -215,6 +215,16 @@ step('版本冲突被拒（409）', await rejects(() => api.decideReport({ id: f
 const mineAsMod = await api.createReport({ restaurant_id: 'R21', kind: 'wrong_info', detail: 'M01 自己提的举报，用来验证不能自处置。' });
 step('同人同店同类未结案不重复开单', (await api.createReport({ restaurant_id: 'R21', kind: 'wrong_info', detail: '换措辞的同类举报' })).id === mineAsMod.id);
 step('自己提的举报不能自己处置（403）', await rejects(() => api.decideReport({ id: mineAsMod.id, action: 'start', expected_version: mineAsMod.version })));
+// 举报可以精确指向某条反馈的某个版本；去重键必须带上这个指针
+const r01fb = (await api.detail('R01')).feedback_page.items;
+step('R01 有两条以上公开反馈可用于本段', r01fb.length >= 2, `${r01fb.length} 条`);
+const fbTa = `${r01fb[0].id}#v${r01fb[0].revision}`;
+const fbTb = `${r01fb[1].id}#v${r01fb[1].revision}`;
+const abuseA = await api.createReport({ restaurant_id: 'R01', kind: 'abuse', detail: 'M01 举报某条具体内容（合成）。', feedback_target: fbTa });
+step('举报带上反馈版本', abuseA.feedback_target === fbTa, fbTa);
+step('同一条反馈再报只有一张单', (await api.createReport({ restaurant_id: 'R01', kind: 'abuse', detail: '再报同一条（合成）。', feedback_target: fbTa })).id === abuseA.id);
+const abuseB = await api.createReport({ restaurant_id: 'R01', kind: 'abuse', detail: 'M01 举报另一条内容（合成）。', feedback_target: fbTb });
+step('指向不同反馈的各留一张且保留关联', abuseB.id !== abuseA.id && abuseB.feedback_target === fbTb, abuseB.id);
 const filtered = await api.reportQueue('RESOLVED');
 step('队列按状态过滤', filtered.length > 0 && filtered.every((r) => r.status === 'RESOLVED'), `${filtered.length} 条`);
 const openQueue = await api.reportQueue();

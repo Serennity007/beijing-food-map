@@ -14,10 +14,10 @@
 - 服务端固定网格聚合（`cellDegForZoom` 分档），点击展开带 `expansion_bounds`；快照/`queryKey` 过期返回 409 `QUERY_EXPIRED`；列表上限 200；写操作乐观锁 `expected_version`。
 - 坐标全程 GCJ-02，只在 MapLibre 渲染边界转 WGS84。
 - **新门店候选与地点核验**（阶段 1A，方案见 [design/restaurant-candidates.md](./design/restaurant-candidates.md)）：候选是独立实体，不与投稿版本混用；创建候选同时落一家 `place_status=PENDING` 的门店，默认层谓词未改动即把它挡在外面。同一作者重复提交同一家店复用同一条候选（不产生第二家门店）；命中已有门店只给重复提示（provider+poi_id / 同名且 ≤150 m / 同名但远），绝不自动合并或自动驳回；驳回必填理由且理由回传给作者；作者补材料在同一候选上 `revision+1` 并回到待核验，换坐标才递增 `location_version`；并入已有门店复用门店合并（仅 admin）。本人提交的候选在 `decideCandidate` 与 `patchRestaurantStatus` 两处都不能自审。
-- **举报工单处置闭环**（阶段 1B，见 decisions D19）：`createReport` 对同人+同店+同类型且未结案的重发返回原单；可选 `feedback_target` 关联到具体反馈版本；`reportQueue(sessionId, status?)` 待处理优先、上限 200、带门店名与 `is_reporter_self`；`decideReport` 走 `REPORT_TRANSITIONS`（终态无回退边）、结案与驳回必填处理结果、`expected_version` 不符 409、**举报人不能处置自己的工单**，且处置不改门店状态。`result_note` 只能由处置动作写入。
+- **举报工单处置闭环**（阶段 1B，见 decisions D19）：`createReport` 对同人+同店+同类型**且同一个 `feedback_target`** 且未结案的重发返回原单；门店页每条公开反馈都有"举报这条内容"入口，工单因此可以精确指向某条反馈的某一版（`VF002#v1` 形状），也可以只举报整店；`reportQueue(sessionId, status?)` 待处理优先、上限 200、带门店名与 `is_reporter_self`；`decideReport` 走 `REPORT_TRANSITIONS`（终态无回退边）、结案与驳回必填处理结果、`expected_version` 不符 409、**举报人不能处置自己的工单**，且处置不改门店状态。`result_note` 只能由处置动作写入。
 - 时间展示统一走 `shanghaiDay` / `shanghaiDateTime`（`rules.ts`，与 `shanghaiToday` 同一套 `Intl` 口径），页面不再截 UTC 字符串（见 decisions D20）。
 
-**网页端（`apps/web`）**：地图首页 + 筛选/搜索 + 详情、投稿（含**建店申请**入口）、我的（清单/反馈/举报/**建店进度与补材料**/注销）、清单编辑与发布/撤回、分享只读页、`/login`、`/admin` 审核台（含举报复核面板与**地点核验队列**）、法律页。地图适配器双实现（MapLibre 公共瓦片 + 高德 JS API 2.0），无 Key 时走瓦片兜底。举报、状态、候选与重复提示的中文标签统一取自 `contracts/enums.ts`，页面里不再各写一份。建店表单在 `features/candidates/CandidateForm.tsx` 只有一份，投稿页与"我的"页共用。「举报复核」面板按状态过滤（全部/待处理/复核中/已处理/已驳回），按引擎给的转移表显示"开始复核/确认并结案/驳回"，自己提交的那条只剩跳转按钮并写明原因，终态卡片显示处理结果与"由谁处置于何时"。
+**网页端（`apps/web`）**：地图首页 + 筛选/搜索 + 详情、投稿（含**建店申请**入口）、我的（清单/反馈/举报/**建店进度与补材料**/注销）、清单编辑与发布/撤回、分享只读页、`/login`、`/admin` 审核台（含举报复核面板与**地点核验队列**）、法律页。地图适配器双实现（MapLibre 公共瓦片 + 高德 JS API 2.0），无 Key 时走瓦片兜底。举报、状态、候选与重复提示的中文标签统一取自 `contracts/enums.ts`，页面里不再各写一份。建店表单在 `features/candidates/CandidateForm.tsx` 只有一份，投稿页与"我的"页共用。「举报复核」面板按状态过滤（全部/待处理/复核中/已处理/已驳回），按引擎给的转移表显示"开始复核/确认并结案/驳回"，自己提交的那条只剩跳转按钮并写明原因，终态卡片显示处理结果与"由谁处置于何时"。门店页每条公开反馈下面有"举报这条内容"，把工单指向该反馈的具体版本（也可改回举报整店），"我的"页与后台队列都显示这个指针。
 
 **演示后端（`apps/api`）**：`node:http` 外壳 + `node:sqlite` 文档表持久化 + SQL 迁移 + OpenAPI 3.0 全量覆盖 + HMAC 签名会话 Cookie（`SESSION_SECRET` 缺失时用进程内临时密钥，`SESSION_TTL_SECONDS` 控有效期，`COOKIE_SECURE` 可独立于 `NODE_ENV` 开启）+ 登录限流 + Origin/Sec-Fetch-Site 跨站写拦截 + 图片鉴权直出 + 审计日志 + 注销清除任务排空（启动时与每秒各跑一次，失败自动回滚重试）。新增 1 条举报处置接口后共 **44 条 method+path 操作 / 38 个不同路径**（`openapi.ts` 与路由表由测试强制一一对应），`documents` 表按 kind 多一行 `candidate`，**不需要新迁移**（文档表是通用形状）。
 
@@ -28,8 +28,8 @@
 | 命令 | 结果 |
 | --- | --- |
 | `npm run typecheck` | 3 个 workspace 全绿（`strict` + `noUncheckedIndexedAccess` + `noUnusedLocals`），退出码 0 |
-| `npm test -w @qianwei/contracts` / `-w @qianwei/web` / `-w @qianwei/api` | **134 项通过，0 失败**：contracts 91（3 个文件：store 63 + candidates 21 + reports 7）/ web 14 / api 29（三条命令各自退出码 0） |
-| `npx tsx scripts/http-contract-check.mts` | **57 项断言通过**（前端真实 `Http` 客户端 × 已监听后端，带 Cookie Jar；本轮为举报闭环加了 10 步） |
+| `npm test -w @qianwei/contracts` / `-w @qianwei/web` / `-w @qianwei/api` | **135 项通过，0 失败**：contracts 92（3 个文件：store 63 + candidates 21 + reports 7）/ web 14 / api 29（三条命令各自退出码 0） |
+| `npx tsx scripts/http-contract-check.mts` | **61 项断言通过**（前端真实 `Http` 客户端 × 已监听后端，带 Cookie Jar；本轮为举报闭环加了 14 步） |
 | `npm run build` | 退出码 0，4.70s。`index.js` 458.76 kB（gzip 138.96）、`maplibre.js` 1 052.94 kB（gzip 284.54）、`react.js` 50.95 kB（gzip 18.03）、CSS 87.27 kB（gzip 14.20） |
 | 写路径跑在独立库上 | 契约自检指向 `work/gate-1b-v2.sqlite`，浏览器实测指向 `work/verify-1b.sqlite`（都是空库由合成种子初始化）。**默认演示库 `apps/api/data/` 在本机根本不存在**（交接包不含它，本轮也没生成），所以种子基线计数无从被污染 |
 | 待验证图层口径 | `GET /map/items?...&layer=pending_verification` → `total_matched=6`，含种子里 4 家 PENDING（R02/R07/R19/R24）与两条待核验候选，**不含**已核验通过的 `R0029`；`query_key` 里的合同版本已是 `2.0-demo-2` |
@@ -50,6 +50,8 @@
 - **结果真的回写给举报人**：M01 回到 `/me` → `我的纠错与举报（1）` 列出 `信息有误 / 已处理 / 工单 REP0003 / 门店 R01 · 提交 2026-09-25`，正文下面是 `处理结果：跨账号处置（合成）：现场照片已核对，信息无误，工单结案。`
 - 版本锁：对同一张单用 `expected_version=9` 发处置请求 → `409 VERSION_CONFLICT 版本冲突，请重载后再操作`，用当前 v1 再发才成功。
 - 面板里**没有任何**"标记闭店/标记风险"的按钮，只给跳转；营业与风险状态仍然只能在「门店状态」里单独确认（REC-07 的"工单和阻断状态分开"）。
+- **举报可以精确指向某条反馈的某一版**（U04 在 `/restaurants/R01`）：每条公开反馈下面有"举报这条内容"，点开后表单顶部写明 `这条工单关联到「测试食客02 的第 1 版反馈」` 并给"改为举报整店"，问题类型自动切到"内容违规"；提交后回执原文 `工单 REP0003（待处理）已记入复核队列，关联到第 1 版反馈 VF002#v1：同一门店同一问题重复提交不会新增工单…`；`/me` 那张卡片带 `关联 VF002#v1` 与 `处理结果：暂无（仍待人工复核）`；M01 的后台卡片带 `关联反馈 VF002#v1` 徽标。三处指针一致，说明它是服务端存的，不是前端各写一份。
+- 这条入口也暴露了去重键的缺陷并当场修掉：原先只按 `同人+同店+kind` 去重，**举报第二条反馈会命中第一条的工单并把关联静默丢掉**；去重键加上 `feedback_target` 后，同店不同反馈各留一张、同一条再报仍只有一张（`reports.test.ts` 新增那条 + 契约自检 4 步）。
 
 **本轮实测与复核抓到并修掉的 4 处**
 - `serve-demo.mjs --api` 的代理把 `Host` 改写成 `127.0.0.1:8787`，于是后端把"浏览器 ↔ 演示服务"这条**真同源**链路判成跨站，所有写操作返回 `403 请求来源不在允许列表内` —— 一键演示的后端模式此前根本走不到写操作。改为保留访客 Host（跨站页面伪造不了 Host，所以 CSRF 判断没有放松）。
@@ -90,7 +92,7 @@
 覆盖到的关键行为（分布在三套测试与契约自检里，都是断言不是"看起来对"）：地图聚合与快照过期 409、媒体可见性、搜索、登录限流 429、投稿幂等键、审核写穿后旧快照 409、撤回不复活、清单发布/撤销换发 token、作者不能自审、门店合并、注销后数据处置、审计日志权限。本轮新增：会话 Cookie 的签名/篡改拒绝/TTL 与 `Secure` 独立开关（`apps/api/test/session.test.ts`）、进程重启后继续完成未跑完的注销清除且旧分享永久失效（`apps/api/test/handover.test.ts`）、举报队列的角色把关与门店摘要（api 测试 + 契约自检第 21 项）。
 本轮（阶段 1A）新增：`packages/contracts/test/candidates.test.ts` 21 项 + `apps/api/test/api.test.ts` 4 项 + 契约自检 18 项，钉住"建店落 PENDING 门店且只进待验证层""候选可立刻被真实投稿并回执待核验原因""**核验通过仍不等于好店达标**""同名近距/远距两种重复提示且都不自动合并""同作者重复提交复用候选（门店数不变）""驳回必填理由并回传到详情页与我的页""被驳回的门店退出两个图层""补材料 revision+1 回到待核验""只有作者能补材料且受版本锁""作者自审在 `decideCandidate` 与 `PATCH /admin/restaurants/:id/status` 两处都 403""并入走门店合并（仅 admin、旧 ID 永久重定向、反馈迁移）""候选随 dumpState/loadState 往返""注销后候选显示已注销用户"。
 另有一条**特征锁定测试**（`特征锁定（存疑）`）钉住一个既有行为：核验状态翻转会递增 `location_version`，从而把该门店已有社区票留在历史版本里、状态从 `QUALIFIED` 掉到 `LAPSED`（实测 R07：3-0-0 → 0-0-0）。这是既有规则且 `apps/api/test/api.test.ts` 有断言要求它，不是本轮引入；但是否属于规格原意存疑，见 `docs/questions-for-next-review.md` Q3。
-本轮（阶段 1B）新增：`packages/contracts/test/reports.test.ts` 7 项 + 改写的队列测试 + 契约自检 10 步，钉住"同人同店同类未结案只有一张单""不同人举报同一事实各留一张""结案/驳回缺理由 400""`OPEN→IN_REVIEW→RESOLVED` 与 `→DISMISSED` 两条路径""终态没有任何回退边""`expected_version` 不符 409 且不改状态""举报人自己处置 403（即使他是 admin）""处置工单不动门店 `business_status`/`risk_status`""`myReports` 只返回本人工单且带处置字段""队列按 待处理→复核中→终态 排序并支持状态过滤"。另有 `shanghaiDay`/`shanghaiDateTime` 的跨 UTC 16:00 边界断言（`store.test.ts`）。
+本轮（阶段 1B）新增：`packages/contracts/test/reports.test.ts` 8 项 + 改写的队列测试 + 契约自检 14 步，钉住"同人同店同类未结案只有一张单""**去重键包含 `feedback_target`：指向不同反馈的各留一张、关联不被静默丢掉**""不同人举报同一事实各留一张""结案/驳回缺理由 400""`OPEN→IN_REVIEW→RESOLVED` 与 `→DISMISSED` 两条路径""终态没有任何回退边""`expected_version` 不符 409 且不改状态""举报人自己处置 403（即使他是 admin）""处置工单不动门店 `business_status`/`risk_status`""`myReports` 只返回本人工单且带处置字段""队列按 待处理→复核中→终态 排序并支持状态过滤"。另有 `shanghaiDay`/`shanghaiDateTime` 的跨 UTC 16:00 边界断言（`store.test.ts`）。
 
 ## not verified（不要当成已交付）
 

@@ -1711,9 +1711,16 @@ export class Store {
         throw new ApiError('VALIDATION_ERROR', '举报关联的反馈不属于这家门店', 400, { feedback_target: '与门店不一致' });
       }
     }
-    // 同一人对同一家店的同一类问题，未结案的不重复开单：否则刷举报只会淹没队列
+    // 同一人对同一家店的同一类问题，未结案的不重复开单：否则刷举报只会淹没队列。
+    // 去重键必须带上 feedback_target：指向不同反馈的两条"内容违规"是两件不同的事，
+    // 合并成一条会让第二次的关联被静默丢掉。
     const open = this.reports.find(
-      (x) => x.reporter_id === user.id && x.restaurant_id === rec.id && x.kind === input.kind && (x.status === 'OPEN' || x.status === 'IN_REVIEW'),
+      (x) =>
+        x.reporter_id === user.id &&
+        x.restaurant_id === rec.id &&
+        x.kind === input.kind &&
+        (x.feedback_target ?? null) === target &&
+        (x.status === 'OPEN' || x.status === 'IN_REVIEW'),
     );
     if (open) return open;
     const ticket: ReportTicket = {

@@ -19,7 +19,7 @@ npm ci → npm run typecheck → npm test → VITE_BASE=/<仓库名>/ npm run bu
        → sed 替换 dist/404.html 的 __BASE__ → upload-pages-artifact(apps/web/dist) → deploy-pages
 ```
 
-- **测试是发布门禁**：134 项用例（contracts 91 / api 29 / web 14，本轮计数）任一失败就不部署。
+- **测试是发布门禁**：135 项用例（contracts 92 / api 29 / web 14，本轮计数）任一失败就不部署。
 - `VITE_BASE` 决定资源前缀与 `BrowserRouter` 的 `basename`；项目页必须是 `/<仓库名>/`，用户站点页留 `/`。
 - 深链接回退：Pages 不做 SPA history 回退，`apps/web/public/404.html` 会把原始路径写进 `sessionStorage['qianwei.fallback']` 再跳回应用根，`main.tsx` 用同一路径继续挂载路由。`__BASE__` 由上面的 `sed` 替换成真实公共路径；未替换时脚本会按 URL 首段猜一个兜底值。
 

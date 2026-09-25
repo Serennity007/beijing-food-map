@@ -75,7 +75,7 @@ curl -s "https://<后端>/api/v1/map/items?west=115.42&south=39.44&east=117.52&n
 回归对账（先把本地后端起在 `127.0.0.1:8787`，脚本打的是已在监听的实例；建议按 [local-dev.md](./local-dev.md) 把库指到独立文件）：
 
 ```bash
-npx tsx scripts/http-contract-check.mts   # 本轮 57 项断言，覆盖到建店与地点核验、分享撤回、举报队列与审计日志
+npx tsx scripts/http-contract-check.mts   # 本轮 61 项断言，覆盖到建店与地点核验、分享撤回、举报队列与审计日志
 ```
 
 ## 下线
