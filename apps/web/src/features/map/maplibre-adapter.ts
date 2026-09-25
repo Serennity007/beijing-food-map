@@ -40,6 +40,12 @@ import {
 /**
  * MapLibre GL 适配器：真实瓦片底图 + DOM 标记，不用任何图片假地图。
  *
+ * 依赖告警说明（GHSA-jrc7-96c5-q579，修复在 6.11.x，跨大版本）：
+ * 漏洞在 MapLibre 的 DOM.sanitize()，只有把 HTML 字符串交给 popup 等内部清洗路径才会触及。
+ * 本适配器不创建 popup、只把自建 DOM 元素交给 MapLibre，标记子元素也是纯 DOM 构造
+ * （见 adapters.util appendMarkerChildren），没有任何字符串进入 MapLibre 的清洗器，
+ * 因此该 CVE 在本仓库的使用面上不可达。升级 6.x 属破坏性变更，单独立项验证。
+ *
  * 坐标口径：数据合同是 GCJ-02，MapLibre 底图是 WGS84 —— 进 SDK 前 toRender() 转一次，
  * 出 SDK（视野上报）前 fromRender() 转回来；业务层与页面层永远只见 GCJ-02。
  */

@@ -199,13 +199,27 @@ export function markerView(entity: MapEntity, selected: boolean): MarkerView {
   };
 }
 
-/** 标记内部结构：形状 + 字母 + 图钉尖，形状与字母都写进 DOM 便于样式与读屏。 */
-export function markerInnerHtml(view: MarkerView): string {
-  const tip = view.kind === 'restaurant' ? '<span class="qm-marker__tip" aria-hidden="true"></span>' : '';
-  return (
-    `<span class="qm-marker__badge" data-shape="${view.shape}" data-hollow="${view.hollow ? '1' : '0'}">` +
-    `<span class="qm-marker__glyph">${view.text}</span></span>${tip}`
-  );
+/**
+ * 标记内部结构：形状 + 字母 + 图钉尖，形状与字母都写进 DOM 便于样式与读屏。
+ * 用 DOM 构造而不是 innerHTML 拼串：门店名等数据将来来自用户投稿，
+ * 任何数据都不允许经过 HTML 字符串解析（对存储型 XSS 的模式性防线）。
+ */
+export function appendMarkerChildren(el: HTMLElement, view: MarkerView): void {
+  const badge = document.createElement('span');
+  badge.className = 'qm-marker__badge';
+  badge.dataset.shape = view.shape;
+  badge.dataset.hollow = view.hollow ? '1' : '0';
+  const glyph = document.createElement('span');
+  glyph.className = 'qm-marker__glyph';
+  glyph.textContent = view.text;
+  badge.appendChild(glyph);
+  el.appendChild(badge);
+  if (view.kind === 'restaurant') {
+    const tip = document.createElement('span');
+    tip.className = 'qm-marker__tip';
+    tip.setAttribute('aria-hidden', 'true');
+    el.appendChild(tip);
+  }
 }
 
 /**
@@ -232,7 +246,8 @@ export function createMarkerEl(entity: MapEntity, selected: boolean): HTMLElemen
 export function applyMarkerView(el: HTMLElement, entity: MapEntity, selected: boolean): void {
   const view = markerView(entity, selected);
   el.className = view.className;
-  el.innerHTML = markerInnerHtml(view);
+  el.textContent = '';
+  appendMarkerChildren(el, view);
   el.setAttribute('role', 'button');
   el.setAttribute('tabindex', '0');
   el.setAttribute('aria-label', view.ariaLabel);
@@ -244,8 +259,13 @@ export function applyMarkerView(el: HTMLElement, entity: MapEntity, selected: bo
 export function createUserLocationEl(): HTMLElement {
   const el = document.createElement('div');
   el.className = 'qm-marker qm-marker--me';
-  el.innerHTML =
-    '<span class="qm-marker__pulse" aria-hidden="true"></span><span class="qm-marker__dot" aria-hidden="true"></span>';
+  const pulse = document.createElement('span');
+  pulse.className = 'qm-marker__pulse';
+  pulse.setAttribute('aria-hidden', 'true');
+  const dot = document.createElement('span');
+  dot.className = 'qm-marker__dot';
+  el.appendChild(pulse);
+  el.appendChild(dot);
   el.setAttribute('aria-label', '我的位置');
   el.setAttribute('role', 'img');
   return el;

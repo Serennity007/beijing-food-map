@@ -49,6 +49,15 @@
 - **B5 错误文案**：新增 `data/errors.ts`（码→人话映射，未映射的透出引擎原句），QUERY_EXPIRED/VERSION_CONFLICT/UNAUTHORIZED 不再把 snapshot/query_key/版本号甩给用户；`useMapData` 两处、门店页四处、投稿页 `readFailure` 已接线；loadMore 快照过期改为静默重拉。映射层在展示层，引擎错误码与规则未动。
 - 门禁（2026-09-26 实测）：typecheck 0 / 135 测试 0 失败 / 契约自检 61 项（`work/contract-check-r2.sqlite`）/ 演示自检 14 项 ALL GREEN（`work/demo-check-r2.sqlite`）/ build 退出码 0。
 
+**第三轮：bug 排查 + 审美刷新的实测（2026-09-26，证据截图 render-check `20-`–`23-`）**
+
+- **标记 DOM 加固（安全）**：地图标记此前用 innerHTML 拼字符串（`view.text` 目前只来自固定字母表与数字计数，不可利用，但店名将来来自用户投稿，一旦进该路径就是存储型 XSS）。已改为纯 `createElement`/`textContent` 构造（`appendMarkerChildren`），任何数据不再经过 HTML 解析。
+- **依赖告警处置**：`@vitest/mocker`（moderate，dev-only）与 `maplibre-gl`（critical，GHSA-jrc7-96c5-q579）的修复都是跨大版本（vitest 3→5、maplibre 5→6.11），无兼容路径，本轮不动。maplibre 该 CVE 触及 `DOM.sanitize()`，本仓库不创建 popup、不向 MapLibre 传任何 HTML 字符串，使用面上不可达；论证注释已写进 `maplibre-adapter.ts`，升级 6.x 留作独立事项（O7）。
+- **焦点管理**：从地图标记（含键盘激活）或搜索结果进入列表后，键盘焦点跟随到所选门店卡片，读屏用户不会"选中了却不知道选到了哪"。
+- **审美刷新（纯展示层，类名与结构未动）**：设计令牌更暖（纸面底色、暖白面板）、新增分层阴影（--shadow-sm/--shadow）与焦点环（--ring）；顶栏/品牌标/面板/卡片/抽屉/状态 pill（毛玻璃）加层次；按钮、chip、单选、表格行、链接全部补悬停与按压反馈；输入类控件焦点改色环；tabbar 激活加顶部指示条；长列表细滚动条；`prefers-reduced-motion` 下关闭全部过渡。已知状态色（ok/warn/danger/info）与 cuisine 徽标的形状编码未动（无障碍要求，状态不只靠颜色区分）。
+- 全页面烟测：地图（390/1440）、门店详情、投稿、后台待审队列（A01 登录）在浏览器过一遍，布局无回归；截图 `20-`–`23-`。
+- 门禁（2026-09-26 实测）：typecheck 0 / 135 测试 0 失败 / build 0 / 契约自检 61 项（`work/contract-check-r3.sqlite`）/ 演示自检 14 项 ALL GREEN（`work/demo-check-r3.sqlite`）。
+
 **第一轮修改的浏览器实测（2026-09-25，证据截图 render-check `9-`–`16-`）**
 
 - **A2 搜索跨视野定位**：望京约 1.5km 小视野（匹配 1 家）搜索并点击 11km 外的双井店——相机飞至目标（实测视口中心 = 目标坐标 116.4650,39.8928），搜索面板收起；双井店本身无社区票不合格，提示条如实写「已定位到…附近，但它不在当前筛选结果中」并给「直接查看详情」入口，没有擅自改筛选或把它混入结果。正路径：点击视野外但达标的劲松店（116.4620,39.8808），相机精准到位、列表卡片高亮滚动、无误导提示。静态模式抽查：面板收起、卡片激活、新视野查询等页面层行为一致（其相机动画在标签页被节流时冻结在中途，属环境伪影，机制与后端模式同一份代码）。

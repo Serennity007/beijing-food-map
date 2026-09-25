@@ -132,7 +132,11 @@ export function MapPage() {
     setSelectedId(null);
   }, []);
 
+  /* 定位收尾时把键盘焦点带到列表卡片：从地图标记或搜索结果进入列表后，
+     Tab 顺序从所选门店继续，读屏用户不会"选中了却不知道选到了哪"。 */
+  const focusCardOnLoad = useRef(false);
   const focusList = useCallback((id: string) => {
+    focusCardOnLoad.current = true;
     setSelectedId(id);
     setFocusTarget(null);
     document.getElementById(`card-${id}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -146,15 +150,20 @@ export function MapPage() {
   const focusSearchResult = useCallback((r: Restaurant) => {
     setQ('');
     setSearch(null);
+    focusCardOnLoad.current = true;
     setSelectedId(r.id);
     setFocusTarget((prev) => ({ id: r.id, name: r.name, point: { lng: r.lng, lat: r.lat }, signal: (prev?.signal ?? 0) + 1 }));
   }, []);
 
-  /* 新视野的数据回来后，如果选中门店已在列表里，把卡片滚进视野（定位的收尾联动）。 */
+  /* 新视野的数据回来后，如果选中门店已在列表里，把卡片滚进视野并把焦点带到卡片（定位的收尾联动）。 */
   useEffect(() => {
     if (!selectedId) return;
     if (!d.list.some((r) => r.id === selectedId)) return;
     document.getElementById(`card-${selectedId}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (focusCardOnLoad.current) {
+      focusCardOnLoad.current = false;
+      document.getElementById(`card-${selectedId}`)?.querySelector<HTMLButtonElement>('.card-title-btn')?.focus();
+    }
   }, [d.list, selectedId]);
 
   /**
