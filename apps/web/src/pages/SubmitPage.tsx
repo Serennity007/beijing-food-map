@@ -24,6 +24,7 @@ import {
 } from '@qianwei/contracts';
 import { useApi } from '../data/api';
 import { LS_DRAFT_PREFIX, type SearchResult } from '../data/client';
+import { describeError, readErrorCode } from '../data/errors';
 import { CandidateForm } from '../features/candidates/CandidateForm';
 import { StatusBlock } from '../components/ui';
 
@@ -64,13 +65,16 @@ function readFailure(e: unknown): ApiFailure {
         if (typeof v === 'string') fields[k] = v;
       }
     }
+    const code = typeof o.code === 'string' ? o.code : null;
+    const raw = typeof o.message === 'string' && o.message ? o.message : '请求失败，请稍后重试';
     return {
-      code: typeof o.code === 'string' ? o.code : null,
-      message: typeof o.message === 'string' && o.message ? o.message : '请求失败，请稍后重试',
+      code,
+      // B5：幂等冲突页面另有专门解释与操作按钮，保留原文；其余按码翻译成人话
+      message: code === 'IDEMPOTENCY_CONFLICT' ? raw : describeError(code, raw),
       fields,
     };
   }
-  return { code: null, message: e instanceof Error ? e.message : '请求失败，请稍后重试', fields };
+  return { code: readErrorCode(e), message: describeError(readErrorCode(e), e instanceof Error ? e.message : '请求失败，请稍后重试'), fields };
 }
 
 function isAttitude(v: unknown): v is FeedbackAttitude {

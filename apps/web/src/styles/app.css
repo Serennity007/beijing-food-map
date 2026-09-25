@@ -1026,6 +1026,32 @@ main:focus {
   background: #fffaef;
 }
 
+/* B2: 详情页速览 —— 一句话推荐依据 + 可展开的完整依据 */
+.basis-line {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f4faf6;
+  border-left: 4px solid var(--ok);
+  font-size: 13.5px;
+}
+
+.basis-details {
+  margin-top: 10px;
+  border-top: 1px dashed var(--line);
+  padding-top: 8px;
+}
+
+.basis-details summary {
+  cursor: pointer;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.basis-details[open] summary {
+  margin-bottom: 6px;
+}
+
 /* 表格（后台） */
 .table-wrap {
   overflow: auto;

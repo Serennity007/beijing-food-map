@@ -13,6 +13,7 @@ import {
   type SystemCollectionKind,
 } from '@qianwei/contracts';
 import { useApi } from '../data/api';
+import { describeError, readErrorCode } from '../data/errors';
 import { CuisineBadges, SourceBadges, StatusBlock, navUrl } from '../components/ui';
 
 const REPORT_KINDS: Array<{ value: ReportTicket['kind']; label: string }> = [
@@ -69,7 +70,7 @@ export function RestaurantPage() {
       const code = (e as { code?: string }).code;
       // 未公开与不存在统一表现，不泄露存在性
       if (code === 'NOT_FOUND') setNotFound(true);
-      else setError((e as Error).message);
+      else setError(describeError(readErrorCode(e), (e as Error).message));
     } finally {
       setBusy(false);
     }
@@ -91,7 +92,7 @@ export function RestaurantPage() {
       setInCollections(next);
       setNotice(on ? '已加入' : '已移除');
     } catch (e) {
-      setError((e as Error).message);
+      setError(describeError(readErrorCode(e), (e as Error).message));
     } finally {
       setBusy(false);
     }
@@ -106,7 +107,7 @@ export function RestaurantPage() {
       setNotice('已撤回，本店票数已重算');
       await load();
     } catch (e) {
-      setError((e as Error).message);
+      setError(describeError(readErrorCode(e), (e as Error).message));
     } finally {
       setBusy(false);
     }
@@ -134,7 +135,7 @@ export function RestaurantPage() {
       setReportTarget(null);
       setReportDetail('');
     } catch (e) {
-      setError((e as Error).message);
+      setError(describeError(readErrorCode(e), (e as Error).message));
     } finally {
       setBusy(false);
     }
@@ -207,104 +208,125 @@ export function RestaurantPage() {
       {error && <div className="alert bad">{error}</div>}
       {notice && <div className="alert ok">{notice}</div>}
 
-      <div className={d.in_default_layer ? 'basis' : 'basis warn'}>
-        <strong>推荐依据</strong>
-        <p style={{ margin: '4px 0 0' }}>
-          {d.in_default_layer ? '这家店出现在默认好店图层，因为：' : '这家店暂不在默认好店图层。'}
-        </p>
-        <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
-          <li>
-            社区：{COMMUNITY_QUALIFICATION_LABEL[d.basis.community]}。近 180 天窗口 {d.basis.window_start} ~ {d.basis.window_end}，推荐
-            {d.basis.tally.recommend} / 一般 {d.basis.tally.neutral} / 不推荐 {d.basis.tally.not_recommend}，共 {d.basis.tally.total} 张有效独立票
-          </li>
-          <li>
-            编辑实吃背书：
-            {d.basis.editorial === 'ACTIVE' && d.basis.editorial_detail
-              ? `有效（${d.basis.editorial_detail.author} 于 ${d.basis.editorial_detail.visited_date} 实吃，另有人员核验）`
-              : d.basis.editorial === 'EXPIRED'
-                ? '已过期（超过实吃日起 180 天）'
-                : d.basis.editorial === 'REVOKED'
-                  ? '已撤销'
-                  : '无'}
-          </li>
-          <li>地点核验：{d.place_status === 'VERIFIED' ? `已核验 ${d.place_verified_at ?? ''}` : '未核验'}</li>
-          {d.ineligibility_reasons.map((r) => (
-            <li key={r}>不符合项：{r}</li>
-          ))}
-        </ul>
-        <p className="hint" style={{ margin: '6px 0 0' }}>
-          规则版本 {d.basis.rule_version}。收藏、点赞和浏览都不计入票数。
-        </p>
-      </div>
+      {/* B2：不达标的原因必须醒目常显，不能折叠进"完整依据"里 */}
+      {!d.in_default_layer && (
+        <div className="basis warn" style={{ marginTop: 14 }}>
+          <strong>这家店暂不在默认好店地图</strong>
+          <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
+            {d.ineligibility_reasons.map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* B2：首屏先回答"吃什么、多少钱、在哪"；完整依据按需展开 */}
+      <section className="panel" style={{ marginTop: 14 }}>
+        {d.photo_media_ids.length > 0 ? (
+          <div className="thumbs">
+            {d.photo_media_ids.map((m) =>
+              photos[m] ? (
+                <img className="thumb" key={m} src={photos[m]} alt={`门店图片 ${m}（测试图片，非真实门店）`} loading="lazy" />
+              ) : (
+                <span className="thumb" key={m} title="未审核图片仅作者可见" />
+              ),
+            )}
+          </div>
+        ) : (
+          <p className="hint" style={{ margin: 0 }}>还没有原创门店图片。</p>
+        )}
+        <dl className="facts" style={{ marginTop: 10 }}>
+          <div>
+            <dt>地址</dt>
+            <dd>
+              {d.address}
+              {d.floor_info ? ` · ${d.floor_info}` : ''}
+            </dd>
+          </div>
+          <div>
+            <dt>人均</dt>
+            <dd className="money">
+              {d.price.average === null ? '未知' : `¥${d.price.average}`}（{d.price.report_count} 人报告，用户自报）
+            </dd>
+          </div>
+          <div>
+            <dt>推荐菜</dt>
+            <dd>{d.dish_highlights.join('、') || '尚未有人填写'}</dd>
+          </div>
+          <div>
+            <dt>口味标签</dt>
+            <dd>{d.taste_tags.join('、') || '无'}</dd>
+          </div>
+          <div>
+            <dt>营业状态</dt>
+            <dd>
+              {d.business_status_note}
+              {d.business_status === 'UNKNOWN' ? ' · 不自动推导“营业中”' : ''}
+            </dd>
+          </div>
+        </dl>
+        {d.in_default_layer && (
+          <p className="basis-line">
+            为什么在好店地图上：近 180 天里 {d.basis.tally.recommend} 位用户推荐（共 {d.basis.tally.total} 份有效反馈）
+            {d.basis.editorial === 'ACTIVE' ? '，另有编辑实吃核验' : ''}，地点已核验。
+          </p>
+        )}
+        <details className="basis-details">
+          <summary>查看完整推荐依据（时间窗、票数、地点核验与坐标）</summary>
+          <div className={d.in_default_layer ? 'basis' : 'basis warn'} style={{ marginTop: 8 }}>
+            <strong>推荐依据</strong>
+            <p style={{ margin: '4px 0 0' }}>
+              {d.in_default_layer ? '这家店出现在默认好店图层，因为：' : '这家店暂不在默认好店图层。'}
+            </p>
+            <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
+              <li>
+                社区：{COMMUNITY_QUALIFICATION_LABEL[d.basis.community]}。近 180 天窗口 {d.basis.window_start} ~ {d.basis.window_end}，推荐
+                {d.basis.tally.recommend} / 一般 {d.basis.tally.neutral} / 不推荐 {d.basis.tally.not_recommend}，共 {d.basis.tally.total} 张有效独立票
+              </li>
+              <li>
+                编辑实吃背书：
+                {d.basis.editorial === 'ACTIVE' && d.basis.editorial_detail
+                  ? `有效（${d.basis.editorial_detail.author} 于 ${d.basis.editorial_detail.visited_date} 实吃，另有人员核验）`
+                  : d.basis.editorial === 'EXPIRED'
+                    ? '已过期（超过实吃日起 180 天）'
+                    : d.basis.editorial === 'REVOKED'
+                      ? '已撤销'
+                      : '无'}
+              </li>
+              <li>地点核验：{d.place_status === 'VERIFIED' ? `已核验 ${d.place_verified_at ?? ''}` : '未核验'}</li>
+              {d.ineligibility_reasons.map((r) => (
+                <li key={r}>不符合项：{r}</li>
+              ))}
+            </ul>
+            <p className="hint" style={{ margin: '6px 0 0' }}>
+              规则版本 {d.basis.rule_version}。收藏、点赞和浏览都不计入票数。
+            </p>
+          </div>
+          <dl className="facts" style={{ marginTop: 8 }}>
+            <div>
+              <dt>地点核验</dt>
+              <dd>{d.verification_note}</dd>
+            </div>
+            <div>
+              <dt>坐标</dt>
+              <dd>
+                {d.lng.toFixed(5)}, {d.lat.toFixed(5)}（{d.coord_system}）
+                {user ? '' : ' · 登录授权后才显示直线距离'}
+              </dd>
+            </div>
+            <div>
+              <dt>数据来源</dt>
+              <dd>
+                {d.basis.sources.length ? d.basis.sources.map((s) => (s === 'community' ? '社区实吃' : '编辑实吃')).join(' + ') : '尚无有效来源'}
+                ，最近更新 {shanghaiDay(d.updated_at)}
+              </dd>
+            </div>
+          </dl>
+        </details>
+      </section>
 
       <div className="detail-grid" style={{ marginTop: 14 }}>
         <div>
-          <section className="panel">
-            <h2>门店资料</h2>
-            {d.photo_media_ids.length > 0 ? (
-              <div className="thumbs">
-                {d.photo_media_ids.map((m) =>
-                  photos[m] ? (
-                    <img className="thumb" key={m} src={photos[m]} alt={`门店图片 ${m}（测试图片，非真实门店）`} loading="lazy" />
-                  ) : (
-                    <span className="thumb" key={m} title="未审核图片仅作者可见" />
-                  ),
-                )}
-              </div>
-            ) : (
-              <p className="hint">还没有原创门店图片。</p>
-            )}
-            <dl className="facts" style={{ marginTop: 10 }}>
-              <div>
-                <dt>地址</dt>
-                <dd>
-                  {d.address}
-                  {d.floor_info ? ` · ${d.floor_info}` : ''}
-                </dd>
-              </div>
-              <div>
-                <dt>地点核验</dt>
-                <dd>{d.verification_note}</dd>
-              </div>
-              <div>
-                <dt>营业状态</dt>
-                <dd>
-                  {d.business_status_note}
-                  {d.business_status === 'UNKNOWN' ? ' · 不自动推导“营业中”' : ''}
-                </dd>
-              </div>
-              <div>
-                <dt>人均</dt>
-                <dd className="money">
-                  {d.price.average === null ? '未知' : `¥${d.price.average}`}（{d.price.report_count} 人报告，用户自报）
-                </dd>
-              </div>
-              <div>
-                <dt>推荐菜</dt>
-                <dd>{d.dish_highlights.join('、') || '尚未有人填写'}</dd>
-              </div>
-              <div>
-                <dt>口味标签</dt>
-                <dd>{d.taste_tags.join('、') || '无'}</dd>
-              </div>
-              <div>
-                <dt>坐标</dt>
-                <dd>
-                  {d.lng.toFixed(5)}, {d.lat.toFixed(5)}（{d.coord_system}）
-                  {user ? '' : ' · 登录授权后才显示直线距离'}
-                </dd>
-              </div>
-              <div>
-                <dt>数据来源</dt>
-                <dd>
-                  {d.basis.sources.length ? d.basis.sources.map((s) => (s === 'community' ? '社区实吃' : '编辑实吃')).join(' + ') : '尚无有效来源'}
-                  ，最近更新 {shanghaiDay(d.updated_at)}
-                </dd>
-              </div>
-            </dl>
-            <p className="hint">距离只在浏览器中按授权定位计算，为近似直线距离，不代表步行时间。</p>
-          </section>
-
           <section className="panel">
             <h2>最近反馈（{d.feedback_page.items.length}）</h2>
             {d.feedback_page.items.length === 0 ? (

@@ -22,14 +22,14 @@ export function CuisineBadges({ cuisines }: { cuisines: Cuisine[] }) {
   );
 }
 
-/** 推荐来源必须写清依据，不用单一颜色区分。 */
+/** 推荐来源必须写清依据，不用单一颜色区分。票数措辞带出窗口与样本量，避免"3/3=满分"的误读。 */
 export function SourceBadges({ r }: { r: Restaurant }) {
   const t = r.basis.tally;
   return (
     <span className="badges">
       {r.in_default_layer && r.basis.sources.includes('community') && (
-        <span className="badge ok" title={`近 180 个自然日：推荐 ${t.recommend} / 一般 ${t.neutral} / 不推荐 ${t.not_recommend}`}>
-          社区推荐 {t.recommend}/{t.total}
+        <span className="badge ok" title={`近 180 个自然日（${r.basis.window_start} ~ ${r.basis.window_end}）：推荐 ${t.recommend} / 一般 ${t.neutral} / 不推荐 ${t.not_recommend}`}>
+          近180天：{t.recommend} 推荐 / {t.total} 反馈
         </span>
       )}
       {r.basis.sources.includes('editorial') && <span className="badge editorial">编辑实吃核验</span>}

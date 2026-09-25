@@ -9,6 +9,7 @@ import {
   type Restaurant,
 } from '@qianwei/contracts';
 import type { ApiClient, MapQueryInput } from '../../data/client';
+import { describeError, readErrorCode } from '../../data/errors';
 import type { MapViewportState } from '../map/types';
 import { VIEWPORT_DEBOUNCE_MS } from '../map/types';
 
@@ -109,8 +110,9 @@ export function useMapData(api: ApiClient) {
           await fetchAll(q, false);
           return;
         }
-        // 失败保留上次数据并明确提示未刷新（MAP-06）
-        setError((e as Error).message || '数据加载失败');
+        // 失败保留上次数据并明确提示未刷新（MAP-06）；QUERY_EXPIRED 已自动重拉过一次，
+        // 还失败就用人话说明"数据更新了但没跟上"，不把 snapshot/query_key 甩给用户（B5）
+        setError(describeError(code ?? null, (e as Error).message || '数据加载失败'));
         setStale(true);
       } finally {
         if (mySeq === seq.current) {
@@ -170,8 +172,12 @@ export function useMapData(api: ApiClient) {
       setNextCursor(page.next_cursor);
     } catch (e) {
       const code = (e as { code?: string }).code;
-      setError(code === 'QUERY_EXPIRED' ? '筛选结果已更新，列表已重新拉取' : (e as Error).message);
-      if (code === 'QUERY_EXPIRED') await fetchAll(query, false);
+      if (code === 'QUERY_EXPIRED') {
+        // 筛选结果变化导致快照过期：直接重拉，不打扰用户
+        await fetchAll(query, false);
+      } else {
+        setError(describeError(readErrorCode(e), (e as Error).message));
+      }
     } finally {
       setListLoading(false);
     }
