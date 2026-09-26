@@ -18,6 +18,7 @@
   --danger: #a3231d;
   --info: #1d5a83;
   --indigo: #2e5f86; /* 蜡染靛蓝：装饰织带与黔味内容的主色 */
+  --font-display: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STZhongsong", "SimSun", serif; /* 大标题/品牌的编辑感 */
   --shadow-sm: 0 1px 2px rgba(28, 26, 24, 0.05), 0 2px 8px rgba(28, 26, 24, 0.05);
   --shadow: 0 1px 2px rgba(28, 26, 24, 0.07), 0 10px 28px rgba(28, 26, 24, 0.11);
   --ring: 0 0 0 3px rgba(180, 72, 58, 0.22);
@@ -63,9 +64,11 @@ h3 {
 }
 
 h1 {
-  font-size: 23px;
+  font-family: var(--font-display);
+  font-size: 25px;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
 }
 
 h2 {
@@ -160,6 +163,12 @@ main:focus {
   display: flex;
   flex-direction: column;
   line-height: 1.15;
+}
+
+.brand-text strong {
+  font-family: var(--font-display);
+  font-size: 16.5px;
+  letter-spacing: 0.04em;
 }
 
 .brand-text small {
@@ -273,6 +282,7 @@ main:focus {
 .tabbar a.active {
   color: var(--brand);
   font-weight: 600;
+  background: linear-gradient(180deg, rgba(253, 243, 241, 0.85), rgba(253, 243, 241, 0));
 }
 
 @media (min-width: 900px) {
@@ -331,11 +341,23 @@ main:focus {
 
 .panel {
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 1px solid rgba(34, 31, 28, 0.055);
   border-radius: var(--radius);
-  padding: 14px;
+  padding: 16px;
   margin-bottom: 14px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 2px rgba(28, 26, 24, 0.04), 0 8px 24px rgba(28, 26, 24, 0.06);
+}
+
+/* 面板小节的品牌刻度线（h3 不加，避免视觉噪声） */
+.panel h2::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 15px;
+  margin-right: 8px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--brand-2), var(--brand));
+  vertical-align: -2px;
 }
 
 .panel h2,
@@ -351,6 +373,31 @@ main:focus {
 
 .money {
   font-variant-numeric: tabular-nums;
+}
+
+/* 人均作为详情页的视觉锚点：大数字 + 弱化单位 */
+.price-big {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.price-big small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-3);
+  letter-spacing: 0;
+}
+
+/* 推荐菜以小标签呈现，替代顿号长串 */
+.dish-chip {
+  display: inline-block;
+  margin: 0 5px 5px 0;
+  padding: 2.5px 10px;
+  border-radius: 999px;
+  background: #fdf1ef;
+  color: #8c2f24;
+  font-size: 12.5px;
 }
 
 /* ---------- 按钮 / 表单 ---------- */
@@ -563,11 +610,14 @@ main:focus {
 
 .searchbar input {
   flex: 1;
-  padding: 10px 12px 10px 34px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  padding: 10px 14px 10px 36px;
+  border: 1px solid transparent;
+  border-radius: 999px;
   font: inherit;
-  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='%238a8379' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.8-3.8'/%3E%3C/svg%3E") no-repeat 11px center;
+  background: rgba(255, 255, 255, 0.92)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='%238a8379' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.8-3.8'/%3E%3C/svg%3E")
+    no-repeat 12px center;
+  box-shadow: var(--shadow-sm);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -652,9 +702,9 @@ main:focus {
 
 .status-empty {
   color: var(--ink-2);
-  border: 1px dashed var(--line-strong);
-  background: var(--surface);
-  padding: 26px 16px;
+  border: 0;
+  background: #f7f3ec;
+  padding: 30px 18px;
 }
 
 .status-error {
@@ -714,14 +764,19 @@ main:focus {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 1px 7px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
+  padding: 1.5px 8px;
+  border: 0;
+  border-radius: 999px;
   background: var(--surface-2);
   color: var(--ink-2);
   font-size: 11.5px;
   line-height: 1.7;
   white-space: nowrap;
+}
+
+/* 菜系徽章保留描边与异形圆角：形状是它们的编码通道 */
+.badge[class*='cuisine-'] {
+  border: 1px solid var(--line);
 }
 
 .badge.ok {
@@ -803,9 +858,10 @@ main:focus {
 
 .card {
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 1px solid rgba(34, 31, 28, 0.05);
   border-radius: var(--radius);
-  padding: 12px;
+  padding: 13px;
+  box-shadow: 0 1px 2px rgba(28, 26, 24, 0.04), 0 4px 14px rgba(28, 26, 24, 0.05);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -999,8 +1055,8 @@ main:focus {
   flex-direction: column;
   height: 14dvh; /* B1: 与默认低档一致，避免首载闪一次折叠动画 */
   max-height: calc(100% - 120px);
-  border-top: 1px solid var(--line);
-  border-radius: 16px 16px 0 0;
+  border-top: 0;
+  border-radius: 18px 18px 0 0;
   background: var(--surface);
   box-shadow: 0 -10px 32px rgba(28, 26, 24, 0.16);
   touch-action: none;
@@ -1045,8 +1101,10 @@ main:focus {
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
+  border-bottom: 0;
+  background: rgba(255, 254, 251, 0.84);
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
 }
 
 /* B1：折叠筛选面板 —— 预算/口味/待验证图层收进来，首屏少占一整行 */
@@ -1063,9 +1121,11 @@ main:focus {
   padding: 10px 12px;
   max-height: 44dvh;
   overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 254, 251, 0.94);
+  backdrop-filter: blur(12px) saturate(1.1);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
   box-shadow: var(--shadow);
 }
 
@@ -1158,9 +1218,8 @@ main:focus {
 
 .facts div {
   display: flex;
-  gap: 8px;
-  padding: 4px 0;
-  border-bottom: 1px dotted var(--line);
+  gap: 10px;
+  padding: 6px 0;
 }
 
 .facts dt {
@@ -1237,8 +1296,20 @@ main:focus {
 }
 
 .qian-dict dt {
-  margin-top: 9px;
-  font-weight: 600;
+  margin-top: 10px;
+  font-family: var(--font-display);
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--indigo);
+}
+
+.qian-dict dd {
+  padding-bottom: 8px;
+}
+
+.qian-dict dt:not(:first-child) {
+  border-top: 1px solid rgba(46, 95, 134, 0.14);
+  padding-top: 10px;
 }
 
 .qian-dict dd {

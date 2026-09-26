@@ -261,13 +261,28 @@ export function RestaurantPage() {
           </div>
           <div>
             <dt>人均</dt>
-            <dd className="money">
-              {d.price.average === null ? '未知' : `¥${d.price.average}`}（{d.price.report_count} 人报告，用户自报）
+            <dd className="money price-big">
+              {d.price.average === null ? (
+                '未知'
+              ) : (
+                <>
+                  ¥{d.price.average}
+                  <small> / 人 · {d.price.report_count} 人报告（用户自报）</small>
+                </>
+              )}
             </dd>
           </div>
           <div>
             <dt>推荐菜</dt>
-            <dd>{d.dish_highlights.join('、') || '尚未有人填写'}</dd>
+            <dd className="dish-chips">
+              {d.dish_highlights.length
+                ? d.dish_highlights.map((x) => (
+                    <span className="dish-chip" key={x}>
+                      {x}
+                    </span>
+                  ))
+                : '尚未有人填写'}
+            </dd>
           </div>
           <div>
             <dt>口味标签</dt>
