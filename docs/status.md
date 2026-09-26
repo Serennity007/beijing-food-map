@@ -82,6 +82,13 @@
 - 已知取舍：衬线在未装 Noto Serif SC 的 Windows 上回退到中宋/宋体，大字号下效果可接受（已在 390/1440 截图核验）；`backdrop-filter` 在不支持的浏览器上退化为半透明纯色，仍可读。
 - 门禁（2026-09-26 实测）：typecheck 0 / 135 测试 0 失败 / build 0 / 契约自检 61 项（`work/contract-check-r6.sqlite`）/ 演示自检 14 项 ALL GREEN（`work/demo-check-r6.sqlite`）。
 
+**第七轮：GitHub Pages 线上部署的实测（2026-09-26，证据截图 render-check `30-`）**
+
+- **线上演示已上线**：https://serennity007.github.io/beijing-food-map/ （公开仓库 Serennity007/beijing-food-map，gh-pages 分支静态部署，与学生系统 study-progress-demo 同一模式）。实测：首页 200、`/beijing-food-map/map` 静态模式引擎跑通（匹配 4 家、地图渲染、标记交互）、深链接 `/restaurants/R01` 经 404 回退直达详情页（价格锚点等新 UI 在线上同样生效）。
+- **部署路径**：`MSYS_NO_PATHCONV=1 VITE_BASE=/beijing-food-map/ npm run build` → 改写 `dist/404.html` 的 `__BASE__` → 产物推 `gh-pages` 分支 → Pages 从该分支发布（GitHub 在分支推送时自动启用）。
+- **未竟事项（如实）**：`main` 源码分支尚未推上 GitHub——gh 的 OAuth 令牌缺 `workflow` scope，推含 Actions 工作流的提交会被拒。已两次发起 `gh auth refresh -s workflow` 设备码授权（用户未在有效期内完成）；授权后一条 `git push -u origin main` 即可补上，`.github/workflows/deploy-web.yml` 的自动 CI+Pages 流水线随之生效。**后端（apps/api）与学生系统同口径**：Pages 跑静态演示模式（浏览器内引擎 + localStorage）；真实后端等 Render 授权后按 `render.yaml` 与 `docs/runbooks/deploy-api.md` 一键部署。
+- 本轮 `.nojekyll` 与 `robots.txt` 随产物推入；代理走本机 7890（git 全局已配，gh 需 `HTTPS_PROXY` 环境变量）。
+
 **第一轮修改的浏览器实测（2026-09-25，证据截图 render-check `9-`–`16-`）**
 
 - **A2 搜索跨视野定位**：望京约 1.5km 小视野（匹配 1 家）搜索并点击 11km 外的双井店——相机飞至目标（实测视口中心 = 目标坐标 116.4650,39.8928），搜索面板收起；双井店本身无社区票不合格，提示条如实写「已定位到…附近，但它不在当前筛选结果中」并给「直接查看详情」入口，没有擅自改筛选或把它混入结果。正路径：点击视野外但达标的劲松店（116.4620,39.8808），相机精准到位、列表卡片高亮滚动、无误导提示。静态模式抽查：面板收起、卡片激活、新视野查询等页面层行为一致（其相机动画在标签页被节流时冻结在中途，属环境伪影，机制与后端模式同一份代码）。

@@ -9,9 +9,9 @@
 1. **[未闭合] 高德 JS API 2.0 Key + 安全密钥**
    填 `VITE_AMAP_KEY` / `VITE_AMAP_SECURITY_CODE`（控制台里把 Key 限定到部署域名）。双适配器已实现并有纯函数单测，但**没在真实高德地图上渲染过**，地图选点的高德分支同样未验。没有 Key 时走 MapLibre + 公共瓦片（OpenFreeMap / CARTO）—— 公共瓦片有配额与商用限制，只适合演示。
 
-2. **[未闭合] 托管平台授权与仓库推送**
-   `Dockerfile` 与 `render.yaml` 已写好但**未在任何账号上构建或导入**（本机没有 Docker；注册/创建服务/绑定域名都是操作你的账号）。
-   前端目标仓库已确认为 `Serennity007/beijing-food-map`（public）。本机 `gh` 已登录到该账号，但：① 推送需要你明确同意；② 现在 `origin` 指向源机器的本地路径 `D:/桌面/qianwei-project-20260924/code/beijing-food-map`（`git ls-remote origin` 直接 fatal），推送前必须先换地址。
+2. **[部分闭合 2026-09-26] 托管平台授权与仓库推送**
+   ✅ **GitHub Pages 线上演示已上线**：https://serennity007.github.io/beijing-food-map/ （公开仓库 `Serennity007/beijing-food-map`，gh-pages 分支静态部署，静态演示模式 = 浏览器内引擎 + localStorage）。深链接与 404 回退已实测。
+   ⏳ **剩余**：① `main` 源码分支未推上（gh OAuth 缺 `workflow` scope，设备码授权两次未在有效期内完成；授权后 `git push -u origin main` 即补齐，Actions 流水线随之生效）；② 真实后端托管仍待你在 render.com 用 GitHub 登录接同仓库，读 `render.yaml` 一键部署（`docs/runbooks/deploy-api.md`）；③ `Dockerfile` 仍未构建过（本机无 Docker）。
    提交身份 `Pasteliangzhengtao <cse.ztliang22@gzu.edu.cn>` 在 public 仓库会公开可见 —— 改不改由你决定，**AI 不会擅自改 git config**。
 
 3. **[未闭合] 真实门店与核验数据源**
