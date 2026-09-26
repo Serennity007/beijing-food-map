@@ -1443,3 +1443,23 @@ table.data th {
     animation-duration: 0.01ms !important;
   }
 }
+
+/* 打卡/记账列表行 */
+.row-dining {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13.5px;
+}
+
+.row-dining:last-child {
+  border-bottom: 0;
+}
+
+.row-dining-main {
+  flex: 1;
+  min-width: 0;
+}

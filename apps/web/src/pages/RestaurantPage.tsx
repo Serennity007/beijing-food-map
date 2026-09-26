@@ -50,6 +50,11 @@ export function RestaurantPage() {
   const [reportDetail, setReportDetail] = useState('');
   const [reportTarget, setReportTarget] = useState<FeedbackPublic | null>(null);
   const reportBox = useRef<HTMLDivElement>(null);
+  const [checkinOpen, setCheckinOpen] = useState(false);
+  const [checkinDate, setCheckinDate] = useState('');
+  const [checkinAmount, setCheckinAmount] = useState('');
+  const [checkinNote, setCheckinNote] = useState('');
+  const [todayMax, setTodayMax] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -79,6 +84,13 @@ export function RestaurantPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void api
+      .today()
+      .then((t) => setTodayMax(t))
+      .catch(() => setTodayMax(null));
+  }, [api]);
 
   async function toggleCollection(kind: SystemCollectionKind, on: boolean) {
     setBusy(true);
@@ -119,6 +131,27 @@ export function RestaurantPage() {
     if (target) setReportKind('abuse');
     setReportOpen(true);
     requestAnimationFrame(() => reportBox.current?.scrollIntoView({ block: 'center' }));
+  }
+
+  async function sendCheckin(): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      const log = await api.createDiningLog({
+        restaurant_id: d?.id ?? '',
+        visited_date: checkinDate,
+        amount_yuan: checkinAmount.trim() === '' ? null : Number(checkinAmount),
+        note: checkinNote.trim() === '' ? null : checkinNote.trim(),
+      });
+      setCheckinOpen(false);
+      setCheckinAmount('');
+      setCheckinNote('');
+      setNotice(`打卡成功（${log.visited_date}）${log.amount_fen !== null ? `，已记账 ¥${(log.amount_fen / 100).toFixed(2)}` : ''}；记录只本人可见，可在「我的」页管理`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   function copyLink(): void {
@@ -215,6 +248,16 @@ export function RestaurantPage() {
           <button className="btn small plain" type="button" onClick={copyLink}>
             复制链接
           </button>
+          <button
+            className="btn small plain"
+            type="button"
+            onClick={() => {
+              setCheckinDate(todayMax ?? '');
+              setCheckinOpen(!checkinOpen);
+            }}
+          >
+            {checkinOpen ? '收起打卡' : '打卡'}
+          </button>
           <Link className="btn small ghost" to={`/submit?restaurant=${d.id}`}>
             我吃过，写反馈
           </Link>
@@ -223,6 +266,30 @@ export function RestaurantPage() {
 
       {error && <div className="alert bad">{error}</div>}
       {notice && <div className="alert ok">{notice}</div>}
+
+      {checkinOpen && (
+        <div className="panel">
+          <h2>打卡 · 记账</h2>
+          <label className="field">
+            <span className="label">到店日期</span>
+            <input type="date" value={checkinDate} max={todayMax ?? undefined} onChange={(e) => setCheckinDate(e.target.value)} />
+          </label>
+          <label className="field">
+            <span className="label">消费金额（元，可留空）</span>
+            <input type="number" min="0" max="100000" step="0.01" value={checkinAmount} onChange={(e) => setCheckinAmount(e.target.value)} placeholder="例如：128.50" />
+          </label>
+          <label className="field">
+            <span className="label">备注（可留空）</span>
+            <input value={checkinNote} maxLength={200} onChange={(e) => setCheckinNote(e.target.value)} placeholder="例如：和朋友的周末早午餐" />
+          </label>
+          <div className="btn-row">
+            <button className="btn small" type="button" disabled={busy || checkinDate === ''} onClick={() => void sendCheckin()}>
+              保存打卡
+            </button>
+            <span className="hint">打卡与记账仅本人可见，不参与公开推荐与票数；可在「我的」页管理。</span>
+          </div>
+        </div>
+      )}
 
       {/* B2：不达标的原因必须醒目常显，不能折叠进"完整依据"里 */}
       {!d.in_default_layer && (
@@ -354,6 +421,25 @@ export function RestaurantPage() {
             </div>
           </dl>
         </details>
+      </section>
+
+      <section className="panel" style={{ marginTop: 14 }}>
+        <h2>交通与到店</h2>
+        <p className="hint">
+          坐标 {d.lng.toFixed(5)}, {d.lat.toFixed(5)}（GCJ-02）。选择出行方式将跳转高德地图路线规划：
+        </p>
+        <div className="btn-row">
+          <a className="btn small ghost" target="_blank" rel="noreferrer" href={`https://uri.amap.com/navigation?to=${d.lng.toFixed(6)},${d.lat.toFixed(6)},${encodeURIComponent(d.name)}&mode=bus&policy=1&src=qianwei-map&coordinate=gaode&callnative=0`}>
+            公交路线
+          </a>
+          <a className="btn small ghost" target="_blank" rel="noreferrer" href={`https://uri.amap.com/navigation?to=${d.lng.toFixed(6)},${d.lat.toFixed(6)},${encodeURIComponent(d.name)}&mode=car&policy=2&src=qianwei-map&coordinate=gaode&callnative=0`}>
+            驾车路线
+          </a>
+          <a className="btn small ghost" target="_blank" rel="noreferrer" href={`https://uri.amap.com/navigation?to=${d.lng.toFixed(6)},${d.lat.toFixed(6)},${encodeURIComponent(d.name)}&mode=walk&src=qianwei-map&coordinate=gaode&callnative=0`}>
+            步行路线
+          </a>
+        </div>
+        <p className="hint">路线由高德网页服务生成，演示环境不保证实时路况；门店坐标为演示合成坐标。</p>
       </section>
 
       <div className="detail-grid" style={{ marginTop: 14 }}>

@@ -334,6 +334,31 @@ const REPORT = obj(
   ['id', 'restaurant_id', 'kind', 'detail', 'reporter_id', 'status', 'created_at', 'version'],
 );
 
+/** 美食打卡/记账：个人到店记录与消费记账（不参与公开推荐与票数）。 */
+const DINING_LOG = obj(
+  {
+    id: str(),
+    user_id: str(),
+    restaurant_id: str(),
+    restaurant_name: str(),
+    visited_date: str('date'),
+    amount_fen: nullable(int(0)),
+    note: nullable(str()),
+    created_at: str('date-time'),
+  },
+  ['id', 'user_id', 'restaurant_id', 'restaurant_name', 'visited_date', 'created_at'],
+);
+
+/** 打卡/记账月度汇总。 */
+const DINING_LOG_STATS = obj(
+  {
+    month: str(),
+    count: int(0),
+    total_fen: int(0),
+  },
+  ['month', 'count', 'total_fen'],
+);
+
 /** 审计条目：只记录谁在什么时候对什么做了什么，不含验证码与令牌。 */
 const AUDIT_REC = obj(
   {
@@ -613,6 +638,48 @@ function documentOperations(): Record<string, Record<string, unknown>> {
     },
     'GET /me/submissions': { tags: ['feedback'], summary: '我的投稿', responses: { '200': ok(arr(ref('Submission'))), '401': err(401, 'UNAUTHORIZED', '需要登录') } },
     'GET /me/reports': { tags: ['reports'], summary: '我的举报', responses: { '200': ok(arr(ref('ReportTicket'))), '401': err(401, 'UNAUTHORIZED', '需要登录') } },
+
+    'POST /me/dining-logs': {
+      tags: ['dining'],
+      summary: '新增美食打卡/记账',
+      description: '个人到店记录与消费记账，只本人可见，不参与公开推荐与票数计算。日期不允许未来；金额为门店现场消费（元）。',
+      requestBody: body(
+        obj(
+          {
+            restaurant_id: str(),
+            visited_date: str(),
+            amount: { type: 'number', description: '消费金额（元），0—100000；不传即只打卡不记账', nullable: true },
+            note: nullable(str()),
+          },
+          ['restaurant_id', 'visited_date'],
+        ),
+      ),
+      responses: {
+        '201': ok(ref('DiningLog')),
+        '400': err(400, 'VALIDATION_ERROR', '日期格式非法/日期是未来/金额越界/备注超长'),
+        '401': err(401, 'UNAUTHORIZED', '需要登录'),
+        '404': err(404, 'NOT_FOUND', '门店不存在'),
+      },
+    },
+
+    'GET /me/dining-logs': {
+      tags: ['dining'],
+      summary: '我的打卡/记账列表（含当月次数与消费合计）',
+      responses: {
+        '200': ok(ref('DiningLogPage')),
+        '401': err(401, 'UNAUTHORIZED', '需要登录'),
+      },
+    },
+
+    'DELETE /me/dining-logs/{id}': {
+      tags: ['dining'],
+      summary: '删除我的打卡/记账记录',
+      responses: {
+        '200': ok(obj({ ok: { type: 'boolean' } })),
+        '401': err(401, 'UNAUTHORIZED', '需要登录'),
+        '404': err(404, 'NOT_FOUND', '记录不存在或不属于本人'),
+      },
+    },
 
     'POST /submissions': {
       tags: ['feedback'],
@@ -926,6 +993,7 @@ export function buildOpenApi(routes: RouteDef[]): Record<string, unknown> {
       { name: 'media', description: '图片资源与 demo 上传' },
       { name: 'auth', description: '会话与账号注销' },
       { name: 'feedback', description: '实吃投稿与撤回' },
+      { name: 'dining', description: '美食打卡与记账（个人）' },
       { name: 'collections', description: '清单、分享与发布' },
       { name: 'reports', description: '举报' },
       { name: 'candidates', description: '新门店候选与地点核验' },
@@ -963,6 +1031,15 @@ export function buildOpenApi(routes: RouteDef[]): Record<string, unknown> {
         Collection: COLLECTION,
         SharedCollectionSnapshot: SHARED_SNAPSHOT,
         ReportTicket: REPORT,
+        DiningLog: DINING_LOG,
+        DiningLogStats: DINING_LOG_STATS,
+        DiningLogPage: obj(
+          {
+            logs: arr(ref('DiningLog')),
+            stats: ref('DiningLogStats'),
+          },
+          ['logs', 'stats'],
+        ),
         RestaurantCandidate: RESTAURANT_CANDIDATE,
         CandidateDuplicate: CANDIDATE_DUPLICATE,
         ProviderCandidate: PROVIDER_CANDIDATE,

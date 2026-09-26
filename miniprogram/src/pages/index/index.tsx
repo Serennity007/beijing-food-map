@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
 import { Map, View, Text, ScrollView } from '@tarojs/components'
 import { BEIJING_BOUNDS, BEIJING_CENTER } from '@qianwei/contracts'
-import { fetchMap, fetchList, type MapQuery, type MapEntity, type Restaurant } from '../../api'
+import { fetchMap, fetchList, searchStores, type MapQuery, type MapEntity, type Restaurant } from '../../api'
 import markerRestaurant from '../../assets/marker-restaurant.png'
 import markerCluster from '../../assets/marker-cluster.png'
 import './index.scss'
@@ -37,12 +37,17 @@ export default function Index() {
   const [markers, setMarkers] = useState<Taro.maps.Marker[]>([])
   const [models, setModels] = useState<Record<number, MarkerModel>>({})
   const [region, setRegion] = useState({ ...BEIJING_CENTER, zoom: 11 })
+  const [view, setView] = useState<'guizhou' | 'southwest' | 'other'>('guizhou')
+  const [layer, setLayer] = useState<'qualified' | 'pending_verification'>('qualified')
+  const [term, setTerm] = useState('')
+  const [hits, setHits] = useState<Restaurant[] | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
+    const q: MapQuery = { ...QUERY, view, layer }
     try {
-      const map = await fetchMap(QUERY)
+      const map = await fetchMap(q)
       const nextModels: Record<number, MarkerModel> = {}
       const nextMarkers: Taro.maps.Marker[] = map.items.map((entity, i) => {
         const id = i + 1
@@ -90,18 +95,33 @@ export default function Index() {
       setSnapshotId(map.snapshot_id)
       setMarkers(nextMarkers)
       setModels(nextModels)
-      const page = await fetchList(QUERY, map.snapshot_id)
+      const page = await fetchList(q, map.snapshot_id)
       setList(page.items)
     } catch (e) {
       setError((e as Error).message || '数据加载失败')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [view, layer])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  // 门店搜索（防抖 300ms），结果叠在地图列表之上
+  useEffect(() => {
+    const t = term.trim()
+    if (!t) {
+      setHits(null)
+      return
+    }
+    const timer = setTimeout(() => {
+      void searchStores(t)
+        .then((r) => setHits(r.own))
+        .catch(() => setHits(null))
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [term])
 
   const onMarkerTap = useCallback(
     (e) => {
@@ -167,6 +187,22 @@ export default function Index() {
 
   return (
     <View className="page">
+      <View className="toolbar">
+        <Input className="search-input" value={term} onInput={(e) => setTerm(e.detail.value)} placeholder="搜店名、菜名或地址" />
+        <View className="chips">
+          {(['guizhou', 'southwest', 'other'] as const).map((v) => (
+            <Text key={v} className={view === v ? 'chip active' : 'chip'} onClick={() => setView(v)}>
+              {v === 'guizhou' ? '贵州菜' : v === 'southwest' ? '西南风味' : '北京其他'}
+            </Text>
+          ))}
+          <Text
+            className={layer === 'pending_verification' ? 'chip active' : 'chip'}
+            onClick={() => setLayer(layer === 'pending_verification' ? 'qualified' : 'pending_verification')}
+          >
+            {layer === 'pending_verification' ? '显示待验证' : '待验证图层'}
+          </Text>
+        </View>
+      </View>
       <View className="map-wrap">
         <Map
           className="the-map"
@@ -188,6 +224,28 @@ export default function Index() {
         </View>
       </View>
 
+      {hits && hits.length > 0 && (
+        <View className="panel">
+          <Text className="label">搜索结果（{hits.length}）</Text>
+          {hits.slice(0, 6).map((r) => (
+            <View className="row" key={r.id} onClick={() => openDetail(r.id)}>
+              <Text className="row-main">
+                {r.name}
+                {r.branch ? `（${r.branch}）` : ''}
+              </Text>
+              <Text className="row-sub">{r.address}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      {hits && hits.length === 0 && (
+        <View className="panel">
+          <Text className="label">没有匹配的已收录门店</Text>
+          <Button className="btn-plain" onClick={() => Taro.navigateTo({ url: '/pages/submit/index' })}>
+            去申请建店
+          </Button>
+        </View>
+      )}
       <View className="list-head">
         <Text className="list-title">好店列表（前 {list.length} 家）</Text>
         {snapshotId && <Text className="list-hint">同一查询快照</Text>}

@@ -4,13 +4,20 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import Taro, { useRouter } from '@tarojs/taro'
-import { View, Text, Button } from '@tarojs/components'
+import { View, Text, Button, Input, Picker } from '@tarojs/components'
 import {
   CUISINE_LABEL,
-  PLACE_LABEL,
   type RestaurantDetail,
 } from '@qianwei/contracts'
-import { fetchDetail } from '../../api'
+import {
+  collections,
+  createDiningLog,
+  createReport,
+  fetchDetail,
+  me,
+  today,
+  toggleSystemItem,
+} from '../../api'
 import './index.scss'
 
 export default function Detail() {
@@ -18,6 +25,18 @@ export default function Detail() {
   const id = params.id ?? ''
   const [d, setD] = useState<RestaurantDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [loggedIn, setLoggedIn] = useState<boolean | null>(null)
+  const [favKinds, setFavKinds] = useState<string[]>([])
+  const [favBusy, setFavBusy] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportKind, setReportKind] = useState('wrong_info')
+  const [reportDetail, setReportDetail] = useState('')
+  const [notice, setNotice] = useState<string | null>(null)
+  const [checkinOpen, setCheckinOpen] = useState(false)
+  const [checkinDate, setCheckinDate] = useState('')
+  const [checkinAmount, setCheckinAmount] = useState('')
+  const [checkinNote, setCheckinNote] = useState('')
+  const [todayMax, setTodayMax] = useState('')
 
   const load = useCallback(async () => {
     setError(null)
@@ -31,6 +50,94 @@ export default function Detail() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    void today()
+      .then((t) => setTodayMax(t))
+      .catch(() => setTodayMax(''))
+  }, [])
+
+  // 登录态与收藏标记
+  useEffect(() => {
+    if (!d) return
+    void (async () => {
+      try {
+        const u = await me()
+        setLoggedIn(u !== null)
+        if (u) {
+          const cols = await collections()
+          const kinds: string[] = []
+          for (const c of cols) {
+            if (c.system_kind && c.items.some((i) => i.restaurant_id === d.id)) kinds.push(c.system_kind)
+          }
+          setFavKinds(kinds)
+        } else {
+          setFavKinds([])
+        }
+      } catch {
+        setLoggedIn(false)
+      }
+    })()
+  }, [d])
+
+  async function toggleFav(kind: string): Promise<void> {
+    if (!d) return
+    setFavBusy(true)
+    try {
+      const on = !favKinds.includes(kind)
+      const cols = await toggleSystemItem(d.id, kind, on)
+      const kinds: string[] = []
+      for (const c of cols) {
+        if (c.system_kind && c.items.some((i) => i.restaurant_id === d.id)) kinds.push(c.system_kind)
+      }
+      setFavKinds(kinds)
+      setNotice(on ? '已加入' : '已移除')
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : '操作失败')
+    } finally {
+      setFavBusy(false)
+    }
+  }
+
+  async function sendReport(): Promise<void> {
+    if (!d) return
+    try {
+      const t = await createReport({ restaurant_id: d.id, kind: reportKind, detail: reportDetail.trim() })
+      setReportOpen(false)
+      setReportDetail('')
+      setNotice(`工单 ${t.id}（${t.status}）已记入复核队列；同一问题重复提交不会新增工单`)
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : '提交失败')
+    }
+  }
+
+  async function sendCheckin(): Promise<void> {
+    if (!d) return
+    try {
+      const log = await createDiningLog({
+        restaurant_id: d.id,
+        visited_date: checkinDate,
+        amount_yuan: checkinAmount.trim() === '' ? null : Number(checkinAmount),
+        note: checkinNote.trim() === '' ? null : checkinNote.trim(),
+      })
+      setCheckinOpen(false)
+      setCheckinAmount('')
+      setCheckinNote('')
+      setNotice(`打卡成功（${log.visited_date}）${log.amount_fen !== null ? `，已记账 ¥${(log.amount_fen / 100).toFixed(2)}` : ''}；记录只本人可见，可在「我的」页管理`)
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : '打卡失败')
+    }
+  }
+
+  function openNav(): void {
+    if (!d) return
+    void Taro.openLocation({ latitude: d.lat, longitude: d.lng, name: d.name, address: d.address, scale: 16 })
+  }
+
+  function copyLink(): void {
+    const url = `https://serennity007.github.io/beijing-food-map/restaurants/${d?.id ?? ''}`
+    void Taro.setClipboardData({ data: url }).then(() => setNotice('链接已复制（演示数据链接）'))
+  }
 
   if (error) {
     return (
@@ -122,6 +229,96 @@ export default function Detail() {
           完整依据（时间窗、三类票数、地点核验与坐标）以 Web 版为准；规则版本 {d.rule_version}。收藏、点赞和浏览都不计入票数。
         </Text>
       </View>
+
+      {notice && (
+        <View className="alert ok">
+          <Text>{notice}</Text>
+        </View>
+      )}
+
+      <View className="panel">
+        <Text className="label">我的记录</Text>
+        <View className="chips">
+          {[
+            { kind: 'want', label: '想吃' },
+            { kind: 'visited', label: '吃过' },
+            { kind: 'private_stash', label: '私藏' },
+          ].map((x) => (
+            <Text
+              key={x.kind}
+              className={favKinds.includes(x.kind) ? 'chip active' : 'chip'}
+              onClick={() => (loggedIn ? void toggleFav(x.kind) : Taro.navigateTo({ url: '/pages/login/index' }))}
+            >
+              {favKinds.includes(x.kind) ? '✓ ' : '+ '}
+              {x.label}
+            </Text>
+          ))}
+        </View>
+        <Text className="hint">私人清单不会公开，也不会代替实吃反馈。</Text>
+        <View className="btn-row">
+          <Button className="btn-primary" onClick={() => { setCheckinDate(todayMax); setCheckinOpen(!checkinOpen) }}>
+            {checkinOpen ? '收起打卡' : '打卡'}
+          </Button>
+          <Button className="btn-primary" onClick={openNav}>
+            到店导航
+          </Button>
+          <Button className="btn-primary" onClick={() => Taro.switchTab({ url: '/pages/submit/index' })}>
+            写反馈
+          </Button>
+          <Button className="btn-plain" onClick={copyLink}>
+            复制链接
+          </Button>
+          <Button className="btn-plain" onClick={() => setReportOpen(!reportOpen)}>
+            {reportOpen ? '收起举报' : '纠错/举报'}
+          </Button>
+        </View>
+        {reportOpen && (
+          <View className="report-box">
+            <Text className="label">问题类型</Text>
+            <View className="chips">
+              {[
+                { kind: 'closed', label: '已经闭店/搬走了' },
+                { kind: 'wrong_location', label: '位置不对' },
+                { kind: 'wrong_info', label: '信息有误' },
+                { kind: 'abuse', label: '内容违规' },
+              ].map((k) => (
+                <Text key={k.kind} className={reportKind === k.kind ? 'chip active' : 'chip'} onClick={() => setReportKind(k.kind)}>
+                  {k.label}
+                </Text>
+              ))}
+            </View>
+            <Textarea value={reportDetail} onInput={(e) => setReportDetail(e.detail.value)} maxlength={300} placeholder="说明具体情况，例如：门头已换成别的店。" />
+            <Button className="btn-primary" disabled={reportDetail.trim() === ''} onClick={() => void sendReport()}>
+              提交工单
+            </Button>
+            <Text className="hint">举报只是复核线索，不会自动下架内容或判定闭店。</Text>
+          </View>
+        )}
+      </View>
+
+      {checkinOpen && (
+        <View className="panel">
+          <Text className="label">打卡 · 记账</Text>
+          <View className="field">
+            <Text className="label">到店日期</Text>
+            <Picker mode="date" value={checkinDate || todayMax} end={todayMax} onChange={(e) => setCheckinDate(e.detail.value)}>
+              <View className="picker-value">{checkinDate || '选择日期'}</View>
+            </Picker>
+          </View>
+          <View className="field">
+            <Text className="label">消费金额（元，可留空）</Text>
+            <Input type="digit" value={checkinAmount} onInput={(e) => setCheckinAmount(e.detail.value)} placeholder="例如：128.50" />
+          </View>
+          <View className="field">
+            <Text className="label">备注（可留空）</Text>
+            <Input value={checkinNote} onInput={(e) => setCheckinNote(e.detail.value)} placeholder="例如：和朋友的周末早午餐" />
+          </View>
+          <Button className="btn-primary" disabled={checkinDate === ''} onClick={() => void sendCheckin()}>
+            保存打卡
+          </Button>
+          <Text className="hint">打卡与记账仅本人可见，不参与公开推荐与票数；可在「我的」页管理。</Text>
+        </View>
+      )}
 
       <View className="footer-note">
         <Text className="hint">

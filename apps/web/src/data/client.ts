@@ -19,6 +19,8 @@ import {
   type ProviderCandidate,
   type ReportTicket,
   type ReportQueueEntry,
+  type DiningLog,
+  type DiningLogPage,
   type ReportStatus,
   type Restaurant,
   type RestaurantCandidate,
@@ -132,6 +134,9 @@ export interface ApiClient {
   /** 工单处置：开始复核 / 结案 / 驳回。举报人本人不能处置自己的举报。 */
   decideReport(input: ReportDecision): Promise<ReportQueueEntry>;
   myReports(): Promise<ReportTicket[]>;
+  createDiningLog(input: { restaurant_id: string; visited_date: string; amount_yuan?: number | null; note?: string | null }): Promise<DiningLog>;
+  myDiningLogs(): Promise<DiningLogPage>;
+  deleteDiningLog(id: string): Promise<{ ok: true }>;
   auditLog(): Promise<AuditRec[]>;
   moderationQueue(): Promise<ModerationQueueEntry[]>;
   moderate(input: { target: string; action: 'approve' | 'reject' | 'hide'; reason?: string; expected_version: number }): Promise<{ ok: true; restaurant: Restaurant | null }>;
@@ -375,6 +380,22 @@ export class StaticClient implements ApiClient {
 
   async myReports() {
     return this.store.myReports(this.sid());
+  }
+
+  async createDiningLog(input: { restaurant_id: string; visited_date: string; amount_yuan?: number | null; note?: string | null }) {
+    const r = this.store.createDiningLog(this.sid(), input);
+    this.persist();
+    return r;
+  }
+
+  async myDiningLogs() {
+    return this.store.myDiningLogs(this.sid());
+  }
+
+  async deleteDiningLog(id: string) {
+    const r = this.store.deleteDiningLog(this.sid(), id);
+    this.persist();
+    return r;
   }
 
   async auditLog() {

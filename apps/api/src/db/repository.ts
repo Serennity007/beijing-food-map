@@ -16,6 +16,7 @@ export const ENTITY_KINDS = [
   'collection',
   'publication',
   'report',
+  'dining_log',
   'audit',
   'idempotency',
   'session',
@@ -41,6 +42,7 @@ export interface DumpedState {
   collections: JsonRecord[];
   publications: JsonRecord[];
   reports: JsonRecord[];
+  dining_logs: JsonRecord[];
   audit: JsonRecord[];
   idempotency: JsonRecord[];
   sessions: Array<[string, JsonRecord]>;
@@ -107,6 +109,11 @@ function rowsFor(kind: DocKind, state: DumpedState, at: string): Row[] {
     case 'collection':
       for (const c of state.collections) push(requiredId('collection', c, str(c, 'id')), c, optStr(c, 'owner_user_id'), null, str(c, 'updated_at'));
       break;
+    case 'dining_log':
+      for (const l of state.dining_logs) {
+        push(requiredId('dining_log', l, str(l, 'id')), l, optStr(l, 'user_id'), optStr(l, 'restaurant_id'), str(l, 'created_at') || at);
+      }
+      break;
     case 'publication': {
       const ownerByCollection = new Map<string, string>();
       for (const c of state.collections) ownerByCollection.set(str(c, 'id'), str(c, 'owner_user_id'));
@@ -160,6 +167,7 @@ function emptyState(): DumpedState {
     collections: [],
     publications: [],
     reports: [],
+    dining_logs: [],
     audit: [],
     idempotency: [],
     sessions: [],
@@ -181,6 +189,7 @@ export function parseDump(json: string): DumpedState {
     collections: raw.collections ?? [],
     publications: raw.publications ?? [],
     reports: raw.reports ?? [],
+    dining_logs: raw.dining_logs ?? [],
     audit: raw.audit ?? [],
     idempotency: raw.idempotency ?? [],
     sessions: raw.sessions ?? [],

@@ -304,6 +304,38 @@ export function buildRouter(svc: Services): Router {
       handler: (ctx) => store.myReports(ctx.sessionId),
     },
 
+    // ------------------------------------------------------------ 美食打卡/记账（个人数据）
+    {
+      method: 'POST',
+      path: '/me/dining-logs',
+      status: 201,
+      summary: '新增美食打卡/记账（个人记录，不参与公开推荐与票数）',
+      writes: true,
+      handler: (ctx) =>
+        store.createDiningLog(
+          ctx.sessionId,
+          {
+            restaurant_id: assertId(need(bStr(ctx.body, 'restaurant_id', { required: true, max: 16 }), 'restaurant_id'), 'restaurant_id'),
+            visited_date: need(bDate(ctx.body, 'visited_date', { required: true }), 'visited_date'),
+            amount_yuan: bNum(ctx.body, 'amount_yuan'),
+            note: bStr(ctx.body, 'note', { max: 200 }) ?? null,
+          },
+        ),
+    },
+    {
+      method: 'GET',
+      path: '/me/dining-logs',
+      summary: '我的打卡/记账列表（含当月次数与消费合计）',
+      handler: (ctx) => store.myDiningLogs(ctx.sessionId),
+    },
+    {
+      method: 'DELETE',
+      path: '/me/dining-logs/:id',
+      summary: '删除我的打卡/记账记录',
+      writes: true,
+      handler: (ctx) => store.deleteDiningLog(ctx.sessionId, idParam(ctx, 'id')),
+    },
+
     // ------------------------------------------------------------ 投稿与反馈
     {
       method: 'POST',

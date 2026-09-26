@@ -23,6 +23,9 @@ import type {
   SharedCollectionSnapshot,
   Submission,
   SystemCollectionKind,
+  DiningLog,
+  DiningLogPage,
+  DiningLogStats,
 } from './dto';
 import {
   CANDIDATE_SOURCES,
@@ -293,6 +296,7 @@ export class Store {
   collections = new Map<string, Collection>();
   publications = new Map<string, PublicationRec>();
   reports: ReportTicket[] = [];
+  dining_logs: DiningLog[] = [];
   audit: AuditRec[] = [];
   idempotency = new Map<string, IdempotencyRec>();
   snapshots = new Map<string, SnapshotRec>();
@@ -2194,6 +2198,73 @@ export class Store {
   }
 
   /** 注销：立即撤销会话、撤销本人分享、隐藏 UGC、移除计票。 */
+  // ------------------------------------------------------------ 美食打卡/记账（个人数据，不参与公开推荐）
+
+  /** 新增打卡/记账：日期不允许未来；金额为门店现场消费（元），仅个人可见。 */
+  createDiningLog(
+    sessionId: string | null,
+    input: { restaurant_id: string; visited_date: string; amount_yuan?: number | null; note?: string | null },
+  ): DiningLog {
+    const user = this.requireUser(sessionId);
+    const rec = this.requireRestaurant(input.restaurant_id);
+    const date = (input.visited_date ?? '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ApiError('VALIDATION_ERROR', 'visited_date 必须是 YYYY-MM-DD', 400);
+    if (Number.isNaN(new Date(`${date}T00:00:00+08:00`).getTime())) throw new ApiError('VALIDATION_ERROR', 'visited_date 不是有效日期', 400);
+    if (date > shanghaiToday(this.clock)) throw new ApiError('VALIDATION_ERROR', '打卡日期不能是未来', 400);
+    let amountFen: number | null = null;
+    if (input.amount_yuan !== undefined && input.amount_yuan !== null) {
+      const yuan = input.amount_yuan;
+      if (!Number.isFinite(yuan) || yuan < 0 || yuan > 100000) throw new ApiError('VALIDATION_ERROR', '消费金额需在 0—100000 元之间', 400);
+      amountFen = Math.round(yuan * 100);
+    }
+    const note = (input.note ?? '').trim();
+    if (note.length > 200) throw new ApiError('VALIDATION_ERROR', '备注最长 200 字', 400);
+    const log: DiningLog = {
+      id: this.nextId('DIN'),
+      user_id: user.id,
+      restaurant_id: rec.id,
+      restaurant_name: rec.name,
+      visited_date: date,
+      amount_fen: amountFen,
+      note: note || null,
+      created_at: this.stamp(),
+    };
+    this.dining_logs.push(log);
+    this.touch(rec.id);
+    return log;
+  }
+
+  /** 我的打卡/记账（含当月汇总，Asia/Shanghai 月）。 */
+  myDiningLogs(sessionId: string | null): DiningLogPage {
+    const user = this.requireUser(sessionId);
+    const month = shanghaiToday(this.clock).slice(0, 7);
+    const logs = this.dining_logs
+      .filter((l) => l.user_id === user.id)
+      .sort((a, b) => (a.visited_date === b.visited_date ? b.created_at.localeCompare(a.created_at) : b.visited_date.localeCompare(a.visited_date)))
+      .map((l) => ({ ...l }));
+    let count = 0;
+    let totalFen = 0;
+    for (const l of logs) {
+      if (l.visited_date.startsWith(month)) {
+        count += 1;
+        totalFen += l.amount_fen ?? 0;
+      }
+    }
+    const stats: DiningLogStats = { month, count, total_fen: totalFen };
+    return { logs, stats };
+  }
+
+  deleteDiningLog(sessionId: string | null, id: string): { ok: true } {
+    const user = this.requireUser(sessionId);
+    const idx = this.dining_logs.findIndex((l) => l.id === id);
+    // 无权与不存在统一 404，不泄露他人记录的存在性
+    if (idx === -1 || this.dining_logs[idx]!.user_id !== user.id) {
+      throw new ApiError('NOT_FOUND', '打卡记录不存在或已删除', 404);
+    }
+    this.dining_logs.splice(idx, 1);
+    return { ok: true };
+  }
+
   deleteAccount(sessionId: string | null): { deletion_job_id: string } {
     const user = this.requireUser(sessionId);
     user.status = 'deleting';
@@ -2231,6 +2302,7 @@ export class Store {
       const collections = new Set([...this.collections.values()].filter(c => c.owner_user_id === uid).map(c => c.id));
       const media = new Set([...this.media.values()].filter(m => m.owner_user_id === uid).map(m => m.id));
       this.visits = this.visits.filter(v => v.user_id !== uid);
+      this.dining_logs = this.dining_logs.filter(l => l.user_id !== uid);
       for (const id of media) this.media.delete(id);
       for (const [id, pub] of this.publications) if (collections.has(pub.collection_id)) this.publications.delete(id);
       for (const id of collections) this.collections.delete(id);
@@ -2317,6 +2389,7 @@ export class Store {
       collections: [...this.collections.values()],
       publications: [...this.publications.values()],
       reports: this.reports,
+      dining_logs: this.dining_logs,
       audit: this.audit,
       idempotency: [...this.idempotency.values()],
       sessions: [...this.sessions.entries()],
@@ -2336,6 +2409,7 @@ export class Store {
       collections?: Collection[];
       publications?: PublicationRec[];
       reports?: ReportTicket[];
+      dining_logs?: DiningLog[];
       audit?: AuditRec[];
       idempotency?: IdempotencyRec[];
       sessions?: Array<[string, { user_id: string; created_at: string }]>;
@@ -2348,6 +2422,7 @@ export class Store {
     this.collections = new Map((s.collections ?? []).map((c) => [c.id, c]));
     this.publications = new Map((s.publications ?? []).map((p) => [p.id, p]));
     this.reports = s.reports ?? [];
+    this.dining_logs = s.dining_logs ?? [];
     this.audit = s.audit ?? [];
     this.idempotency = new Map((s.idempotency ?? []).map((i) => [`${i.user_id}:${i.route}:${i.key}`, i]));
     this.sessions = new Map((s.sessions ?? []).map(([k, v]) => [k, v]));

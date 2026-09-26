@@ -274,6 +274,19 @@ step('补材料后驳回理由清空', amended.reject_reason === null);
 const lvAfterAmend = (await api.detail(candB.restaurant_id!)).location_version;
 step('换坐标后 location_version 递增', lvAfterAmend > lvBeforeAmend, `${lvBeforeAmend} → ${lvAfterAmend}`);
 
+// ---------------------------------------------- 美食打卡/记账（个人数据）
+await api.createDiningLog({ restaurant_id: candB.restaurant_id!, visited_date: '2026-09-20', amount_yuan: 68.5, note: '酸汤鱼 + 米粉' });
+await api.createDiningLog({ restaurant_id: candB.restaurant_id!, visited_date: '2026-08-30', amount_yuan: 30 });
+const diningPage = await api.myDiningLogs();
+step('打卡列表可读且按日期倒序', diningPage.logs.length >= 2 && diningPage.logs[0]!.visited_date >= diningPage.logs[1]!.visited_date, `${diningPage.logs.length} 条`);
+step('打卡金额以分存储', diningPage.logs.some((l) => l.amount_fen === 6850));
+step('当月汇总只含本月', diningPage.stats.month.length === 7 && diningPage.logs.filter((l) => l.visited_date.startsWith(diningPage.stats.month)).reduce((sum, l) => sum + (l.amount_fen ?? 0), 0) === diningPage.stats.total_fen);
+const delTarget = diningPage.logs[0]!.id;
+await api.deleteDiningLog(delTarget);
+step('删除打卡后列表减少', (await api.myDiningLogs()).logs.every((l) => l.id !== delTarget));
+await api.logout();
+await api.login('U01', '888888');
+step('他人打卡不可见', (await api.myDiningLogs()).logs.every((l) => l.id !== delTarget));
 await api.logout();
 await api.login('M01', '888888');
 const audit = await api.auditLog();

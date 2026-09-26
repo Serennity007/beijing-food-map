@@ -765,3 +765,50 @@ describe('交接补齐：举报与注销任务', () => {
     expect(() => restored.login('U02', '888888')).toThrow();
   });
 });
+
+describe('美食打卡/记账（DiningLog，个人数据）', () => {
+  const s = newStore();
+  const sid = () => s.login('U05', '888888').session_id;
+  const other = () => s.login('U03', '888888').session_id;
+
+  it('创建打卡：金额与备注合法入库，列表按日期倒序并带门店名', () => {
+    const before = s.myDiningLogs(sid()).logs.length;
+    s.createDiningLog(sid(), { restaurant_id: 'R01', visited_date: TODAY, amount_yuan: 68.5, note: '酸汤鱼 + 米粉' });
+    s.createDiningLog(sid(), { restaurant_id: 'R01', visited_date: '2026-09-20', amount_yuan: 30, note: null });
+    const page = s.myDiningLogs(sid());
+    expect(page.logs.length).toBe(before + 2);
+    expect(page.logs[0]!.visited_date).toBe(TODAY);
+    expect(page.logs[0]!.restaurant_name).toContain('黔江酸汤粉');
+    expect(page.logs[0]!.amount_fen).toBe(6850);
+  });
+
+  it('当月汇总：次数与消费合计只统计本月', () => {
+    const stats = s.myDiningLogs(sid()).stats;
+    expect(stats.month).toBe(TODAY.slice(0, 7));
+    expect(stats.count).toBeGreaterThanOrEqual(1);
+    expect(stats.total_fen).toBeGreaterThanOrEqual(6850);
+  });
+
+  it('拒绝：未来日期 / 金额越界 / 备注超长', () => {
+    expect(() => s.createDiningLog(sid(), { restaurant_id: 'R01', visited_date: '2027-01-01' })).toThrow(/不能是未来/);
+    expect(() => s.createDiningLog(sid(), { restaurant_id: 'R01', visited_date: TODAY, amount_yuan: 200000 })).toThrow(/0—100000/);
+    expect(() => s.createDiningLog(sid(), { restaurant_id: 'R01', visited_date: TODAY, note: 'x'.repeat(201) })).toThrow(/200/);
+    expect(() => s.createDiningLog(sid(), { restaurant_id: 'R01', visited_date: '2026-13-40' })).toThrow(/不是有效日期/);
+  });
+
+  it('删除：本人可删，他人记录统一 404 不泄露存在性', () => {
+    const created = s.createDiningLog(sid(), { restaurant_id: 'R01', visited_date: TODAY });
+    expect(s.deleteDiningLog(sid(), created.id).ok).toBe(true);
+    expect(() => s.deleteDiningLog(other(), created.id)).toThrow(/不存在/);
+    expect(() => s.deleteDiningLog(sid(), created.id)).toThrow(/不存在/);
+  });
+
+  it('注销清除任务会删除本人全部打卡记录', () => {
+    const victim = s.login('U03', '888888').session_id;
+    s.createDiningLog(victim, { restaurant_id: 'R01', visited_date: TODAY });
+    s.deleteAccount(victim);
+    s.processDeletionJobs();
+    const stranger = s.login('U05', '888888').session_id;
+    expect(s.myDiningLogs(stranger).logs.every((l) => l.user_id !== 'U03')).toBe(true);
+  });
+});

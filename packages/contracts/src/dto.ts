@@ -391,3 +391,29 @@ export interface RestaurantCandidate {
   updated_at: string;
   is_test_data: true;
 }
+
+/** 美食打卡/记账：用户个人的到店记录与消费记账（不参与公开推荐与票数）。 */
+export interface DiningLog {
+  id: string;
+  user_id: string;
+  restaurant_id: string;
+  restaurant_name: string;
+  /** 实到日期（Asia/Shanghai 日历日），不允许未来日期。 */
+  visited_date: string;
+  /** 消费金额（分）；null = 本次未记账。 */
+  amount_fen: number | null;
+  note: string | null;
+  created_at: string;
+}
+
+/** 打卡/记账的月度汇总（Asia/Shanghai 当月）。 */
+export interface DiningLogStats {
+  month: string;
+  count: number;
+  total_fen: number;
+}
+
+export interface DiningLogPage {
+  logs: DiningLog[];
+  stats: DiningLogStats;
+}

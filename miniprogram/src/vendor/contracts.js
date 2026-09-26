@@ -961,6 +961,7 @@ var Store = class {
     __publicField(this, "collections", /* @__PURE__ */ new Map());
     __publicField(this, "publications", /* @__PURE__ */ new Map());
     __publicField(this, "reports", []);
+    __publicField(this, "dining_logs", []);
     __publicField(this, "audit", []);
     __publicField(this, "idempotency", /* @__PURE__ */ new Map());
     __publicField(this, "snapshots", /* @__PURE__ */ new Map());
@@ -2674,6 +2675,64 @@ var Store = class {
     return this.toCandidateDto(c, sessionId);
   }
   /** 注销：立即撤销会话、撤销本人分享、隐藏 UGC、移除计票。 */
+  // ------------------------------------------------------------ 美食打卡/记账（个人数据，不参与公开推荐）
+  /** 新增打卡/记账：日期不允许未来；金额为门店现场消费（元），仅个人可见。 */
+  createDiningLog(sessionId, input) {
+    var _a, _b;
+    const user = this.requireUser(sessionId);
+    const rec = this.requireRestaurant(input.restaurant_id);
+    const date = ((_a = input.visited_date) != null ? _a : "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ApiError("VALIDATION_ERROR", "visited_date \u5FC5\u987B\u662F YYYY-MM-DD", 400);
+    if (Number.isNaN((/* @__PURE__ */ new Date(`${date}T00:00:00+08:00`)).getTime())) throw new ApiError("VALIDATION_ERROR", "visited_date \u4E0D\u662F\u6709\u6548\u65E5\u671F", 400);
+    if (date > shanghaiToday(this.clock)) throw new ApiError("VALIDATION_ERROR", "\u6253\u5361\u65E5\u671F\u4E0D\u80FD\u662F\u672A\u6765", 400);
+    let amountFen = null;
+    if (input.amount_yuan !== void 0 && input.amount_yuan !== null) {
+      const yuan = input.amount_yuan;
+      if (!Number.isFinite(yuan) || yuan < 0 || yuan > 1e5) throw new ApiError("VALIDATION_ERROR", "\u6D88\u8D39\u91D1\u989D\u9700\u5728 0\u2014100000 \u5143\u4E4B\u95F4", 400);
+      amountFen = Math.round(yuan * 100);
+    }
+    const note = ((_b = input.note) != null ? _b : "").trim();
+    if (note.length > 200) throw new ApiError("VALIDATION_ERROR", "\u5907\u6CE8\u6700\u957F 200 \u5B57", 400);
+    const log = {
+      id: this.nextId("DIN"),
+      user_id: user.id,
+      restaurant_id: rec.id,
+      restaurant_name: rec.name,
+      visited_date: date,
+      amount_fen: amountFen,
+      note: note || null,
+      created_at: this.stamp()
+    };
+    this.dining_logs.push(log);
+    this.touch(rec.id);
+    return log;
+  }
+  /** 我的打卡/记账（含当月汇总，Asia/Shanghai 月）。 */
+  myDiningLogs(sessionId) {
+    var _a;
+    const user = this.requireUser(sessionId);
+    const month = shanghaiToday(this.clock).slice(0, 7);
+    const logs = this.dining_logs.filter((l) => l.user_id === user.id).sort((a, b) => a.visited_date === b.visited_date ? b.created_at.localeCompare(a.created_at) : b.visited_date.localeCompare(a.visited_date)).map((l) => ({ ...l }));
+    let count = 0;
+    let totalFen = 0;
+    for (const l of logs) {
+      if (l.visited_date.startsWith(month)) {
+        count += 1;
+        totalFen += (_a = l.amount_fen) != null ? _a : 0;
+      }
+    }
+    const stats = { month, count, total_fen: totalFen };
+    return { logs, stats };
+  }
+  deleteDiningLog(sessionId, id) {
+    const user = this.requireUser(sessionId);
+    const idx = this.dining_logs.findIndex((l) => l.id === id);
+    if (idx === -1 || this.dining_logs[idx].user_id !== user.id) {
+      throw new ApiError("NOT_FOUND", "\u6253\u5361\u8BB0\u5F55\u4E0D\u5B58\u5728\u6216\u5DF2\u5220\u9664", 404);
+    }
+    this.dining_logs.splice(idx, 1);
+    return { ok: true };
+  }
   deleteAccount(sessionId) {
     var _a;
     const user = this.requireUser(sessionId);
@@ -2711,6 +2770,7 @@ var Store = class {
       const collections = new Set([...this.collections.values()].filter((c) => c.owner_user_id === uid).map((c) => c.id));
       const media = new Set([...this.media.values()].filter((m) => m.owner_user_id === uid).map((m) => m.id));
       this.visits = this.visits.filter((v) => v.user_id !== uid);
+      this.dining_logs = this.dining_logs.filter((l) => l.user_id !== uid);
       for (const id of media) this.media.delete(id);
       for (const [id, pub] of this.publications) if (collections.has(pub.collection_id)) this.publications.delete(id);
       for (const id of collections) this.collections.delete(id);
@@ -2794,13 +2854,14 @@ var Store = class {
       collections: [...this.collections.values()],
       publications: [...this.publications.values()],
       reports: this.reports,
+      dining_logs: this.dining_logs,
       audit: this.audit,
       idempotency: [...this.idempotency.values()],
       sessions: [...this.sessions.entries()]
     });
   }
   loadState(json) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
     const s = JSON.parse(json);
     this.restaurants = new Map(((_a = s.restaurants) != null ? _a : []).map((r2) => [r2.id, r2]));
     this.candidates = new Map(((_b = s.candidates) != null ? _b : []).map((c) => [c.id, c]));
@@ -2810,11 +2871,12 @@ var Store = class {
     this.collections = new Map(((_f = s.collections) != null ? _f : []).map((c) => [c.id, c]));
     this.publications = new Map(((_g = s.publications) != null ? _g : []).map((p) => [p.id, p]));
     this.reports = (_h = s.reports) != null ? _h : [];
-    this.audit = (_i = s.audit) != null ? _i : [];
-    this.idempotency = new Map(((_j = s.idempotency) != null ? _j : []).map((i) => [`${i.user_id}:${i.route}:${i.key}`, i]));
-    this.sessions = new Map(((_k = s.sessions) != null ? _k : []).map(([k, v]) => [k, v]));
-    this.resultsVersion = (_l = s.results_version) != null ? _l : this.resultsVersion;
-    this.seq = (_m = s.seq) != null ? _m : this.seq;
+    this.dining_logs = (_i = s.dining_logs) != null ? _i : [];
+    this.audit = (_j = s.audit) != null ? _j : [];
+    this.idempotency = new Map(((_k = s.idempotency) != null ? _k : []).map((i) => [`${i.user_id}:${i.route}:${i.key}`, i]));
+    this.sessions = new Map(((_l = s.sessions) != null ? _l : []).map(([k, v]) => [k, v]));
+    this.resultsVersion = (_m = s.results_version) != null ? _m : this.resultsVersion;
+    this.seq = (_n = s.seq) != null ? _n : this.seq;
     this.snapshots.clear();
     this.recomputeAll();
     void s.last_computed_day;

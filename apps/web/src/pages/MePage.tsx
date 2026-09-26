@@ -19,6 +19,7 @@ import {
   type RestaurantCandidate,
   type Submission,
 } from '@qianwei/contracts';
+import type { DiningLogPage } from '@qianwei/contracts';
 import { useApi } from '../data/api';
 import { clearLocalDraft } from '../data/client';
 import { CandidateForm } from '../features/candidates/CandidateForm';
@@ -65,6 +66,7 @@ export function MePage() {
   const [cands, setCands] = useState<RestaurantCandidate[] | null>(null);
   const [amend, setAmend] = useState<RestaurantCandidate | null>(null);
   const [candFields, setCandFields] = useState<Record<string, string>>({});
+  const [dining, setDining] = useState<DiningLogPage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<string | null>(null);
@@ -73,10 +75,11 @@ export function MePage() {
     setBusy(true);
     setError(null);
     try {
-      const [s, r, c] = await Promise.all([api.mySubmissions(), api.myReports(), api.myCandidates()]);
+      const [s, r, c, d] = await Promise.all([api.mySubmissions(), api.myReports(), api.myCandidates(), api.myDiningLogs()]);
       setSubs(s);
       setReports(r);
       setCands(c);
+      setDining(d);
     } catch (e) {
       const f = readFailure(e);
       setError(f.code ? `${f.message}（${f.code}）` : f.message);
@@ -89,6 +92,19 @@ export function MePage() {
     if (!user) return;
     void load();
   }, [user, load]);
+
+  async function removeDining(id: string): Promise<void> {
+    setBusy(true);
+    try {
+      await api.deleteDiningLog(id);
+      setDining(await api.myDiningLogs());
+    } catch (e) {
+      const f = readFailure(e);
+      setError(f.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function destroy(): Promise<void> {
     if (!confirm(DELETE_TEXT)) return;
@@ -219,6 +235,25 @@ export function MePage() {
             </Link>
           </div>
         )}
+      </section>
+
+      <section className="panel">
+        <h2>美食打卡 · 记账（{dining ? `${dining.stats.month}：${dining.stats.count} 次 · ¥${(dining.stats.total_fen / 100).toFixed(2)}` : '…'}）</h2>
+        <p className="hint">打卡与记账仅本人可见，不参与公开推荐与票数。在门店详情页点「打卡」即可新增记录。</p>
+        {dining && dining.logs.length === 0 && <p className="hint">还没有打卡记录。去门店详情页点「打卡」。</p>}
+        {dining &&
+          dining.logs.map((l) => (
+            <div className="row-dining" key={l.id}>
+              <div className="row-dining-main">
+                <strong>{l.visited_date}</strong> · <Link to={`/restaurants/${l.restaurant_id}`}>{l.restaurant_name}</Link>
+                {l.amount_fen !== null && <span className="money"> · ¥{(l.amount_fen / 100).toFixed(2)}</span>}
+                {l.note && <span className="hint"> · {l.note}</span>}
+              </div>
+              <button className="btn small plain" type="button" disabled={busy} onClick={() => void removeDining(l.id)}>
+                删除
+              </button>
+            </div>
+          ))}
       </section>
 
       <section className="panel">

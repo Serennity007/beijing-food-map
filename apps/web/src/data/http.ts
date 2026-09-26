@@ -230,6 +230,18 @@ export class Http implements ApiClient {
     return this.req<C.ReportTicket[]>('/me/reports');
   }
 
+  createDiningLog(input: { restaurant_id: string; visited_date: string; amount_yuan?: number | null; note?: string | null }) {
+    return this.req<C.DiningLog>('/me/dining-logs', { method: 'POST' }, input);
+  }
+
+  myDiningLogs() {
+    return this.req<C.DiningLogPage>('/me/dining-logs');
+  }
+
+  deleteDiningLog(id: string) {
+    return this.req<{ ok: true }>(`/me/dining-logs/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
   auditLog() {
     return this.req<C.AuditRec[]>('/admin/audit-log');
   }

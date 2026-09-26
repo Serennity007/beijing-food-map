@@ -2,15 +2,37 @@
   "miniprogramRoot": "dist/",
   "compileType": "miniprogram",
   "projectname": "qianwei-miniprogram",
-  "appid": "touristappid",
+  "appid": "wx47ae40f1e04eb679",
   "setting": {
     "urlCheck": false,
     "es6": false,
     "enhance": true,
     "postcss": false,
     "minified": false,
-    "ignoreUploadUnusedFiles": true
+    "ignoreUploadUnusedFiles": true,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": true,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
   },
   "libVersion": "3.7.8",
-  "condition": {}
+  "condition": {},
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "editorSetting": {}
 }
