@@ -1294,6 +1294,27 @@ function CandidatesPanel({ isAdmin, onPick }: { isAdmin: boolean; onPick: (id: s
   const [busy, setBusy] = useState(false);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [targets, setTargets] = useState<Record<string, string>>({});
+  // O1：并入目标必须显式选择（搜索点选或从重复提示点选），不再静默默认第一条重复提示——
+  // 旧实现 target 会悄悄落到 dupStores[0]，一键就可能并错门店。
+  const [mergePicks, setMergePicks] = useState<Record<string, { id: string; name: string } | null>>({});
+
+  function pickMergeTarget(c: RestaurantCandidate, id: string, name: string): void {
+    setTargets((cur) => ({ ...cur, [c.id]: id }));
+    setMergePicks((cur) => ({ ...cur, [c.id]: { id, name } }));
+  }
+
+  function clearMergeTarget(c: RestaurantCandidate): void {
+    setMergePicks((cur) => {
+      const next = { ...cur };
+      delete next[c.id];
+      return next;
+    });
+    setTargets((cur) => {
+      const next = { ...cur };
+      delete next[c.id];
+      return next;
+    });
+  }
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -1352,7 +1373,7 @@ function CandidatesPanel({ isAdmin, onPick }: { isAdmin: boolean; onPick: (id: s
       {rows?.length === 0 && <StatusBlock kind="empty" message="没有待处理的建店申请。" />}
       {rows?.map((c) => {
         const dupStores = c.duplicates.filter((d) => d.kind === 'restaurant');
-        const target = targets[c.id] ?? dupStores[0]?.matched_id ?? '';
+        const target = mergePicks[c.id]?.id ?? '';
         const pending = c.status === 'PENDING';
         return (
           <article className="card" key={c.id}>
@@ -1394,6 +1415,16 @@ function CandidatesPanel({ isAdmin, onPick }: { isAdmin: boolean; onPick: (id: s
                     <button className="btn small plain" type="button" onClick={() => onPick(d.matched_id)}>
                       看这家店
                     </button>
+                    {isAdmin && pending && !c.is_author_self && (
+                      <button
+                        className="btn small"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => pickMergeTarget(c, d.matched_id, d.name)}
+                      >
+                        并入到这家
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -1419,22 +1450,32 @@ function CandidatesPanel({ isAdmin, onPick }: { isAdmin: boolean; onPick: (id: s
                   </button>
                 </div>
                 {isAdmin && (
-                  <div className="btn-row">
-                    <input
-                      value={target}
-                      aria-label="并入目标门店 ID"
-                      placeholder="并入到哪个门店 ID"
-                      style={{ maxWidth: 180 }}
-                      onChange={(e) => setTargets((cur) => ({ ...cur, [c.id]: e.target.value }))}
+                  <div style={{ marginTop: 8 }}>
+                    <StorePicker
+                      label="并入目标门店（搜索后点选）"
+                      pickedName={mergePicks[c.id] ? `${mergePicks[c.id]!.name} · ${mergePicks[c.id]!.id}` : null}
+                      onPick={(r) => pickMergeTarget(c, r.id, r.name)}
                     />
-                    <button
-                      className="btn small plain"
-                      type="button"
-                      disabled={busy || target.trim() === ''}
-                      onClick={() => void decide(c, 'merge')}
-                    >
-                      并入已有门店
-                    </button>
+                    {mergePicks[c.id] && (
+                      <p className="hint" style={{ margin: '4px 0' }}>
+                        已选目标：{mergePicks[c.id]!.name}（{mergePicks[c.id]!.id}）。并入会迁移引用并做旧 ID 重定向，不可撤销；执行前请确认两家确为同一实体。
+                      </p>
+                    )}
+                    <div className="btn-row">
+                      <button
+                        className="btn small plain"
+                        type="button"
+                        disabled={busy || target.trim() === ''}
+                        onClick={() => void decide(c, 'merge')}
+                      >
+                        并入已有门店
+                      </button>
+                      {mergePicks[c.id] && (
+                        <button className="btn small plain" type="button" disabled={busy} onClick={() => clearMergeTarget(c)}>
+                          清除选择
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </>

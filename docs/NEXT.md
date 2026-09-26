@@ -85,14 +85,13 @@ R07（地点 PENDING、3 推荐 0 一般 0 不推荐、community=QUALIFIED）
 
 | # | 可优化项 | 在哪 | 代价 / 收益 |
 | --- | --- | --- | --- |
-| O1 | 后台"并入已有门店"是一个手填门店 ID 的文本框，而仓库里已经有 `StorePicker`（`apps/web/src/pages/AdminPage.tsx:334`，门店状态面板在用）。并入还需要"从重复提示里点选"，两套选择逻辑叠进一个组件要改它的接口 | `AdminPage.tsx` 候选面板 | 小 / 中高（这是后台最容易点错的地方，且组件已存在，纯复用） |
 | O4 | 图片与清单条目没有各自的举报入口：引擎的 `feedback_target` 只认 `visit#vN` 形状（`store.ts` `createReport` 的校验），要指向媒体/清单项得先扩校验与队列展示 | `store.ts` + `openapi.ts` + 门店页/清单页 | 中 / 中（要先定 N4 的匿名与聚合口径，否则入口做了也用不上） |
 | O5 | 举报与建店都没有频控/配额（见 N5）：现在只有"同目标不重复开单"的去重 | `store.ts` | 小 / 取决于 N5 决策 |
 | O6 | 读屏冒烟测试：目前只有键盘遍历的证据，`aria-label` 的措辞与 live region 从没被真实读屏验证过 | 全站 | 小 / 高（但需要你开一次 NVDA 或 VoiceOver，算半外部条件） |
 | O7 | `npm audit` 两个告警：`maplibre-gl <=6.4.0` critical（GHSA-jrc7-96c5-q579）与 `@vitest/mocker` moderate。修复都是跨大版本（6.11.x / vitest 5）。**已论证 maplibre 该 CVE 在本仓库不可达**：不创建 popup、不向 MapLibre 传任何 HTML 字符串，标记子元素纯 DOM 构造（论证写在 `maplibre-adapter.ts` 头注释）；升级属破坏性变更，单独立项验证 | `apps/web/src/features/map/maplibre-adapter.ts` | 中 / 高（依赖升级属"需确认"动作） |
 | O8 | `Dockerfile` 与 `render.yaml` 从未构建/导入过（本机无 Docker）。任何有 Docker 的机器上先 `docker build -t qw .` 验一遍，比读 YAML 有用 | 仓库根 | 小 / 中 |
 
-**已经不用做的**（曾经的疑问，现已实现并实测）：地图点空白选点；表单内嵌选点地图与跨页选点（O2 的"选位置主路径"闭环）；错误文案人话映射（O3 闭合）；举报工单处置流转（C9 已闭合）；详情页速览与折叠（原 B2）。
+**已经不用做的**（曾经的疑问，现已实现并实测）：地图点空白选点；表单内嵌选点地图与跨页选点（O2 闭环）；错误文案人话映射（O3 闭合）；举报工单处置流转（C9 已闭合）；详情页速览与折叠（原 B2）；**O1 后台合并选店**——并入目标改为 StorePicker 搜索点选或重复提示里一键点选，并移除了"静默默认第一条重复提示"的隐患（原实现 target 会悄悄落到 dupStores[0]），端到端合并实测通过。
 
 ---
 
