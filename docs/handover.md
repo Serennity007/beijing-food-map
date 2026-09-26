@@ -9,7 +9,7 @@
 
 **只想把网页打开给人看**：双击仓库根的 `一键演示.bat`，或 `node scripts/serve-demo.mjs`（加 `--api` 起后端模式）。
 上台前跑 `node scripts/demo-check.mjs`（后端模式要加 `--base=http://127.0.0.1:<端口>`，没有 `--port`）看 ALL GREEN。
-交付视角的说明在 [../DELIVERY.md](../DELIVERY.md)，照着讲的六幕脚本在 [演示动线.md](./演示动线.md)。开发命令：
+照着讲的六幕演示脚本在 [演示动线.md](./演示动线.md)。开发命令：
 
 ```bash
 npm install            # npm workspaces，锁文件 package-lock.json（没有 pnpm，见 D01）
@@ -187,7 +187,6 @@ npm run build                                # 期望退出码 0
 
 ## 8. 文档索引
 
-- [../DELIVERY.md](../DELIVERY.md) 怎么最快看到它、能演示到哪一步、哪些话不能说
 - [../README.md](../README.md) 快速开始、两种运行模式、值得手动验证的规则
 - [status.md](./status.md) **账本**：implemented / verified / not verified / release_ready
 - [NEXT.md](./NEXT.md) 待决问题（N1–N8）+ 可优化清单（O1–O8）+ 需要授权的事

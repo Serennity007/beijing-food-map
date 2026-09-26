@@ -12,19 +12,7 @@
 门禁现状（2026-09-25 本机）：typecheck 0 / 135 项测试 0 失败 / 契约自检 61 项 / 演示自检 14 项 ALL GREEN。
 **改任何代码后必须重跑并更新 [status.md](./status.md) 里的数字**，别照抄这里的。
 
-> **2026-09-25 第一轮已完成**（依据《修改指导意见》第一批/第二批，证据见 status.md 与 render-check `9-`–`16-`）：
-> A2 搜索跨视野定位（`MapAdapter.centerOnPoint` + 结果坐标驱动相机 + 不可见解释条）；A3 搜索失败提示与五态状态机（含重试与"申请新增门店"入口）；B1 首屏让位地图（工具栏折叠筛选、抽屉默认低档、顶部/底部遮挡实测化并修复控件被遮）；B3 建店表单过时坐标提示修正 + 选点往返草稿保留；§7 交接包 `先读我.md` 恢复命令修正（PowerShell 实测）。
-> N1 建议规则写入 [decisions.md](./decisions.md) D21 **待人拍板，代码未动**。第二轮建议从 B2（详情页信息层级）与 B4（后台合并选店）继续。
->
-> **2026-09-26 第二轮已完成（执行人自主判断轮，不必照文档逐条改）**：B2 详情页速览重构 + 完整依据折叠（含票数徽标措辞改为「近180天：3 推荐 / 3 反馈」）、B5 错误文案映射（`data/errors.ts`，已接地图/门店/投稿三处）。**判断为不做**：B4 后台合并选店（后台低频操作、现有手填 ID 有重定向兜底，等真实运营再投入）；B3 表单分组（草稿保留已消除主要摩擦）。剩余批次以 [交付-第一轮-20260925.md](./交付-第一轮-20260925.md) 的遗留清单与 blockers.md 为准。
->
-> **2026-09-26 第三轮（全量 bug 排查 + 审美刷新）**：标记 DOM 加固（innerHTML→createElement，对用户投稿数据杜绝存储型 XSS 模式）、搜索/标记定位后焦点跟随到列表卡片、展示层全面审美刷新（分层阴影/悬停反馈/焦点环/毛玻璃 pill/细滚动条/reduced-motion，类名与结构未动）。O7 的 maplibre CVE（GHSA-jrc7-96c5-q579）经使用面论证在本仓库不可达（无 popup、无 HTML 字符串进 MapLibre，论证写在 maplibre-adapter.ts），升级 6.x 仍留作独立事项。
->
-> **2026-09-26 第四轮（功能增强）**：建店表单内嵌选点地图（MapView 新增 picker 形态与画布标签参数化，O2 的"选位置主路径"就此闭环，跨页选点链路保留为备选）、地图页搜索无结果带词跳转投稿页预填、详情页复制链接、抽屉骨架屏。O2/O3 至此基本消化完毕；O1（后台合并选店）维持"等真实运营"的判断。
->
-> **2026-09-26 第五轮（数据管线 + 贵州元素）**：扫街榜为高德 App 内产品，开放平台 API 无榜单接口，按 blockers A3 的条款门**不做抓取与虚构**；交付 `scripts/import-amap-candidates.mts` 合规收集管线（校验/去重/暂存，不进引擎）+ `database/import/README.md` 供数指引 + 手填模板。供数需要你给高德开放平台 Web 服务 Key（A1）或 App 内人工记录。贵州元素落地：蜡染织带、黔字徽标、黔味小词典、空态文案。
-
----
+> **当前状态（2026-09-26）**：线上演示已上线 https://serennity007.github.io/beijing-food-map/ （gh-pages 静态演示模式；`main` 源码待 gh 补 `workflow` scope 后推送，见 blockers.md 第 2 条）。功能已闭环的部分：搜索跨视野定位与失败态、首屏遮挡实测化、详情页速览与价格锚点、表单内嵌选点地图（端到端 RC0123）、错误文案映射、高德收集管线、贵州元素与编辑感排版。**接下来要完成的都在本文件与 [blockers.md](./blockers.md)**：N1（核验清票规则，建议方案见 decisions.md D21）待人拍板；O 表为剩余可选优化；第三节的授权与数据供数只能由人推进。
 
 ## 一、需要人拍板的规则问题（我给不出结论，按影响排序）
 
@@ -98,21 +86,19 @@ R07（地点 PENDING、3 推荐 0 一般 0 不推荐、community=QUALIFIED）
 | # | 可优化项 | 在哪 | 代价 / 收益 |
 | --- | --- | --- | --- |
 | O1 | 后台"并入已有门店"是一个手填门店 ID 的文本框，而仓库里已经有 `StorePicker`（`apps/web/src/pages/AdminPage.tsx:334`，门店状态面板在用）。并入还需要"从重复提示里点选"，两套选择逻辑叠进一个组件要改它的接口 | `AdminPage.tsx` 候选面板 | 小 / 中高（这是后台最容易点错的地方，且组件已存在，纯复用） |
-| O2 | 建店表单是一整块 8 字段长表单，无分步、无预览、错误全内联 | `features/candidates/CandidateForm.tsx` | 中 / 中（投稿转化率相关，但演示版可接受） |
-| O3 | `QUERY_EXPIRED`、版本冲突等错误文案对普通用户不可读（见 N8） | `apps/web/src/pages/*` + `data/client.ts` 的错误映射 | 小 / 中 |
 | O4 | 图片与清单条目没有各自的举报入口：引擎的 `feedback_target` 只认 `visit#vN` 形状（`store.ts` `createReport` 的校验），要指向媒体/清单项得先扩校验与队列展示 | `store.ts` + `openapi.ts` + 门店页/清单页 | 中 / 中（要先定 N4 的匿名与聚合口径，否则入口做了也用不上） |
 | O5 | 举报与建店都没有频控/配额（见 N5）：现在只有"同目标不重复开单"的去重 | `store.ts` | 小 / 取决于 N5 决策 |
 | O6 | 读屏冒烟测试：目前只有键盘遍历的证据，`aria-label` 的措辞与 live region 从没被真实读屏验证过 | 全站 | 小 / 高（但需要你开一次 NVDA 或 VoiceOver，算半外部条件） |
-| O7 | `npm audit` 两个告警：`maplibre-gl <=6.4.0` critical（XSS Sanitizer Bypass，GHSA-jrc7-96c5-q579）与 `@vitest/mocker` moderate（路径穿越）。升级 maplibre 是 breaking（`npm audit fix --force` 会装 6.11.x），且我们自己的 `maplibre-adapter.ts` 会往 popup 里拼 HTML —— 升级前要先审一遍哪些字符串是用户可控的 | `apps/web/src/features/map/maplibre-adapter.ts` | 中 / 高（依赖升级属于"需确认"动作，不要擅自做） |
+| O7 | `npm audit` 两个告警：`maplibre-gl <=6.4.0` critical（GHSA-jrc7-96c5-q579）与 `@vitest/mocker` moderate。修复都是跨大版本（6.11.x / vitest 5）。**已论证 maplibre 该 CVE 在本仓库不可达**：不创建 popup、不向 MapLibre 传任何 HTML 字符串，标记子元素纯 DOM 构造（论证写在 `maplibre-adapter.ts` 头注释）；升级属破坏性变更，单独立项验证 | `apps/web/src/features/map/maplibre-adapter.ts` | 中 / 高（依赖升级属"需确认"动作） |
 | O8 | `Dockerfile` 与 `render.yaml` 从未构建/导入过（本机无 Docker）。任何有 Docker 的机器上先 `docker build -t qw .` 验一遍，比读 YAML 有用 | 仓库根 | 小 / 中 |
 
-**已经不用做的**（曾经的疑问，现已实现并实测）：地图点空白选点（MapLibre 侧，GCJ-02 出 SDK 边界时转换，投稿页据此预填建店表单）；举报工单的处置状态流转（C9 已闭合）。
+**已经不用做的**（曾经的疑问，现已实现并实测）：地图点空白选点；表单内嵌选点地图与跨页选点（O2 的"选位置主路径"闭环）；错误文案人话映射（O3 闭合）；举报工单处置流转（C9 已闭合）；详情页速览与折叠（原 B2）。
 
 ---
 
 ## 三、必须先拿到人类授权 / 凭据，不要自行推进
 
-- 推送到 GitHub（`Serennity007/beijing-food-map`，public）。本机 `gh` 已登录该账号，但**推送要你明确同意**，且要先换掉指向源机器的 `origin`。
+- GitHub：公开仓库已建、Pages 线上演示已发布（gh-pages 分支）。剩余：`main` 源码推送待你完成一次 `gh auth refresh -h github.com -s workflow` 设备码授权（gh 令牌缺 `workflow` scope，推含 Actions 工作流的提交会被拒），然后 `git push -u origin main`。
 - 后端托管（Render/Fly/Railway）、`VITE_AMAP_KEY` + 安全密钥、短信服务、云账号、对象存储、任何付费开通、任何对真人发消息。
 - 真实门店数据：需要经人工核验的门店库。**虚构门店/探店/票数/截图是硬约束禁止项。** 建店与举报流程都已通，缺的只是数据与核验人力。
 - 依赖升级（O7）与任何 `--force` 类操作。
