@@ -5,6 +5,9 @@ export default defineAppConfig({
     'pages/submit/index',
     'pages/me/index',
     'pages/login/index',
+    'pages/revise/index',
+    'pages/collection-edit/index',
+    'pages/admin/index',
   ],
   window: {
     backgroundTextStyle: 'light',

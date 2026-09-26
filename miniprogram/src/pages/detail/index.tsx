@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Taro, { useRouter } from '@tarojs/taro'
 import { View, Text, Button, Input, Picker } from '@tarojs/components'
 import {
+  ATTITUDE_LABEL,
   CUISINE_LABEL,
   type RestaurantDetail,
 } from '@qianwei/contracts'
@@ -17,6 +18,7 @@ import {
   me,
   today,
   toggleSystemItem,
+  withdrawFeedback,
 } from '../../api'
 import './index.scss'
 
@@ -37,6 +39,10 @@ export default function Detail() {
   const [checkinAmount, setCheckinAmount] = useState('')
   const [checkinNote, setCheckinNote] = useState('')
   const [todayMax, setTodayMax] = useState('')
+  const [withdrawBusy, setWithdrawBusy] = useState(false)
+
+  const feedbackStatusLabel = (s: string): string =>
+    s === 'PENDING' ? '待审核' : s === 'APPROVED' ? '已公开' : s === 'REJECTED' ? '未通过' : s === 'HIDDEN' ? '已隐藏' : s === 'WITHDRAWN' ? '已撤回' : s === 'DRAFT' ? '草稿' : s
 
   const load = useCallback(async () => {
     setError(null)
@@ -134,6 +140,27 @@ export default function Detail() {
     void Taro.openLocation({ latitude: d.lat, longitude: d.lng, name: d.name, address: d.address, scale: 16 })
   }
 
+  async function doWithdraw(): Promise<void> {
+    if (!d) return
+    const ok = await Taro.showModal({
+      title: '撤回反馈',
+      content: '撤回后这条反馈立即停止公开、立即停止计票，更早的已批准版本不会自动恢复。确定撤回？',
+      confirmText: '撤回',
+      confirmColor: '#a3231d',
+    })
+    if (!ok.confirm) return
+    setWithdrawBusy(true)
+    try {
+      await withdrawFeedback(d.id)
+      setNotice('已撤回，本店票数已重算')
+      await load()
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : '撤回失败')
+    } finally {
+      setWithdrawBusy(false)
+    }
+  }
+
   function copyLink(): void {
     const url = `https://serennity007.github.io/beijing-food-map/restaurants/${d?.id ?? ''}`
     void Taro.setClipboardData({ data: url }).then(() => setNotice('链接已复制（演示数据链接）'))
@@ -163,6 +190,7 @@ export default function Detail() {
 
   const cuisineNames = d.cuisines.map((c) => CUISINE_LABEL[c as keyof typeof CUISINE_LABEL]).join(' · ')
   const price = d.price.average === null ? '人均未知' : `¥${d.price.average}`
+  const my = d.my_current_feedback
   const basisLine = d.in_default_layer
     ? `为什么在好店地图上：近 180 天里 ${d.basis.tally.recommend} 位用户推荐（共 ${d.basis.tally.total} 份有效反馈），地点已核验。`
     : `这家店暂不在默认好店地图：${d.ineligibility_reasons.join('；') || '未满足推荐资格'}`
@@ -226,13 +254,36 @@ export default function Detail() {
 
       <View className="panel">
         <Text className="hint">
-          完整依据（时间窗、三类票数、地点核验与坐标）以 Web 版为准；规则版本 {d.rule_version}。收藏、点赞和浏览都不计入票数。
+          完整依据（时间窗、三类票数、地点核验与坐标）以 Web 版为准；规则版本 {d.basis.rule_version}。收藏、点赞和浏览都不计入票数。
         </Text>
       </View>
 
       {notice && (
         <View className="alert ok">
           <Text>{notice}</Text>
+        </View>
+      )}
+
+      {my && (
+        <View className="panel">
+          <Text className="label">已有一条我的反馈</Text>
+          <View className="badge-row">
+            <Text className="badge editorial">{ATTITUDE_LABEL[my.attitude as keyof typeof ATTITUDE_LABEL]}</Text>
+            <Text className="badge muted">实吃 {my.visited_date}</Text>
+            <Text className="badge warn">{feedbackStatusLabel(my.content_status)}</Text>
+            {my.approved_revision !== null && <Text className="badge ok">公开第 {my.approved_revision} 版</Text>}
+            {my.pending_revision !== null && <Text className="badge warn">第 {my.pending_revision} 版待审</Text>}
+          </View>
+          {my.reason ? <Text className="hint">{my.reason}</Text> : null}
+          <Text className="hint">撤回会立即停止公开并退出计票，更早的已批准版本不会自动复活，票数即时重算。</Text>
+          <View className="btn-row">
+            <Button className="btn-plain" onClick={() => Taro.navigateTo({ url: `/pages/revise/index?id=${encodeURIComponent(d.id)}` })}>
+              修改这条
+            </Button>
+            <Button className="btn-plain" disabled={withdrawBusy} onClick={() => void doWithdraw()}>
+              {withdrawBusy ? '撤回中…' : '撤回'}
+            </Button>
+          </View>
         </View>
       )}
 

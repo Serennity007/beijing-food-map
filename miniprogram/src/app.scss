@@ -433,3 +433,79 @@ Textarea {
 .report-box Textarea {
   margin-top: 10px;
 }
+
+/* ---------- 徽标 / 卡片行（后台与清单页共用） ---------- */
+
+.badge {
+  display: inline-block;
+  padding: 2px 14px;
+  border-radius: 999px;
+  font-size: 20px;
+  line-height: 1.5;
+}
+
+.badge.ok {
+  background: #eef7f1;
+  color: #1f6f43;
+}
+
+.badge.warn {
+  background: #fff5e6;
+  color: #96650b;
+}
+
+.badge.danger {
+  background: #fdf2f1;
+  color: #a3231d;
+}
+
+.badge.muted {
+  background: #f1eee7;
+  color: #8a8379;
+}
+
+.badge.editorial {
+  background: #eaf2fb;
+  color: #2e5f86;
+}
+
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.card-row {
+  margin-top: 8px;
+}
+
+/* 后台分区切片的选中态放大一点，方便点按 */
+.tab-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.radio-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.section-title {
+  display: block;
+  font-size: 28px;
+  font-weight: 700;
+  color: #221f1c;
+  margin: 20px 0 8px;
+}

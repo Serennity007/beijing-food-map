@@ -2,9 +2,50 @@
  * 小程序端 API 层：与 Web 端 Http 客户端同一套后端契约、同一解包口径。
  * 会话：后端下发 HMAC 签名 Cookie，wx.request 不自动管理，
  * 这里手工维护一个最小 Cookie Jar（存 storage，每请求带回）。
- * 只搬运数据，不重算任何业务规则。
+ * 只搬运数据，不重算任何业务规则。DTO 类型从 @qianwei/contracts 直连源码（构建时经 vendor 产物），避免两份漂移。
  */
 import Taro from '@tarojs/taro'
+import type {
+  AuditRec,
+  BusinessStatus,
+  CandidateFacts,
+  CandidateStatus,
+  Collection,
+  DiningLog,
+  DiningLogPage,
+  ModerationQueueEntry,
+  PlaceVerificationStatus,
+  ReportQueueEntry,
+  ReportStatus,
+  ReportTicket,
+  Restaurant,
+  RestaurantCandidate,
+  RestaurantDetail,
+  RiskStatus,
+  SessionUser,
+  Submission,
+} from '@qianwei/contracts'
+
+export type {
+  AuditRec,
+  BusinessStatus,
+  CandidateFacts,
+  CandidateStatus,
+  Collection,
+  DiningLog,
+  DiningLogPage,
+  ModerationQueueEntry,
+  PlaceVerificationStatus,
+  ReportQueueEntry,
+  ReportStatus,
+  ReportTicket,
+  Restaurant,
+  RestaurantCandidate,
+  RestaurantDetail,
+  RiskStatus,
+  SessionUser,
+  Submission,
+}
 
 /** 后端基准地址。发布前换成已备案的 HTTPS 域名。 */
 export const BASE = 'http://127.0.0.1:8787/api/v1'
@@ -81,92 +122,6 @@ export interface MapItemsResponse {
 export interface PageResponse<T> {
   items: T[]
   next_cursor: string | null
-}
-
-export interface SessionUser {
-  id: string
-  display_name: string
-  roles: string[]
-  phone_masked: string
-  is_test_data: true
-  account_status: 'active' | 'deleting'
-}
-
-export interface Restaurant {
-  id: string
-  name: string
-  branch: string | null
-  cuisines: string[]
-  dish_highlights: string[]
-  price: { average: number | null; report_count: number }
-  address: string
-  place_status: string
-  in_default_layer: boolean
-  basis: {
-    community: string
-    tally: { recommend: number; neutral: number; not_recommend: number; total: number }
-    editorial: string
-    sources: string[]
-  }
-  lng: number
-  lat: number
-  is_test_data: boolean
-}
-
-export interface RestaurantDetail extends Restaurant {
-  verification_note: string
-  business_status: string
-  business_status_note: string
-  floor_info: string | null
-  taste_tags: string[]
-  ineligibility_reasons: string[]
-  place_verified_at: string | null
-  my_current_feedback: {
-    attitude: string
-    visited_date: string
-    content_status: string
-    pending_revision: number | null
-    approved_revision: number | null
-    reason: string
-    disclosure: string
-  } | null
-  updated_at: string
-  rule_version: string
-}
-
-export interface RestaurantCandidate {
-  id: string
-  revision: number
-  name: string
-  branch: string | null
-  address: string
-  status: 'PENDING' | 'APPROVED' | 'REJECTED'
-  reject_reason: string | null
-  restaurant_id: string | null
-  duplicates: Array<{ kind: string; matched_id: string; name: string; reason: string; distance_m: number | null }>
-}
-
-export interface Submission {
-  id: string
-  version: number
-  status: string
-  restaurant_id: string
-  restaurant_name: string
-}
-
-export interface ReportTicket {
-  id: string
-  status: string
-  kind: string
-  result_note: string | null
-}
-
-export interface Collection {
-  id: string
-  title: string
-  description: string | null
-  system_kind: string | null
-  items: Array<{ restaurant_id: string; restaurant_name?: string }>
 }
 
 interface Envelope<T> {
@@ -255,6 +210,11 @@ export function me(): Promise<SessionUser | null> {
   return req('/me')
 }
 
+/** 账号注销：立即撤销本机会话与本人分享、隐藏 UGC、退出计票；返回清除任务编号。 */
+export function deleteAccount(): Promise<{ deletion_job_id: string }> {
+  return req('/me', 'DELETE')
+}
+
 // ---------------- 投稿 ----------------
 
 export interface SubmitInput {
@@ -275,27 +235,18 @@ export function mySubmissions(): Promise<Submission[]> {
   return req('/me/submissions')
 }
 
+/** 撤回我在这家店的全部反馈：立即停止公开与计票，不可逆。 */
+export function withdrawFeedback(restaurantId: string): Promise<{ ok: true }> {
+  return req(`/restaurants/${encodeURIComponent(restaurantId)}/my-feedback`, 'DELETE')
+}
+
 export function uploadTestPhoto(restaurantId: string | null): Promise<{ id: string }> {
   return req('/uploads/test-photo', 'POST', { restaurant_id: restaurantId })
 }
 
 // ---------------- 建店候选 ----------------
 
-export interface CandidateCreateInput {
-  name: string
-  branch: string | null
-  address: string
-  floor_info: string | null
-  cuisines: string[]
-  lng: number
-  lat: number
-  source: string
-  provider: string | null
-  poi_id: string | null
-  evidence_note: string
-}
-
-export function createCandidate(input: CandidateCreateInput, idempotencyKey: string): Promise<RestaurantCandidate> {
+export function createCandidate(input: CandidateFacts, idempotencyKey: string): Promise<RestaurantCandidate> {
   return req('/restaurant-candidates', 'POST', input, idempotencyKey)
 }
 
@@ -304,21 +255,6 @@ export function myCandidates(): Promise<RestaurantCandidate[]> {
 }
 
 // ---------------- 举报 ----------------
-
-export interface DiningLog {
-  id: string
-  restaurant_id: string
-  restaurant_name: string
-  visited_date: string
-  amount_fen: number | null
-  note: string | null
-  created_at: string
-}
-
-export interface DiningLogPage {
-  logs: DiningLog[]
-  stats: { month: string; count: number; total_fen: number }
-}
 
 export function createDiningLog(input: { restaurant_id: string; visited_date: string; amount_yuan?: number | null; note?: string | null }): Promise<DiningLog> {
   return req('/me/dining-logs', 'POST', input)
@@ -331,7 +267,6 @@ export function myDiningLogs(): Promise<DiningLogPage> {
 export function deleteDiningLog(id: string): Promise<{ ok: true }> {
   return req(`/me/dining-logs/${encodeURIComponent(id)}`, 'DELETE')
 }
-
 
 export function createReport(input: { restaurant_id: string; kind: string; detail: string; feedback_target?: string | null }): Promise<ReportTicket> {
   return req('/reports', 'POST', input)
@@ -349,4 +284,85 @@ export function collections(): Promise<Collection[]> {
 
 export function toggleSystemItem(restaurantId: string, kind: string, on: boolean): Promise<Collection[]> {
   return req(`/restaurants/${encodeURIComponent(restaurantId)}/collection-item`, 'PUT', { kind, on })
+}
+
+export function createCollection(title: string, description: string | null): Promise<Collection> {
+  return req('/collections', 'POST', { title, description })
+}
+
+export function updateCollectionItem(
+  collectionId: string,
+  restaurantId: string,
+  patch: { note?: string | null; note_shareable?: boolean; remove?: boolean; position?: number },
+): Promise<Collection> {
+  return req(
+    `/collections/${encodeURIComponent(collectionId)}/items/${encodeURIComponent(restaurantId)}`,
+    patch.remove ? 'DELETE' : 'PUT',
+    patch.remove ? undefined : patch,
+  )
+}
+
+export function deleteCollection(collectionId: string): Promise<{ ok: true }> {
+  return req(`/collections/${encodeURIComponent(collectionId)}`, 'DELETE')
+}
+
+export function requestPublication(collectionId: string, shareItemIds: string[]): Promise<{ id: string; status: string; generation: number }> {
+  return req(`/collections/${encodeURIComponent(collectionId)}/publication-requests`, 'POST', { share_item_ids: shareItemIds })
+}
+
+export function unpublish(collectionId: string): Promise<Collection> {
+  return req(`/collections/${encodeURIComponent(collectionId)}/unpublish`, 'POST')
+}
+
+// ---------------- 后台审核（moderator / admin，否则 403） ----------------
+
+export function moderationQueue(): Promise<ModerationQueueEntry[]> {
+  return req('/admin/queue')
+}
+
+export function moderate(input: { target: string; action: 'approve' | 'reject' | 'hide'; reason?: string; expected_version: number }): Promise<{ ok: true }> {
+  return req(`/admin/moderation/${encodeURIComponent(input.target)}/actions`, 'POST', {
+    action: input.action,
+    reason: input.reason,
+    expected_version: input.expected_version,
+  })
+}
+
+export function candidateQueue(status?: CandidateStatus | null): Promise<RestaurantCandidate[]> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : ''
+  return req(`/admin/candidates${qs}`)
+}
+
+export function decideCandidate(input: { id: string; action: 'verify' | 'reject' | 'merge'; reason?: string; target_restaurant_id?: string; expected_version: number }): Promise<RestaurantCandidate> {
+  return req(`/admin/candidates/${encodeURIComponent(input.id)}/actions`, 'POST', {
+    action: input.action,
+    reason: input.reason,
+    target_restaurant_id: input.target_restaurant_id,
+    expected_version: input.expected_version,
+  })
+}
+
+export function reportQueue(status?: ReportStatus | null): Promise<ReportQueueEntry[]> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : ''
+  return req(`/admin/reports${qs}`)
+}
+
+export function decideReport(input: { id: string; action: 'start' | 'resolve' | 'dismiss'; reason?: string; expected_version: number }): Promise<ReportQueueEntry> {
+  return req(`/admin/reports/${encodeURIComponent(input.id)}/actions`, 'POST', {
+    action: input.action,
+    reason: input.reason,
+    expected_version: input.expected_version,
+  })
+}
+
+export function patchRestaurantStatus(input: { id: string; place_status?: PlaceVerificationStatus; business_status?: BusinessStatus; risk_status?: RiskStatus; reason?: string }): Promise<Restaurant> {
+  return req(`/admin/restaurants/${encodeURIComponent(input.id)}/status`, 'PATCH', input)
+}
+
+export function mergeRestaurants(input: { source_id: string; target_id: string; reason: string; expected_version: number }): Promise<{ canonical: string }> {
+  return req(`/admin/restaurants/${encodeURIComponent(input.source_id)}/merge`, 'POST', input)
+}
+
+export function auditLog(): Promise<AuditRec[]> {
+  return req('/admin/audit-log')
 }

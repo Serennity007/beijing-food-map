@@ -1,13 +1,15 @@
 /**
- * 我的地图（小程序 C 端）：登录状态、我的投稿、我的举报、我的清单。
- * 只读列表 + 登录/退出；后台管理、清单发布与注销等高危操作留在 Web 端。
+ * 我的地图（小程序 C 端）：登录状态、我的投稿、我的举报、我的清单、打卡记账。
+ * 只搬运数据，不重算任何业务规则；后台入口按 me() 返回的 roles 显示，403 时页面提示角色不足。
  */
 import { useCallback, useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
-import { View, Text, Button } from '@tarojs/components'
+import { View, Text, Button, Input, Textarea } from '@tarojs/components'
 import {
   clearSession,
   collections,
+  createCollection,
+  deleteAccount,
   deleteDiningLog,
   logout,
   me,
@@ -15,8 +17,8 @@ import {
   myDiningLogs,
   myReports,
   mySubmissions,
-  type DiningLogPage,
   type Collection,
+  type DiningLogPage,
   type ReportTicket,
   type RestaurantCandidate,
   type SessionUser,
@@ -32,6 +34,13 @@ export default function Me() {
   const [cols, setCols] = useState<Collection[]>([])
   const [candidates, setCandidates] = useState<RestaurantCandidate[]>([])
   const [dining, setDining] = useState<DiningLogPage | null>(null)
+
+  // 新建清单（内联表单）
+  const [createOpen, setCreateOpen] = useState(false)
+  const [newTitle, setNewTitle] = useState('')
+  const [newDesc, setNewDesc] = useState('')
+  const [createBusy, setCreateBusy] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoaded(true)
@@ -83,6 +92,50 @@ export default function Me() {
     }
   }
 
+  async function doCreate() {
+    if (newTitle.trim() === '') return
+    setCreateBusy(true)
+    setNotice(null)
+    try {
+      const c = await createCollection(newTitle.trim(), newDesc.trim() === '' ? null : newDesc.trim())
+      setCreateOpen(false)
+      setNewTitle('')
+      setNewDesc('')
+      setNotice(`清单「${c.title}」已创建，点它进入编辑与发布`)
+      await load()
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : '创建失败')
+    } finally {
+      setCreateBusy(false)
+    }
+  }
+
+  async function doDeleteAccount() {
+    const ok = await Taro.showModal({
+      title: '注销账号',
+      content: '注销会立即撤销你的会话与已公开分享、隐藏你提交的内容并退出计票，且不可撤销。确定注销？',
+      confirmText: '注销',
+      confirmColor: '#a3231d',
+    })
+    if (!ok.confirm) return
+    try {
+      const r = await deleteAccount()
+      clearSession()
+      Taro.removeStorageSync('qw.user')
+      setUser(null)
+      setSubmissions([])
+      setReports([])
+      setCols([])
+      setCandidates([])
+      setDining(null)
+      await Taro.showToast({ title: `已提交注销（${r.deletion_job_id}）`, icon: 'none' })
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : '注销失败')
+    }
+  }
+
+  const canAdmin = user !== null && (user.roles.includes('moderator') || user.roles.includes('admin'))
+
   const statusLabel = (s: string): string =>
     s === 'PENDING' ? '待审核' : s === 'APPROVED' ? '已公开' : s === 'REJECTED' ? '未通过' : s === 'HIDDEN' ? '已隐藏' : s === 'OPEN' ? '待处理' : s === 'IN_REVIEW' ? '复核中' : s === 'RESOLVED' ? '已处理' : s === 'DISMISSED' ? '已驳回' : s
 
@@ -106,6 +159,20 @@ export default function Me() {
           </Button>
         )}
       </View>
+
+      {canAdmin && (
+        <View className="btn-row">
+          <Button className="btn-primary" onClick={() => Taro.navigateTo({ url: '/pages/admin/index' })}>
+            内容后台（审核）
+          </Button>
+        </View>
+      )}
+
+      {notice && (
+        <View className="alert ok">
+          <Text>{notice}</Text>
+        </View>
+      )}
 
       {user && (
         <>
@@ -132,7 +199,7 @@ export default function Me() {
                   {c.id} · {c.name}
                 </Text>
                 <Text className="row-sub">
-                  {c.status === 'PENDING' ? '待核验' : c.status === 'APPROVED' ? '已核验' : '已驳回'}
+                  {c.status === 'PENDING' ? '待核验' : c.status === 'VERIFIED' ? '已核验' : c.status === 'MERGED' ? '已并入' : '已驳回'}
                   {c.restaurant_id ? ` · 门店 ${c.restaurant_id}` : ''}
                 </Text>
               </View>
@@ -182,22 +249,51 @@ export default function Me() {
           <View className="panel">
             <Text className="label">我的清单（{cols.length}）</Text>
             {cols.map((c) => (
-              <View className="row" key={c.id}>
+              <View className="row" key={c.id} onClick={() => Taro.navigateTo({ url: `/pages/collection-edit/index?id=${encodeURIComponent(c.id)}` })}>
                 <Text className="row-main">
                   {c.title}
                   {c.system_kind ? ' · 系统清单' : ''}
+                  {c.publication_status === 'PUBLISHED' ? ' · 已公开' : c.publication_status === 'PENDING_REVIEW' ? ' · 发布待审' : ''}
                 </Text>
-                <Text className="row-sub">{c.items.length} 家</Text>
+                <Text className="row-sub">{c.items.length} 家 · 点击编辑 / 发布 / 分享</Text>
               </View>
             ))}
             {cols.length === 0 && <Text className="hint">还没有清单（收藏后自动建立）。</Text>}
-            <Text className="hint">清单的编辑与发布分享留在 Web 端操作。</Text>
+            <View className="btn-row">
+              <Button className="btn-plain" onClick={() => setCreateOpen(!createOpen)}>
+                {createOpen ? '收起新建' : '新建清单'}
+              </Button>
+            </View>
+            {createOpen && (
+              <View className="field">
+                <Text className="label">清单标题</Text>
+                <Input value={newTitle} onInput={(e) => setNewTitle(e.detail.value)} placeholder="例如：望京贵州菜一日路线" />
+                <View className="field">
+                  <Text className="label">说明（可留空）</Text>
+                  <Textarea value={newDesc} onInput={(e) => setNewDesc(e.detail.value)} placeholder="这份清单给谁看、想表达什么" />
+                </View>
+                <Button className="btn-primary" disabled={createBusy || newTitle.trim() === ''} onClick={() => void doCreate()}>
+                  {createBusy ? '创建中…' : '创建'}
+                </Button>
+                <Text className="hint">自建清单可编辑、可发布分享；系统清单（想吃/吃过/私藏）只能收藏，不能发布。</Text>
+              </View>
+            )}
           </View>
         </>
       )}
 
+      {user && (
+        <View className="panel">
+          <Text className="label">账号</Text>
+          <Button className="btn-plain" onClick={() => void doDeleteAccount()}>
+            注销账号
+          </Button>
+          <Text className="hint">注销会立即撤销本机会话与本人分享、隐藏 UGC、退出计票，不可撤销。</Text>
+        </View>
+      )}
+
       <View className="footer-note">
-        <Text className="hint">后台审核、清单发布/撤销、账号注销等操作请使用 Web 版（安全边界更高）。</Text>
+        <Text className="hint">演示版本：门店、图片、实吃与票数均为合成测试数据。</Text>
       </View>
     </View>
   )
