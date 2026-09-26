@@ -17,6 +17,7 @@
   --warn: #96650b;
   --danger: #a3231d;
   --info: #1d5a83;
+  --indigo: #2e5f86; /* 蜡染靛蓝：装饰织带与黔味内容的主色 */
   --shadow-sm: 0 1px 2px rgba(28, 26, 24, 0.05), 0 2px 8px rgba(28, 26, 24, 0.05);
   --shadow: 0 1px 2px rgba(28, 26, 24, 0.07), 0 10px 28px rgba(28, 26, 24, 0.11);
   --ring: 0 0 0 3px rgba(180, 72, 58, 0.22);
@@ -125,7 +126,10 @@ main:focus {
   gap: 10px;
   height: var(--topbar-h);
   padding: 0 12px;
-  background: var(--surface);
+  /* 贵州元素：底边一条蜡染靛蓝菱纹织带（SVG data-URI，24px 单元平铺） */
+  background: var(--surface)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='6' viewBox='0 0 24 6'%3E%3Cpath d='M6 0l3 3-3 3-3-3z' fill='%232e5f86' opacity='.5'/%3E%3Cpath d='M18 0l3 3-3 3-3-3z' fill='%232e5f86' opacity='.5'/%3E%3C/svg%3E")
+    repeat-x left bottom / 24px 6px;
   border-bottom: 1px solid var(--line);
   box-shadow: var(--shadow-sm);
 }
@@ -229,7 +233,10 @@ main:focus {
   grid-template-columns: repeat(3, 1fr);
   gap: 2px;
   padding-bottom: env(safe-area-inset-bottom);
-  background: var(--surface);
+  /* 与顶栏呼应：上边一条蜡染织带 */
+  background: var(--surface)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='6' viewBox='0 0 24 6'%3E%3Cpath d='M6 0l3 3-3 3-3-3z' fill='%232e5f86' opacity='.5'/%3E%3Cpath d='M18 0l3 3-3 3-3-3z' fill='%232e5f86' opacity='.5'/%3E%3C/svg%3E")
+    repeat-x left top / 24px 6px;
   border-top: 1px solid var(--line);
 }
 
@@ -754,6 +761,13 @@ main:focus {
   border-radius: 6px 6px 6px 2px;
 }
 
+/* 贵州菜徽标带出省份简称「黔」（文字本身有语义，不依赖颜色或形状单通道） */
+.badge.cuisine-guizhou::before {
+  content: "黔";
+  margin-right: 3px;
+  font-weight: 700;
+}
+
 .badge.cuisine-sichuan {
   border-color: #e8d3ab;
   background: #fdf6e8;
@@ -1200,6 +1214,37 @@ main:focus {
 
 .basis-details[open] summary {
   margin-bottom: 6px;
+}
+
+/* 黔味小词典：靛蓝内容卡（文化说明，不背书任何门店） */
+.qian-dict {
+  background: linear-gradient(180deg, #f3f7fa, var(--surface));
+  border-color: #cddbe4;
+}
+
+.qian-dict summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--indigo);
+}
+
+.qian-dict summary::marker {
+  color: var(--indigo);
+}
+
+.qian-dict dl {
+  margin: 10px 0 0;
+}
+
+.qian-dict dt {
+  margin-top: 9px;
+  font-weight: 600;
+}
+
+.qian-dict dd {
+  margin: 2px 0 0;
+  color: var(--ink-2);
+  font-size: 13.5px;
 }
 
 /* 表格（后台） */

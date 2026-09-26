@@ -927,6 +927,27 @@ export function SubmitPage() {
         </section>
       )}
 
+      <details className="panel qian-dict">
+        <summary>黔味小词典 · 写反馈时对照</summary>
+        <dl>
+          <dt>酸汤</dt>
+          <dd>苗侗家常的发酵汤底：红酸汤多以毛辣果（野生小番茄）发酵，白酸汤走米汤发酵，酸得干净不刺口。</dd>
+          <dt>折耳根</dt>
+          <dd>鱼腥草的根，凉拌菜与蘸水里的常客，气味门槛高，爱者极爱。</dd>
+          <dt>丝娃娃</dt>
+          <dd>贵阳街头小吃：薄面皮裹十来样素菜丝，灵魂在一碗蘸水。</dd>
+          <dt>烙锅</dt>
+          <dd>食材在平锅上烙熟蘸干辣椒面，贵州夜宵的常客。</dd>
+          <dt>肠旺面</dt>
+          <dd>肥肠、血旺、脆臊配碱水面，红油打底的贵阳早点。</dd>
+          <dt>蘸水</dt>
+          <dd>贵州餐桌的半条命：糊辣椒、折耳根、酸汤各成流派，一桌一配。</dd>
+        </dl>
+        <p className="hint" style={{ marginBottom: 0 }}>
+          只讲味道文化，不替任何门店背书；哪家好吃，以你的实吃反馈为准。
+        </p>
+      </details>
+
       <div className="stale-note">
         演示版本：门店、图片与实吃记录均为合成测试数据，不代表任何真实餐馆；服务端还会复核账号、日期、图片归属与北京范围。
       </div>
