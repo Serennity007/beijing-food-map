@@ -1,0 +1,48 @@
+{
+  "name": "qianwei-miniprogram",
+  "version": "0.1.0",
+  "private": true,
+  "description": "京城黔味地图小程序端 · M1 只读版（地图首页 + 门店详情，数据来自本机/部署后端）",
+  "templateInfo": {
+    "note": "手工脚手架：Taro 4.2.1 + React 18 + TypeScript + webpack5，与全局 @tarojs/cli@4.2.1 对齐"
+  },
+  "scripts": {
+    "prebuild:weapp": "node scripts/bundle-contracts.mjs",
+    "build:weapp": "taro build --type weapp",
+    "dev:weapp": "npm run build:weapp -- --watch",
+    "bundle:contracts": "node scripts/bundle-contracts.mjs"
+  },
+  "browserslist": [
+    "last 3 versions",
+    "Android >= 4.1",
+    "ios >= 8"
+  ],
+  "dependencies": {
+    "@babel/runtime": "^7.24.0",
+    "@tarojs/components": "4.2.1",
+    "@tarojs/helper": "4.2.1",
+    "@tarojs/plugin-framework-react": "4.2.1",
+    "@tarojs/plugin-platform-weapp": "4.2.1",
+    "@tarojs/react": "4.2.1",
+    "@tarojs/runtime": "4.2.1",
+    "@tarojs/shared": "4.2.1",
+    "@tarojs/taro": "4.2.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-react": "^8.0.1",
+    "@babel/preset-typescript": "^8.0.1",
+    "@tarojs/cli": "4.2.1",
+    "@tarojs/webpack5-runner": "4.2.1",
+    "@types/react": "^18.3.0",
+    "@types/webpack-env": "^1.18.0",
+    "babel-preset-taro": "4.2.1",
+    "esbuild": "^0.28.2",
+    "miniprogram-automator": "^0.12.1",
+    "sass": "^1.75.0",
+    "typescript": "^5.6.0",
+    "webpack": "^5.91.0"
+  }
+}

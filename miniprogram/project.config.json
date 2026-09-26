@@ -1,0 +1,16 @@
+{
+  "miniprogramRoot": "dist/",
+  "compileType": "miniprogram",
+  "projectname": "qianwei-miniprogram",
+  "appid": "touristappid",
+  "setting": {
+    "urlCheck": false,
+    "es6": false,
+    "enhance": true,
+    "postcss": false,
+    "minified": false,
+    "ignoreUploadUnusedFiles": true
+  },
+  "libVersion": "3.7.8",
+  "condition": {}
+}

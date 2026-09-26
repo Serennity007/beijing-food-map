@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "types": [
+      "@tarojs/taro",
+      "@types/webpack-env"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@qianwei/contracts": [
+        "./src/vendor/contracts.d.ts"
+      ]
+    }
+  },
+  "include": [
+    "src",
+    "config",
+    "babel.config.js"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}
