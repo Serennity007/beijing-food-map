@@ -88,11 +88,16 @@ export interface RestaurantDetail extends Restaurant {
 
 async function req<T>(path: string): Promise<T> {
   const r = await Taro.request({ url: `${BASE}${path}`, method: 'GET' })
-  if (r.statusCode >= 400) {
-    const data = r.data as { message?: string }
-    throw new Error(data.message ?? `请求失败（${r.statusCode}）`)
+  // 后端响应是 { data: T, error?: { code, message } } 信封（与 Web 端 Http 客户端同一解包口径）
+  const json = (
+    typeof r.data === 'string'
+      ? (JSON.parse(r.data) as { data?: T; error?: { code: string; message: string } } | null)
+      : (r.data as { data?: T; error?: { code: string; message: string } } | null)
+  )
+  if (r.statusCode >= 400 || json?.error) {
+    throw new Error(json?.error?.message ?? `请求失败（${r.statusCode}）`)
   }
-  return r.data as T
+  return (json?.data ?? null) as T
 }
 
 /** 生成 /map/items 的查询串。 */

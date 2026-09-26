@@ -20,23 +20,25 @@ try {
   const page = await mp.reLaunch('/pages/index/index')
   await page.waitFor(6000)
 
-  const data = await page.data()
-  console.log('[verify] totalMatched =', data.totalMatched)
-  console.log('[verify] list =', (data.list ?? []).map((r) => `${r.id} ${r.name}`).join(' ; '))
-  console.log('[verify] markers =', (data.markers ?? []).length, 'error =', data.error)
-
-  const sys = await mp.systemInfo()
-  console.log('[verify] SDKVersion =', sys.SDKVersion, 'platform =', sys.platform)
+  // 函数组件的 React 状态不在 page.data() 里，用渲染元素做验证
+  const cards = await page.$$('.card')
+  const pill = await page.$('.pill')
+  const pillText = pill ? await pill.text() : null
+  const mapEl = await page.$('.the-map')
+  console.log('[verify] index: pill =', JSON.stringify(pillText), '| cards =', cards.length, '| map =', !!mapEl)
 
   await mp.screenshot({ path: path.join(root, 'scripts', 'devtools-index.png') })
 
-  // 进入详情页
-  const first = (data.list ?? [])[0]
-  if (first) {
-    const detail = await mp.reLaunch('/pages/detail/index?id=' + first.id)
-    await detail.waitFor(4000)
-    const dd = await detail.data()
-    console.log('[verify] detail =', dd.d ? `${dd.d.name} | ${dd.d.address?.slice(0, 24)} | in_default_layer=${dd.d.in_default_layer}` : `error=${dd.error}`)
+  // 进入详情页（用列表第一家的卡片）
+  const firstCard = cards[0]
+  if (firstCard) {
+    await firstCard.tap()
+    await page.waitFor(4000)
+    const cur = await mp.currentPage()
+    console.log('[verify] navigated to =', cur?.path)
+    const h1 = await page.$('.h1')
+    const price = await page.$('.price')
+    console.log('[verify] detail: h1 =', JSON.stringify(h1 ? await h1.text() : null), '| price =', JSON.stringify(price ? await price.text() : null))
     await mp.screenshot({ path: path.join(root, 'scripts', 'devtools-detail.png') })
   }
   console.log('[verify] DONE')
