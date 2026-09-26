@@ -37,3 +37,11 @@
 | `25-guizhou-elements-390.png` / `26-qian-dictionary-390.png` | 贵州元素：蜡染织带 + 黔字徽标 / 黔味小词典 |
 | `27-premium-detail-390.png` / `28-premium-map-390.png` / `29-premium-detail-1440.png` | 高级感升级：衬线标题、价格锚点、毛玻璃工具栏、去边框分层 |
 | `30-live-pages-390.png` | **线上实拍**：https://serennity007.github.io/beijing-food-map/ 全套 UI 生效 |
+
+小程序样式完善（2026-09-26）：
+
+| 文件 | 页面 | 看到的关键点 |
+| --- | --- | --- |
+| `34-miniprogram-index-styled.png` | 小程序首页 | 全局样式落地后：工具栏（搜索+菜系chips+待验证开关）、原生地图、好店卡片列表、tabBar 图标 |
+| `35-miniprogram-submit-styled.png` | 小程序投稿页 | 修复样式缺失（app.wxss 未生成）后的表单卡片形态 |
+| `36-miniprogram-me-styled.png` | 小程序我的页 | 登录态卡片与 tabBar 选中态 |

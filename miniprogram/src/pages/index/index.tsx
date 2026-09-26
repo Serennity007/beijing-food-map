@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
-import { Map, View, Text, ScrollView } from '@tarojs/components'
+import { Map, View, Text, ScrollView, Input, Button } from '@tarojs/components'
 import { BEIJING_BOUNDS, BEIJING_CENTER } from '@qianwei/contracts'
 import { fetchMap, fetchList, searchStores, type MapQuery, type MapEntity, type Restaurant } from '../../api'
 import markerRestaurant from '../../assets/marker-restaurant.png'

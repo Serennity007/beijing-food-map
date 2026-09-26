@@ -19,9 +19,24 @@ export default defineAppConfig({
     backgroundColor: '#fffefb',
     borderStyle: 'black',
     list: [
-      { pagePath: 'pages/index/index', text: '逛地图' },
-      { pagePath: 'pages/submit/index', text: '推荐好店' },
-      { pagePath: 'pages/me/index', text: '我的地图' },
+      {
+        pagePath: 'pages/index/index',
+        text: '逛地图',
+        iconPath: 'assets/tab-map.png',
+        selectedIconPath: 'assets/tab-map-active.png',
+      },
+      {
+        pagePath: 'pages/submit/index',
+        text: '推荐好店',
+        iconPath: 'assets/tab-submit.png',
+        selectedIconPath: 'assets/tab-submit-active.png',
+      },
+      {
+        pagePath: 'pages/me/index',
+        text: '我的地图',
+        iconPath: 'assets/tab-me.png',
+        selectedIconPath: 'assets/tab-me-active.png',
+      },
     ],
   },
 })
