@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>京城黔味地图｜演示版</title>
+    <!--
+      GitHub Pages 不会为 SPA 做 history 回退，任何深链接/刷新都会落到这里。
+      记下原始路径后回到应用根，由 main.tsx 用同一路径继续挂载路由。
+    -->
+    <script>
+      (function () {
+        // 部署工作流会把 /beijing-food-map/ 替换为真实公共路径；未替换时按项目页首段推测。
+        var base = '/beijing-food-map/';
+        if (base.indexOf('__') === 0) {
+          var seg = window.location.pathname.split('/');
+          base = seg.length > 2 ? '/' + seg[1] + '/' : '/';
+        }
+        var rest = window.location.pathname.slice(base.length - 1) || '/';
+        if (rest === '/404.html') rest = '/';
+        try {
+          window.sessionStorage.setItem('qianwei.fallback', rest + window.location.search);
+        } catch (e) {
+          /* 隐私模式下只能回到首页 */
+        }
+        window.location.replace(base);
+      })();
+    </script>
+  </head>
+  <body>
+    <p>正在回到地图… 如果浏览器禁止会话存储，请从 <a href="./">应用根目录</a> 进入。</p>
+  </body>
+</html>
