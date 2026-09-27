@@ -71,6 +71,7 @@ function saveCookieFrom(header: Record<string, unknown> | undefined): void {
   const raw = (header['Set-Cookie'] ?? header['set-cookie']) as string | string[] | undefined
   if (!raw) return
   const first = Array.isArray(raw) ? raw[0] : raw
+  if (!first) return
   const pair = first.split(';')[0]?.trim()
   if (pair) Taro.setStorageSync(COOKIE_KEY, pair)
 }

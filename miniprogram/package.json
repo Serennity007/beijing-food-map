@@ -10,7 +10,8 @@
     "prebuild:weapp": "node scripts/bundle-contracts.mjs",
     "build:weapp": "taro build --type weapp",
     "dev:weapp": "npm run build:weapp -- --watch",
-    "bundle:contracts": "node scripts/bundle-contracts.mjs"
+    "bundle:contracts": "node scripts/bundle-contracts.mjs",
+    "typecheck:mp": "tsc --noEmit"
   },
   "browserslist": [
     "last 3 versions",

@@ -24,13 +24,13 @@ export default defineConfig(async (merge, { command, mode }) => {
     },
     framework: 'react',
     compiler: 'webpack5',
-    mini: {
-      // 契约包经 esbuild 预打包为 src/vendor/contracts.js（prebuild 脚本），
-      // 把与 Web 端相同的导入名映射到打包产物
-      alias: {
-        '@qianwei/contracts': path.resolve(process.cwd(), 'src/vendor/contracts.js'),
-      },
+    // 契约包经 esbuild 预打包为 src/vendor/contracts.js（prebuild 脚本），
+    // 把与 Web 端相同的导入名映射到打包产物。
+    // alias 是 Taro 顶层配置项（webpack5-runner 只读 config.alias），放在 mini 里不生效
+    alias: {
+      '@qianwei/contracts': path.resolve(process.cwd(), 'src/vendor/contracts.js'),
     },
+    mini: {},
     h5: {},
   }
   if (process.env.NODE_ENV === 'development') {

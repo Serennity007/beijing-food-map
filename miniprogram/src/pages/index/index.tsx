@@ -4,13 +4,57 @@
  * 小程序端不重算任何资格与计票。
  */
 import { useCallback, useEffect, useState } from 'react'
+import type { ComponentProps } from 'react'
 import Taro from '@tarojs/taro'
 import { Map, View, Text, ScrollView, Input, Button } from '@tarojs/components'
+import type { CommonEvent } from '@tarojs/components'
 import { BEIJING_BOUNDS, BEIJING_CENTER } from '@qianwei/contracts'
 import { fetchMap, fetchList, searchStores, type MapQuery, type MapEntity, type Restaurant } from '../../api'
 import markerRestaurant from '../../assets/marker-restaurant.png'
 import markerCluster from '../../assets/marker-cluster.png'
 import './index.scss'
+
+/** <Map markers> 收窄断言的目标类型（Taro 未从包根导出 MapProps，经组件 props 推导） */
+type TaroMapMarker = NonNullable<ComponentProps<typeof Map>['markers']>[number]
+
+/** Taro 的 MapProps 把微信可选的 onError 标成必填，这里按 props 推导的类型给个记录性空实现 */
+const onMapError: ComponentProps<typeof Map>['onError'] = () => {
+  console.warn('[map] 地图组件触发 onError')
+}
+
+/**
+ * 本页 marker 的最小类型。Taro 的 MapProps.label/callout 把微信可选字段
+ * （anchorX/borderWidth/textAlign 等）标成必填，为不虚构默认值改变渲染，
+ * 这里只声明实际用到的字段，在 <Map> 传入处断言一次。
+ */
+interface MapMarker {
+  id: number
+  latitude: number
+  longitude: number
+  width: number
+  height: number
+  iconPath: string
+  label?: {
+    content: string
+    color: string
+    bgColor: string
+    borderRadius: number
+    padding: number
+    fontSize: number
+    anchorX: number
+    anchorY: number
+    textAlign: 'center'
+  }
+  callout?: {
+    content: string
+    color: string
+    bgColor: string
+    padding: number
+    borderRadius: number
+    display: 'ALWAYS'
+    fontSize: number
+  }
+}
 
 const QUERY: MapQuery = {
   west: BEIJING_BOUNDS.west,
@@ -34,7 +78,7 @@ export default function Index() {
   const [list, setList] = useState<Restaurant[]>([])
   const [totalMatched, setTotalMatched] = useState(0)
   const [snapshotId, setSnapshotId] = useState<string | null>(null)
-  const [markers, setMarkers] = useState<Taro.maps.Marker[]>([])
+  const [markers, setMarkers] = useState<MapMarker[]>([])
   const [models, setModels] = useState<Record<number, MarkerModel>>({})
   const [region, setRegion] = useState({ ...BEIJING_CENTER, zoom: 11 })
   const [view, setView] = useState<'guizhou' | 'southwest' | 'other'>('guizhou')
@@ -49,7 +93,7 @@ export default function Index() {
     try {
       const map = await fetchMap(q)
       const nextModels: Record<number, MarkerModel> = {}
-      const nextMarkers: Taro.maps.Marker[] = map.items.map((entity, i) => {
+      const nextMarkers: MapMarker[] = map.items.map((entity, i) => {
         const id = i + 1
         nextModels[id] = { id, entity }
         const base = {
@@ -124,9 +168,9 @@ export default function Index() {
   }, [term])
 
   const onMarkerTap = useCallback(
-    (e) => {
-      const markerId = (e as { detail?: { markerId?: number } }).detail?.markerId
-      if (markerId === undefined) return
+    (e: CommonEvent<{ markerId: number | string }>) => {
+      const markerId = Number(e.detail.markerId)
+      if (!Number.isFinite(markerId)) return
       const model = models[markerId]
       if (!model) return
       const { entity } = model
@@ -208,9 +252,10 @@ export default function Index() {
           className="the-map"
           latitude={region.lat}
           longitude={region.lng}
-          zoom={region.zoom}
-          markers={markers}
+          scale={region.zoom}
+          markers={markers as TaroMapMarker[]}
           onMarkerTap={onMarkerTap}
+          onError={onMapError}
           showCompass={false}
           enableRotate={false}
           enable3D={false}

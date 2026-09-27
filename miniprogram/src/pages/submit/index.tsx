@@ -4,14 +4,17 @@
  * 未登录会得到 401：页面给出登录入口，不自行判定权限。
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { ComponentProps } from 'react'
 import Taro from '@tarojs/taro'
 import { View, Text, Input, Button, Picker, Textarea, Map } from '@tarojs/components'
 import {
   ATTITUDE_LABEL,
   ATTITUDES,
+  CUISINES,
   DISCLOSURE_LABEL,
   DISCLOSURES,
   type CandidateFacts,
+  type Cuisine,
 } from '@qianwei/contracts'
 import {
   ApiError,
@@ -33,6 +36,11 @@ function newKey(): string {
   return c && typeof c.randomUUID === 'function' ? c.randomUUID() : `demo-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
+/** Taro 的 MapProps 把微信可选的 onError 标成必填，这里按 props 推导的类型给个记录性空实现 */
+const onMapError: ComponentProps<typeof Map>['onError'] = () => {
+  console.warn('[map] 地图组件触发 onError')
+}
+
 export default function Submit() {
   const [term, setTerm] = useState('')
   const [hits, setHits] = useState<Restaurant[] | null>(null)
@@ -43,7 +51,7 @@ export default function Submit() {
   // 建店申请字段
   const [cName, setCName] = useState('')
   const [cAddress, setCAddress] = useState('')
-  const [cCuisines, setCCuisines] = useState<string[]>([])
+  const [cCuisines, setCCuisines] = useState<Cuisine[]>([])
   const [cEvidence, setCEvidence] = useState('')
   const [cPick, setCPick] = useState<{ lng: number; lat: number } | null>(null)
   const [cPickOpen, setCPickOpen] = useState(false)
@@ -59,6 +67,7 @@ export default function Submit() {
   const [reason, setReason] = useState('')
   const [disclosure, setDisclosure] = useState<string | null>(null)
   const [mediaIds, setMediaIds] = useState<string[]>([])
+  const [mediaCount, setMediaCount] = useState(0)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<{ message: string; fields: Record<string, string> } | null>(null)
   const [receipt, setReceipt] = useState<{ id: string; version: number; status: string; restaurant_name: string } | null>(null)
@@ -199,7 +208,7 @@ export default function Submit() {
     }
   }
 
-  function toggleCuisine(c: string): void {
+  function toggleCuisine(c: Cuisine): void {
     setCCuisines((cur) => (cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c].slice(0, 3)))
   }
 
@@ -289,7 +298,7 @@ export default function Submit() {
           <View className="field">
             <Text className="label">菜系（最多 3 个）</Text>
             <View className="chips">
-              {['guizhou', 'sichuan', 'chongqing', 'yunnan', 'other'].map((c) => (
+              {CUISINES.map((c) => (
                 <Text key={c} className={cCuisines.includes(c) ? 'chip active' : 'chip'} onClick={() => toggleCuisine(c)}>
                   {c}
                 </Text>
@@ -304,8 +313,9 @@ export default function Submit() {
                   className="the-map"
                   latitude={cPick?.lat ?? 39.9042}
                   longitude={cPick?.lng ?? 116.4074}
-                  zoom={13}
+                  scale={13}
                   showCompass={false}
+                  onError={onMapError}
                   onTap={(e) => {
                     const detail = (e as { detail?: { longitude?: number; latitude?: number } })?.detail
                     if (detail?.longitude !== undefined && detail?.latitude !== undefined) {

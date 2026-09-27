@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import Taro, { useRouter } from '@tarojs/taro'
-import { View, Text, Button, Input, Picker } from '@tarojs/components'
+import { View, Text, Button, Input, Picker, Textarea } from '@tarojs/components'
 import {
   ATTITUDE_LABEL,
   CUISINE_LABEL,
