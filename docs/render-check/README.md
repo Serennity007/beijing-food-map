@@ -45,3 +45,17 @@
 | `34-miniprogram-index-styled.png` | 小程序首页 | 全局样式落地后：工具栏（搜索+菜系chips+待验证开关）、原生地图、好店卡片列表、tabBar 图标 |
 | `35-miniprogram-submit-styled.png` | 小程序投稿页 | 修复样式缺失（app.wxss 未生成）后的表单卡片形态 |
 | `36-miniprogram-me-styled.png` | 小程序我的页 | 登录态卡片与 tabBar 选中态 |
+
+小程序功能对齐与 UI 写路径（2026-09-26/27，DevTools 模拟器 ws://127.0.0.1:9420 + 本机 8787 后端 + 全新 SQLite）：
+
+| 文件 | 看到的关键点 |
+| --- | --- |
+| `37-miniprogram-admin.png` – `44-miniprogram-revise-submitted.png` | 功能对齐轮：后台六分区（待审队列 VF047#v1/MMF047 带操作按钮、地点核验空态、门店状态检索、审计日志）、清单编辑 COL0001 全要素（已公开徽标/3 条目笔记/发布区）、修订页预填与提交回执 VF001#v2 PENDING、A01/U01 入口差异 |
+| `45-miniprogram-ui-collection-items.png` | UI 写路径：U01 新建清单「测试·UI写路径验证清单」→ 搜索"酸汤粉"命中平台收录门店 → 加入清单成功 |
+| `46-miniprogram-ui-publish-pending.png` | 提交发布回执：发布申请 PUB0005 · PENDING_REVIEW |
+| `47-miniprogram-ui-admin-approved.png` | A01 后台待审队列「通过」PUB0005：已处置提示 |
+| `48-miniprogram-ui-published.png` | U01 重进清单：徽标已公开 + 生效令牌 tok-… |
+| `49-miniprogram-ui-feedback-withdrawn.png` | U01 详情 R01「撤回」（showModal 确认）：已撤回、票数重算、重进后反馈区消失 |
+| `50-miniprogram-ui-account-deleted.png` | U05 注销（showModal 确认）：回执 DELJOB…、回到未登录态 |
+
+> 45–50 由 `miniprogram/scripts/verify-write-ui.mjs` 自动拍摄（showModal 经 mockWxMethod 自动确认，业务接口零 mock，18/18 项断言通过，详见 status.md）。
