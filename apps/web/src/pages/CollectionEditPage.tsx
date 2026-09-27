@@ -229,7 +229,7 @@ export function CollectionEditPage() {
   if (!ready) {
     return (
       <div className="page page-narrow">
-        <StatusBlock kind="loading" message="正在确认内测账号…" />
+        <StatusBlock kind="loading" message="正在确认登录状态…" />
       </div>
     );
   }
@@ -261,7 +261,7 @@ export function CollectionEditPage() {
           message="清单属于个人私密数据，登录后才能编辑与发布。"
           action={
             <Link className="btn small" to={`/login?next=/me/collections/${id}`}>
-              内测登录
+              登录
             </Link>
           }
         />

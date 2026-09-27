@@ -62,8 +62,8 @@ export default function Legal() {
   return (
     <View className="page">
       <View className="head">
-        <Text className="h1">{privacy ? '隐私说明（演示版）' : '用户条款（演示版）'}</Text>
-        <Text className="sub">演示版如实写明数据处置与保留策略，不承诺无法做到的事。</Text>
+        <Text className="h1">{privacy ? '隐私说明' : '用户条款'}</Text>
+        <Text className="sub">如实写明数据处置与保留策略，不承诺无法做到的事。</Text>
       </View>
 
       <View className="panel">

@@ -222,7 +222,7 @@ export function AdminPage() {
       <div className="page page-narrow">
         <StatusBlock
           kind="empty"
-          message="内容后台需要登录。请使用具备 moderator 或 admin 角色的内测账号。"
+          message="内容后台需要登录。请使用具备 moderator 或 admin 角色的账号。"
           action={
             <Link className="btn small" to="/login?next=/admin">
               去登录

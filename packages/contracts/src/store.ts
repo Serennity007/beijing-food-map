@@ -3,6 +3,7 @@ import type {
   CandidateDuplicate,
   Collection,
   CollectionItemRecord,
+  DeploymentMeta,
   FeedbackPublic,
   MapEntity,
   MapItemsResponse,
@@ -131,6 +132,8 @@ export interface UserRec {
   status: 'active' | 'deleting' | 'deleted';
   deletion_job_id?: string;
   deletion_completed_at?: string;
+  /** 合成测试账号标记：种子/邀请账号 true；真实短信注册 false（读取缺字段按 true 兜底）。 */
+  is_test_data?: boolean;
 }
 
 export interface EditorialRec {
@@ -170,6 +173,8 @@ export interface RestaurantRec {
   version: number;
   updated_at: string;
   note: string;
+  /** 合成测试门店标记：种子 true；人工核验入库（候选转正）按环境判定。读取缺字段按 true 兜底。 */
+  is_test_data?: boolean;
   // 派生
   tally: { recommend: number; neutral: number; not_recommend: number; total: number };
   window_start: string;
@@ -193,6 +198,8 @@ export interface MediaRec {
   restaurant_id: string | null;
   /** 没有这个字段就不能报"提交时间"——早前的本机快照里没有它，读取处要按未知处理。 */
   created_at?: string;
+  /** 合成图片标记：种子/演示上传 true；真实上传 false。 */
+  is_test_data?: boolean;
 }
 
 export interface PublicationRec {
@@ -254,6 +261,8 @@ export interface CandidateRec extends DedupeTarget {
   version: number;
   created_at: string;
   updated_at: string;
+  /** 建店候选：演示环境的产品流内容也属合成数据；production 的人工核验入库为真实数据。 */
+  is_test_data?: boolean;
 }
 
 /** 建店申请与补材料共用的事实字段，校验只在这一处。 */
@@ -272,6 +281,11 @@ export interface CandidateInput extends CandidateFacts {
 interface StoreOptions {
   /** production 下拒绝装载测试种子与演示登录后门。 */
   env?: 'development' | 'test' | 'demo_static' | 'production';
+  /**
+   * 是否装载演示种子（默认 true）。production 装配传 false：得到空引擎，随后用
+   * loadState 恢复真实核验数据；此时构造器不再抛「拒绝种子」。
+   */
+  seed?: boolean;
   now?: () => number;
 }
 
@@ -286,7 +300,7 @@ const SYSTEM_KINDS: Array<{ kind: SystemCollectionKind; title: string }> = [
  * 浏览器 demo 走同一个类，后端 API 也只是它的 HTTP 外壳，避免两处规则漂移。
  */
 export class Store {
-  readonly env: StoreOptions['env'];
+  readonly env: NonNullable<StoreOptions['env']>;
   private clock: Clock;
   restaurants = new Map<string, RestaurantRec>();
   candidates = new Map<string, CandidateRec>();
@@ -308,6 +322,7 @@ export class Store {
   constructor(opts: StoreOptions = {}) {
     this.env = opts.env ?? 'development';
     this.clock = { now: opts.now ?? (() => Date.now()) };
+    if (opts.seed === false) return;
     if (this.env === 'production') {
       throw new RuleViolation('production 环境拒绝装载测试种子，请先接入真实核验数据');
     }
@@ -338,6 +353,7 @@ export class Store {
         roles: [...u.roles],
         phone_masked: u.phone,
         status: u.id === 'U06' ? 'deleted' : 'active',
+        is_test_data: true,
       });
     }
     for (const s of SEED_RESTAURANTS) {
@@ -349,6 +365,7 @@ export class Store {
           width: 640,
           height: 420,
           review_status: 'APPROVED',
+          is_test_data: true,
           context: 'private',
           publication_id: null,
           restaurant_id: s.id,
@@ -358,6 +375,7 @@ export class Store {
       });
       const rec: RestaurantRec = {
         ...s,
+        is_test_data: true,
         place_verified_date:
           s.place_verified_days_ago === null ? null : addDays(this.today(), -s.place_verified_days_ago),
         photo_media_ids: photos,
@@ -426,6 +444,7 @@ export class Store {
         width: 640,
         height: 420,
         review_status: f.status === 'APPROVED' ? 'APPROVED' : 'PENDING',
+        is_test_data: true,
         context: 'private',
         publication_id: null,
         restaurant_id: f.restaurant_id,
@@ -696,7 +715,7 @@ export class Store {
       taste_tags: rec.taste_tags,
       photo_media_ids: rec.photo_media_ids,
       profile_public: rec.profile_public,
-      is_test_data: true,
+      is_test_data: rec.is_test_data !== false,
       place_status: rec.place_status,
       place_verified_at: rec.place_verified_date,
       business_status: rec.business_status,
@@ -725,7 +744,7 @@ export class Store {
       width: m.width,
       height: m.height,
       review_status: m.review_status,
-      is_test_data: true,
+      is_test_data: m.is_test_data !== false,
       exif_stripped: true,
     };
   }
@@ -752,6 +771,7 @@ export class Store {
       width: 640,
       height: 420,
       review_status: 'PENDING',
+      is_test_data: true,
       context: 'private',
       publication_id: null,
       restaurant_id: restaurantId,
@@ -1090,7 +1110,7 @@ export class Store {
       display_name: u.display_name,
       roles: u.roles,
       phone_masked: u.phone_masked,
-      is_test_data: true,
+      is_test_data: u.is_test_data !== false,
       account_status: u.status === 'active' ? 'active' : 'deleting',
     };
   }
@@ -1123,6 +1143,7 @@ export class Store {
       roles: input.roles,
       phone_masked: '138****0000',
       status: 'active',
+      is_test_data: true,
     });
     this.ensureSystemCollections(input.id);
     this.logAudit(this.requireRole(sessionId, ['admin']).id, 'create_invited_user', input.id, null, null, null);
@@ -1662,6 +1683,14 @@ export class Store {
     return { ...col, items: [...col.items] };
   }
 
+  /** 部署自描述：前端据此决定演示水印的显隐（production 且未装测试种子 = 干净上线态）。 */
+  deploymentMeta(): DeploymentMeta {
+    return {
+      env: this.env,
+      test_data_loaded: [...this.restaurants.values()].some((r) => r.is_test_data !== false),
+    };
+  }
+
   sharedSnapshot(token: string): SharedCollectionSnapshot {
     const pub = [...this.publications.values()].find((p) => p.token === token && p.status === 'PUBLISHED');
     if (!pub) throw new ApiError('NOT_FOUND', '链接无效或已撤销', 404);
@@ -1677,6 +1706,7 @@ export class Store {
       description: pub.description,
       author_display_name: author.display_name,
       published_at: pub.published_at ?? pub.created_at,
+      contains_test_data: [...this.restaurants.values()].some((r) => r.is_test_data !== false),
       items: pub.items.flatMap((i) => {
         const rec = this.restaurants.get(i.restaurant_id);
         // 快照不能绕过后续隐藏/撤回
@@ -1982,6 +2012,7 @@ export class Store {
       submitted_by: c.submitted_by,
       author_display_name: this.users.get(c.submitted_by)?.display_name ?? '已注销用户',
       is_author_self: actor !== null && actor === c.submitted_by,
+      is_test_data: c.is_test_data !== false,
       place_status: rest && !rest.deleted && !rest.merged_into ? rest.place_status : null,
       reject_reason: c.reject_reason,
       decided_by: c.decided_by,
@@ -1989,7 +2020,6 @@ export class Store {
       version: c.version,
       created_at: c.created_at,
       updated_at: c.updated_at,
-      is_test_data: true,
     };
   }
 
@@ -2031,6 +2061,8 @@ export class Store {
         floor_info: facts.floor_info,
         lng: facts.lng,
         lat: facts.lat,
+        /** 人工核验入库：production 为真实数据（导入管线），演示环境属合成内容。 */
+        is_test_data: this.env !== 'production',
         price_avg: null,
         price_reports: 0,
         dish_highlights: [],
@@ -2067,6 +2099,7 @@ export class Store {
         cuisines: [...facts.cuisines],
         status: 'PENDING',
         restaurant_id: rid,
+        is_test_data: this.env !== 'production',
         submitted_by: user.id,
         reject_reason: null,
         decided_by: null,

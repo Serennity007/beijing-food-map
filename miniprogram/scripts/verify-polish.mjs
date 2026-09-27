@@ -72,7 +72,7 @@ async function loginAs(uid) {
 // 1) 法律页 · 隐私
 const privacy = await retry(() => mp.reLaunch('/pages/legal/index?kind=privacy'), 'reLaunch privacy')
 await privacy.waitFor(2500)
-check('隐私标题', await hasText(privacy, '隐私说明（演示版）'))
+check('隐私标题', await hasText(privacy, '隐私说明'))
 check('收集什么区块', await hasText(privacy, '我们收集什么'))
 check('删除与注销区块', await hasText(privacy, '删除与注销'))
 await shot('55-miniprogram-ui-legal-privacy.png')
@@ -80,7 +80,7 @@ await shot('55-miniprogram-ui-legal-privacy.png')
 // 2) 法律页 · 条款（页内切换）
 await retry(() => tapText(privacy, '切换到用户条款'), 'tap switch to terms')
 await privacy.waitFor(1500)
-check('条款标题', await hasText(privacy, '用户条款（演示版）'))
+check('条款标题', await hasText(privacy, '用户条款'))
 check('推荐规则区块', await hasText(privacy, '推荐是怎么来的'))
 check('免责声明', await hasText(privacy, '演示版免责声明'))
 await shot('56-miniprogram-ui-legal-terms.png')

@@ -71,7 +71,8 @@ export interface Restaurant {
   taste_tags: string[];
   photo_media_ids: string[];
   profile_public: boolean;
-  is_test_data: true;
+  /** 合成测试数据标记：演示种子恒为 true；真实核验数据为 false（生产视图据此隐藏演示水印）。 */
+  is_test_data: boolean;
   place_status: PlaceVerificationStatus;
   place_verified_at: string | null;
   business_status: BusinessStatus;
@@ -111,7 +112,7 @@ export interface MediaAsset {
   width: number;
   height: number;
   review_status: ContentVersionStatus;
-  is_test_data: true;
+  is_test_data: boolean;
   exif_stripped: true;
 }
 
@@ -259,6 +260,8 @@ export interface SharedCollectionSnapshot {
   description: string | null;
   author_display_name: string;
   published_at: string;
+  /** 快照内是否含合成测试门店：为 true 时公开页显示演示水印，真实数据不显示。 */
+  contains_test_data: boolean;
   items: Array<{
     restaurant_id: string;
     name: string;
@@ -273,12 +276,19 @@ export interface SharedCollectionSnapshot {
   }>;
 }
 
+/** 部署自描述：前端据此决定是否显示演示水印（production 且无测试数据 = 干净上线态）。 */
+export interface DeploymentMeta {
+  env: 'development' | 'test' | 'demo_static' | 'production';
+  /** 当前库内是否装载了合成测试数据（演示种子）。 */
+  test_data_loaded: boolean;
+}
+
 export interface SessionUser {
   id: string;
   display_name: string;
   roles: Role[];
   phone_masked: string;
-  is_test_data: true;
+  is_test_data: boolean;
   account_status: 'active' | 'deleting';
 }
 
@@ -389,7 +399,7 @@ export interface RestaurantCandidate {
   version: number;
   created_at: string;
   updated_at: string;
-  is_test_data: true;
+  is_test_data: boolean;
 }
 
 /** 美食打卡/记账：用户个人的到店记录与消费记账（不参与公开推荐与票数）。 */

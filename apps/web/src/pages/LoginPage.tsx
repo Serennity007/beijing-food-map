@@ -33,9 +33,9 @@ export function LoginPage() {
 
   return (
     <div className="page page-narrow">
-      <h1>内测登录</h1>
+      <h1>登录</h1>
       <p className="hint">
-        演示版使用预置的<strong>合成邀请账号</strong>，不发送真实短信。正式环境改为服务端短信验证码：短时有效、单次使用、失败次数与费用上限都在服务端控制。
+        当前部署使用预置的<strong>合成邀请账号</strong>，不发送真实短信；生产部署会改为服务端短信验证码：短时有效、单次使用、失败次数与费用上限都在服务端控制。
       </p>
       {error && <div className="alert bad">{error}</div>}
 

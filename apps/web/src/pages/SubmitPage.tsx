@@ -556,7 +556,7 @@ export function SubmitPage() {
               <span className={selected.place_status === 'VERIFIED' ? 'badge ok' : 'badge warn'}>
                 {selected.place_status === 'VERIFIED' ? `地点已核验 ${selected.place_verified_at ?? ''}` : '地点待核验'}
               </span>
-              <span className="badge muted">演示数据 #{selected.id}</span>
+              {selected.is_test_data && <span className="badge muted">演示数据 #{selected.id}</span>}
             </div>
             <div className="btn-row">
               <Link className="btn small plain" to={`/restaurants/${selected.id}`}>

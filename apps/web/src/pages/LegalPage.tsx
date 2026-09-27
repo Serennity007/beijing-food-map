@@ -5,7 +5,7 @@ export function LegalPage({ kind }: { kind: 'privacy' | 'terms' }) {
   const privacy = kind === 'privacy';
   return (
     <div className="page page-narrow">
-      <h1>{privacy ? '隐私说明（演示版）' : '用户条款（演示版）'}</h1>
+      <h1>{privacy ? '隐私说明' : '用户条款'}</h1>
       <div className="panel">
         {privacy ? (
           <>

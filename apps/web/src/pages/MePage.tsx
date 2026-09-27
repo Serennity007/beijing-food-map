@@ -175,10 +175,10 @@ export function MePage() {
         ) : (
           <StatusBlock
             kind="empty"
-            message="登录后查看自己的投稿、纠错工单与账号设置。演示版使用预置的合成邀请账号。"
+            message="登录后查看自己的投稿、纠错工单与账号设置。"
             action={
               <Link className="btn" to="/login?next=/me">
-                内测登录
+                登录
               </Link>
             }
           />
@@ -212,7 +212,7 @@ export function MePage() {
         <div className="card-row">
           <strong>{user.display_name}</strong>
           <span className="badge">{user.id}</span>
-          <span className="badge muted">合成账号 · is_test_data</span>
+          {user.is_test_data && <span className="badge muted">合成账号 · is_test_data</span>}
           {user.account_status === 'deleting' && <span className="badge warn">注销处理中</span>}
         </div>
         <dl className="facts">

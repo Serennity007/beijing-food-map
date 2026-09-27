@@ -70,8 +70,8 @@ export function SharedPage() {
         <div className="card-row">
           <h1>{snap.title}</h1>
           <span className="badges">
-            <span className="badge">演示快照</span>
-            <span className="badge muted">{demoBadge}</span>
+            {snap.contains_test_data && <span className="badge">演示快照</span>}
+            {demoBadge && <span className="badge muted">{demoBadge}</span>}
           </span>
         </div>
         {snap.description && <p className="card-dishes">{snap.description}</p>}
@@ -147,7 +147,7 @@ export function SharedPage() {
       <p className="hint">
         生产环境本页会以 no-store 响应头提供，避免权限撤销之后仍被浏览器或 CDN 缓存命中；当前
         {api.mode === 'static' ? '静态演示中，快照直接读取本机浏览器内的领域引擎数据。' : '演示后端返回同一份快照数据。'}
-        门店、图片与笔记均为合成测试数据。
+        {snap.contains_test_data ? '门店、图片与笔记均为合成测试数据。' : ''}
       </p>
       <div className="btn-row">
         <Link className="btn small ghost" to="/map">

@@ -416,9 +416,11 @@ export default function Submit() {
         </View>
       )}
 
-      <View className="footer-note">
-        <Text className="hint">演示版本：门店、图片、实吃与票数均为合成测试数据。</Text>
-      </View>
+      {restaurant?.is_test_data && (
+        <View className="footer-note">
+          <Text className="hint">演示版本：门店、图片、实吃与票数均为合成测试数据。</Text>
+        </View>
+      )}
     </View>
   )
 }

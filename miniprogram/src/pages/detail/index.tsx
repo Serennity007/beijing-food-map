@@ -371,11 +371,11 @@ export default function Detail() {
         </View>
       )}
 
-      <View className="footer-note">
-        <Text className="hint">
-          演示版本：门店与票数均为合成测试数据（{d.is_test_data ? 'is_test_data' : '数据标记异常'}）。
-        </Text>
-      </View>
+      {d.is_test_data && (
+        <View className="footer-note">
+          <Text className="hint">演示版本：门店与票数均为合成测试数据（is_test_data）。</Text>
+        </View>
+      )}
     </View>
   )
 }

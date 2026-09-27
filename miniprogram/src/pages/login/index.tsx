@@ -34,8 +34,8 @@ export default function Login() {
   return (
     <View className="page">
       <View className="head">
-        <Text className="h1">内测登录</Text>
-        <Text className="sub">演示版使用预置的合成邀请账号，不发送真实短信。验证码固定为 888888，只在演示环境有效。</Text>
+        <Text className="h1">登录</Text>
+        <Text className="sub">当前部署使用预置的合成邀请账号，不发送真实短信。验证码固定为 888888，只在演示环境有效。</Text>
       </View>
 
       <View className="panel">

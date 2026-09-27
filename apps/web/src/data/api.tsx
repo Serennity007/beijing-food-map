@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { ApiClient } from './client';
 import { StaticClient } from './client';
 import { Http } from './http';
-import type { SessionUser } from '@qianwei/contracts';
+import type { DeploymentMeta, SessionUser } from '@qianwei/contracts';
 
 interface ApiState {
   api: ApiClient;
@@ -27,6 +27,7 @@ export function ApiProvider({ children }: { children: ReactNode }) {
   const api = useMemo(makeClient, []);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [ready, setReady] = useState(false);
+  const [meta, setMeta] = useState<DeploymentMeta | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -34,8 +35,10 @@ export function ApiProvider({ children }: { children: ReactNode }) {
     } catch {
       setUser(null);
     } finally {
-      setReady(true);
+      setReady(true)
     }
+    // 部署自描述失败时按 null 处理：水印按保守（显示）策略走
+    setMeta(await api.meta().catch(() => null));
   }, [api]);
 
   useEffect(() => {
@@ -47,11 +50,19 @@ export function ApiProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, [api]);
 
+  // 演示水印跟着部署事实走：production 且未装载测试种子 = 干净上线态，不显示任何演示标记
+  const showDemoBadge = meta === null || meta.env !== 'production' || meta.test_data_loaded;
+  const demoBadge = showDemoBadge
+    ? api.mode === 'static'
+      ? '演示数据 · 存在本机浏览器'
+      : '演示数据 · 含合成测试内容'
+    : '';
+
   const value: ApiState = {
     api,
     user,
     ready,
-    demoBadge: api.mode === 'static' ? '演示数据 · 存在本机浏览器' : '演示后端 · 合成测试数据',
+    demoBadge,
     refresh,
     setUser,
     signOut,

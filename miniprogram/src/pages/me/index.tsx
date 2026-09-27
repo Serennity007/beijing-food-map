@@ -155,7 +155,7 @@ export default function Me() {
           </Button>
         ) : (
           <Button className="btn-primary" onClick={() => Taro.navigateTo({ url: '/pages/login/index' })}>
-            内测登录
+            登录
           </Button>
         )}
       </View>
@@ -306,9 +306,11 @@ export default function Me() {
         </View>
       )}
 
-      <View className="footer-note">
-        <Text className="hint">演示版本：门店、图片、实吃与票数均为合成测试数据。</Text>
-      </View>
+      {user?.is_test_data && (
+        <View className="footer-note">
+          <Text className="hint">演示版本：门店、图片、实吃与票数均为合成测试数据。</Text>
+        </View>
+      )}
     </View>
   )
 }

@@ -556,7 +556,9 @@ export function MapPage() {
             </button>
           )}
           <p className="hint">
-            演示版本：门店、图片、实吃与票数均为合成测试数据。
+            {d.list.some((r) => r.is_test_data)
+              ? '演示版本：门店、图片、实吃与票数均为合成测试数据。'
+              : ''}
             {user ? '' : ' 登录后可投稿并建立自己的地图。'}
           </p>
         </Drawer>

@@ -156,7 +156,7 @@ export function RestaurantPage() {
 
   function copyLink(): void {
     const url = window.location.href;
-    const done = () => setNotice('链接已复制，可以粘贴给朋友（演示数据链接，对方打开看到的也是合成门店）');
+    const done = () => setNotice('链接已复制，可以粘贴给朋友。');
     if (navigator.clipboard?.writeText) {
       navigator.clipboard
         .writeText(url)
@@ -578,9 +578,9 @@ export function RestaurantPage() {
           <section className="panel">
             <h3>菜系</h3>
             <p className="hint">{d.cuisines.map((c) => CUISINE_LABEL[c]).join(' · ')}</p>
-            <p className="hint">
-              演示数据 #{d.id}（is_test_data）。地址与图片均为合成内容，不代表真实门店。
-            </p>
+            {d.is_test_data && (
+              <p className="hint">演示数据 #{d.id}（is_test_data）。地址与图片均为合成内容，不代表真实门店。</p>
+            )}
           </section>
         </div>
       </div>

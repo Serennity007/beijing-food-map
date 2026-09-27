@@ -541,6 +541,17 @@ function documentOperations(): Record<string, Record<string, unknown>> {
       responses: { '200': ok(obj({ status: { type: 'string', enum: ['ready'] } }, ['status'])), '503': err(503, 'PROVIDER_UNAVAILABLE', '存储未就绪') },
     },
     'GET /today': { tags: ['ops'], summary: '服务器今天（Asia/Shanghai）', security: [], responses: { '200': ok({ type: 'string', format: 'date' }) } },
+    'GET /meta': {
+      tags: ['ops'],
+      summary: '部署自描述：环境与测试数据装载状态',
+      description: '前端据此决定演示水印显隐：production 且未装载测试种子时，界面不出现任何演示/测试标记。',
+      security: [],
+      responses: {
+        '200': ok(
+          obj({ env: { type: 'string', enum: ['development', 'test', 'demo_static', 'production'] }, test_data_loaded: { type: 'boolean' } }, ['env', 'test_data_loaded']),
+        ),
+      },
+    },
 
     'GET /map/items': {
       tags: ['map'],

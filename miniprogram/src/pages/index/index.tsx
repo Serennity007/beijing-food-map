@@ -380,9 +380,11 @@ export default function Index() {
             <Text>当前视野内没有符合推荐资格的门店。</Text>
           </View>
         )}
-        <View className="list-footer">
-          <Text className="list-hint">演示版本：门店与票数均为合成测试数据</Text>
-        </View>
+        {list.some((r) => r.is_test_data) && (
+          <View className="list-footer">
+            <Text className="list-hint">演示版本：门店与票数均为合成测试数据</Text>
+          </View>
+        )}
       </ScrollView>
     </View>
   )

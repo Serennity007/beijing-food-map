@@ -209,6 +209,10 @@ export class Http implements ApiClient {
     return this.req<C.SharedCollectionSnapshot>(`/shared-collections/${encodeURIComponent(token)}`);
   }
 
+  meta() {
+    return this.req<C.DeploymentMeta>('/meta');
+  }
+
   createReport(input: ReportInput) {
     return this.req<C.ReportTicket>('/reports', { method: 'POST' }, input);
   }

@@ -180,6 +180,12 @@ export function buildRouter(svc: Services): Router {
       },
     },
     { method: 'GET', path: '/today', summary: '服务器认定的 Asia/Shanghai 今天', handler: () => store.today() },
+    {
+      method: 'GET',
+      path: '/meta',
+      summary: '部署自描述：环境与是否装载测试数据（前端据此显示/隐藏演示水印）',
+      handler: () => store.deploymentMeta(),
+    },
 
     // ------------------------------------------------------------ 地图与列表
     {

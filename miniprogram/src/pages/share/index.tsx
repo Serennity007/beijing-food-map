@@ -66,9 +66,11 @@ export default function Share() {
     <View className="page">
       <View className="head">
         <Text className="h1">{snap.title}</Text>
-        <View className="badge-row">
-          <Text className="badge muted">演示快照</Text>
-        </View>
+        {snap.contains_test_data && (
+          <View className="badge-row">
+            <Text className="badge muted">演示快照</Text>
+          </View>
+        )}
         {snap.description && <Text className="sub">{snap.description}</Text>}
         <Text className="card-meta">
           作者 {snap.author_display_name} · 发布于 {snap.published_at} · 共 {snap.items.length} 家门店
@@ -135,7 +137,7 @@ export default function Share() {
       )}
 
       <View className="footer-note">
-        <Text className="hint">生产环境本页会以 no-store 响应头提供，避免权限撤销之后仍被缓存命中。门店、图片与笔记均为合成测试数据。</Text>
+        <Text className="hint">生产环境本页会以 no-store 响应头提供，避免权限撤销之后仍被缓存命中。{snap.contains_test_data ? '门店、图片与笔记均为合成测试数据。' : ''}</Text>
       </View>
     </View>
   )

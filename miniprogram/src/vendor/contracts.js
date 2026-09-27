@@ -972,6 +972,7 @@ var Store = class {
     var _a, _b;
     this.env = (_a = opts.env) != null ? _a : "development";
     this.clock = { now: (_b = opts.now) != null ? _b : (() => Date.now()) };
+    if (opts.seed === false) return;
     if (this.env === "production") {
       throw new RuleViolation("production \u73AF\u5883\u62D2\u7EDD\u88C5\u8F7D\u6D4B\u8BD5\u79CD\u5B50\uFF0C\u8BF7\u5148\u63A5\u5165\u771F\u5B9E\u6838\u9A8C\u6570\u636E");
     }
@@ -998,7 +999,8 @@ var Store = class {
         display_name: u.display_name,
         roles: [...u.roles],
         phone_masked: u.phone,
-        status: u.id === "U06" ? "deleted" : "active"
+        status: u.id === "U06" ? "deleted" : "active",
+        is_test_data: true
       });
     }
     for (const s of SEED_RESTAURANTS) {
@@ -1010,6 +1012,7 @@ var Store = class {
           width: 640,
           height: 420,
           review_status: "APPROVED",
+          is_test_data: true,
           context: "private",
           publication_id: null,
           restaurant_id: s.id,
@@ -1019,6 +1022,7 @@ var Store = class {
       });
       const rec = {
         ...s,
+        is_test_data: true,
         place_verified_date: s.place_verified_days_ago === null ? null : addDays(this.today(), -s.place_verified_days_ago),
         photo_media_ids: photos,
         lng: s.lng,
@@ -1084,6 +1088,7 @@ var Store = class {
         width: 640,
         height: 420,
         review_status: f.status === "APPROVED" ? "APPROVED" : "PENDING",
+        is_test_data: true,
         context: "private",
         publication_id: null,
         restaurant_id: f.restaurant_id,
@@ -1320,7 +1325,7 @@ var Store = class {
       taste_tags: rec.taste_tags,
       photo_media_ids: rec.photo_media_ids,
       profile_public: rec.profile_public,
-      is_test_data: true,
+      is_test_data: rec.is_test_data !== false,
       place_status: rec.place_status,
       place_verified_at: rec.place_verified_date,
       business_status: rec.business_status,
@@ -1348,7 +1353,7 @@ var Store = class {
       width: m.width,
       height: m.height,
       review_status: m.review_status,
-      is_test_data: true,
+      is_test_data: m.is_test_data !== false,
       exif_stripped: true
     };
   }
@@ -1374,6 +1379,7 @@ var Store = class {
       width: 640,
       height: 420,
       review_status: "PENDING",
+      is_test_data: true,
       context: "private",
       publication_id: null,
       restaurant_id: restaurantId,
@@ -1666,7 +1672,7 @@ var Store = class {
       display_name: u.display_name,
       roles: u.roles,
       phone_masked: u.phone_masked,
-      is_test_data: true,
+      is_test_data: u.is_test_data !== false,
       account_status: u.status === "active" ? "active" : "deleting"
     };
   }
@@ -1695,7 +1701,8 @@ var Store = class {
       display_name: input.display_name,
       roles: input.roles,
       phone_masked: "138****0000",
-      status: "active"
+      status: "active",
+      is_test_data: true
     });
     this.ensureSystemCollections(input.id);
     this.logAudit(this.requireRole(sessionId, ["admin"]).id, "create_invited_user", input.id, null, null, null);
@@ -2189,6 +2196,13 @@ var Store = class {
     col.version += 1;
     return { ...col, items: [...col.items] };
   }
+  /** 部署自描述：前端据此决定演示水印的显隐（production 且未装测试种子 = 干净上线态）。 */
+  deploymentMeta() {
+    return {
+      env: this.env,
+      test_data_loaded: [...this.restaurants.values()].some((r2) => r2.is_test_data !== false)
+    };
+  }
   sharedSnapshot(token) {
     var _a;
     const pub = [...this.publications.values()].find((p) => p.token === token && p.status === "PUBLISHED");
@@ -2205,6 +2219,7 @@ var Store = class {
       description: pub.description,
       author_display_name: author.display_name,
       published_at: (_a = pub.published_at) != null ? _a : pub.created_at,
+      contains_test_data: [...this.restaurants.values()].some((r2) => r2.is_test_data !== false),
       items: pub.items.flatMap((i) => {
         const rec = this.restaurants.get(i.restaurant_id);
         if (!rec || rec.deleted || rec.merged_into || !rec.profile_public) return [];
@@ -2478,14 +2493,14 @@ var Store = class {
       submitted_by: c.submitted_by,
       author_display_name: (_b = (_a = this.users.get(c.submitted_by)) == null ? void 0 : _a.display_name) != null ? _b : "\u5DF2\u6CE8\u9500\u7528\u6237",
       is_author_self: actor !== null && actor === c.submitted_by,
+      is_test_data: c.is_test_data !== false,
       place_status: rest && !rest.deleted && !rest.merged_into ? rest.place_status : null,
       reject_reason: c.reject_reason,
       decided_by: c.decided_by,
       decided_at: c.decided_at,
       version: c.version,
       created_at: c.created_at,
-      updated_at: c.updated_at,
-      is_test_data: true
+      updated_at: c.updated_at
     };
   }
   /**
@@ -2525,6 +2540,8 @@ var Store = class {
         floor_info: facts.floor_info,
         lng: facts.lng,
         lat: facts.lat,
+        /** 人工核验入库：production 为真实数据（导入管线），演示环境属合成内容。 */
+        is_test_data: this.env !== "production",
         price_avg: null,
         price_reports: 0,
         dish_highlights: [],
@@ -2561,6 +2578,7 @@ var Store = class {
         cuisines: [...facts.cuisines],
         status: "PENDING",
         restaurant_id: rid,
+        is_test_data: this.env !== "production",
         submitted_by: user.id,
         reject_reason: null,
         decided_by: null,

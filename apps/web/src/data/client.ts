@@ -21,6 +21,7 @@ import {
   type ReportQueueEntry,
   type DiningLog,
   type DiningLogPage,
+  type DeploymentMeta,
   type ReportStatus,
   type Restaurant,
   type RestaurantCandidate,
@@ -101,6 +102,8 @@ export interface ReportInput {
 
 export interface ApiClient {
   readonly mode: 'static' | 'http';
+  /** 部署自描述：环境与测试数据装载状态（决定演示水印显隐）。 */
+  meta(): Promise<DeploymentMeta>;
   mapItems(q: MapQueryInput, snapshotId?: string | null): Promise<MapItemsResponse>;
   listRestaurants(q: MapQueryInput, snapshotId: string | null, cursor: string | null, limit: number): Promise<Page<Restaurant>>;
   search(q: string): Promise<SearchResult>;
@@ -206,6 +209,10 @@ export class StaticClient implements ApiClient {
 
   async mapItems(q: MapQueryInput, snapshotId?: string | null): Promise<MapItemsResponse> {
     return this.store.mapItems({ ...q, contract_version: CONTRACT_VERSION }, snapshotId ?? null);
+  }
+
+  async meta(): Promise<DeploymentMeta> {
+    return this.store.deploymentMeta();
   }
 
   async listRestaurants(q: MapQueryInput, snapshotId: string | null, cursor: string | null, limit: number) {

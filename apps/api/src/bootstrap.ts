@@ -24,7 +24,8 @@ export interface Booted {
 export function createStore(cfg: AppConfig): Store {
   const env = cfg.nodeEnv === 'production' ? 'production' : cfg.nodeEnv === 'test' ? 'test' : 'development';
   try {
-    return new Store({ env });
+    // production：空引擎启动（不装种子），随后从 SQLite 恢复真实核验数据；库为空即干净的上线初态
+    return new Store({ env, seed: env !== 'production' });
   } catch (err) {
     if (err instanceof RuleViolation) {
       throw new BootError('NODE_ENV=production 下禁止装载合成测试种子：请先接入真实核验数据源，再以 production 启动');
