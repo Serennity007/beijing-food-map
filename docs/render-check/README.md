@@ -82,3 +82,12 @@
 | `59-miniprogram-ui-admin-polish.png` | 内容后台七分区回归（待审队列/地点核验/举报复核/门店状态/合并/编辑背书/审计日志） |
 
 > 55–59 由 `miniprogram/scripts/verify-polish.mjs` 自动拍摄（14/14 项断言通过，详见 status.md）。
+
+设计系统 v2 · 美观大气简约轮（2026-09-27，两端同一设计语言）：
+
+| 文件 | 看到的关键点 |
+| --- | --- |
+| `60-miniprogram-v2-index.png` – `64-miniprogram-v2-submit.png` | 小程序 v2：令牌化全局样式（去边框白卡/填充式表单/衬线标题/织带点缀）下的 首页/详情/我的/后台/投稿 五页实拍 |
+| `65-web-v2-map-390.png` / `66-web-v2-detail-390.png` | Web 精修（圆角 16px/面板留白 20px/按钮加饱满/标题 27px）后 390 宽实拍（浏览器实拍，地图瓦片在内嵌浏览器未加载属环境伪影） |
+
+> 60–64 由 `miniprogram/scripts/shots-v2.mjs` 拍摄；65–66 由浏览器实拍。小程序功能回归 verify-polish 14/14 通过。

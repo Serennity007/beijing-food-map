@@ -1,136 +1,162 @@
-/* 京城黔味地图小程序 · 全局样式（设计令牌与 Web 版 app.css 对齐） */
+/* 京城黔味地图小程序 · 设计系统 v2
+   与 Web 版 app.css 同一设计语言：暖纸底 + 白卡分层、衬线标题、蜡染靛蓝织带、
+   黔红主按钮。大气 = 留白与字号层级；简约 = 去边框、色调填充、少描线。 */
 
 page {
-  background: #f4f1eb;
+  /* ---- 色板（与 Web :root 同源） ---- */
+  --bg: #f4f1eb;
+  --surface: #fffefb;
+  --surface-2: #f3efe7;
+  --ink: #221f1c;
+  --ink-2: #57514a;
+  --ink-3: #8a8379;
+  --line: #e4dfd6;
+  --line-strong: #d2cbbc;
+  --brand: #8c2f24;
+  --brand-2: #b4483a;
+  --ok: #1f6f43;
+  --warn: #96650b;
+  --danger: #a3231d;
+  --info: #1d5a83;
+  --indigo: #2e5f86;
+  /* ---- 形状与投影 ---- */
+  --radius-lg: 28rpx;
+  --radius: 20rpx;
+  --radius-sm: 14rpx;
+  --shadow-card: 0 1px 2px rgba(28, 26, 24, 0.04), 0 8px 24px rgba(28, 26, 24, 0.07);
+  --shadow-float: 0 2px 4px rgba(28, 26, 24, 0.05), 0 14px 36px rgba(28, 26, 24, 0.12);
+  --font-display: 'Noto Serif SC', 'Songti SC', 'STZhongsong', serif;
+
+  background: var(--bg);
   font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
-  font-size: 28px;
-  color: #221f1c;
-  line-height: 1.6;
+  font-size: 28rpx;
+  color: var(--ink);
+  line-height: 1.65;
 }
 
 /* ---------- 页面骨架 ---------- */
 
 .page {
   min-height: 100vh;
-  background: #f4f1eb;
-  padding: 24px;
+  background: var(--bg);
+  padding: 32rpx;
   box-sizing: border-box;
 }
 
 .head {
   position: relative;
-  margin-bottom: 20px;
-  padding-top: 20rpx;
+  margin-bottom: 28rpx;
+  padding-top: 24rpx;
 }
 
-/* 蜡染靛蓝织带：页头品牌点缀（靛蓝 → 黔红渐变短条），与 Web 版装饰语言一致 */
+/* 蜡染靛蓝织带：靛蓝 → 黔红渐变短条，全站页头品牌点缀 */
 .head::before {
   content: '';
   position: absolute;
   top: 0;
   left: 2rpx;
-  width: 112rpx;
+  width: 128rpx;
   height: 10rpx;
   border-radius: 999rpx;
-  background: linear-gradient(90deg, #2e5f86, #8c2f24);
+  background: linear-gradient(90deg, var(--indigo), var(--brand));
 }
 
 .h1 {
   display: block;
-  font-family: 'Noto Serif SC', 'Songti SC', 'STZhongsong', serif;
-  font-size: 42px;
+  font-family: var(--font-display);
+  font-size: 46rpx;
   font-weight: 700;
-  color: #221f1c;
-  line-height: 1.3;
+  color: var(--ink);
+  line-height: 1.28;
   letter-spacing: 0.01em;
 }
 
 .sub {
   display: block;
-  margin-top: 8px;
-  font-size: 24px;
-  color: #8a8379;
+  margin-top: 10rpx;
+  font-size: 25rpx;
+  color: var(--ink-2);
 }
 
 .hint {
   display: block;
-  font-size: 22px;
-  color: #8a8379;
-  line-height: 1.6;
+  font-size: 22rpx;
+  color: var(--ink-3);
+  line-height: 1.65;
 }
 
 .footer-note {
-  padding: 20px 0 60px;
+  padding: 28rpx 0 80rpx;
 }
 
-/* ---------- 面板与卡片：白卡 + 柔和投影（去边框） ---------- */
+/* ---------- 面板与卡片：去边框白卡 + 双层柔影 ---------- */
 
 .panel {
-  background: #fffefb;
-  border-radius: 24px;
-  padding: 24px;
-  margin-top: 20px;
-  box-shadow: 0 2px 4px rgba(28, 26, 24, 0.05), 0 12px 32px rgba(28, 26, 24, 0.08);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 32rpx;
+  margin-top: 24rpx;
+  box-shadow: var(--shadow-card);
 }
 
 .card {
-  background: #fffefb;
-  border: 1px solid rgba(34, 31, 28, 0.05);
-  border-radius: 20px;
-  padding: 20px;
-  margin-bottom: 16px;
-  box-shadow: 0 1px 2px rgba(28, 26, 24, 0.05), 0 8px 22px rgba(28, 26, 24, 0.07);
+  background: var(--surface);
+  border-radius: 24rpx;
+  padding: 26rpx;
+  margin-bottom: 18rpx;
+  box-shadow: 0 1px 2px rgba(28, 26, 24, 0.04), 0 6px 18px rgba(28, 26, 24, 0.06);
 }
 
 .card.picked {
-  border-color: #e6c3bd;
+  box-shadow: 0 0 0 2rpx rgba(140, 47, 36, 0.28), var(--shadow-card);
 }
 
 .card-name {
   display: block;
-  font-size: 29px;
+  font-size: 30rpx;
   font-weight: 700;
-  color: #221f1c;
+  color: var(--ink);
 }
 
 .card-meta {
   display: block;
-  font-size: 22px;
-  color: #8a8379;
-  margin-top: 6px;
+  font-size: 22rpx;
+  color: var(--ink-3);
+  margin-top: 8rpx;
+  line-height: 1.55;
 }
 
 .card-dishes {
   display: block;
-  font-size: 23px;
-  color: #57514a;
-  margin-top: 6px;
+  font-size: 23rpx;
+  color: var(--ink-2);
+  margin-top: 8rpx;
 }
 
-/* ---------- 表单 ---------- */
+/* ---------- 表单：色调填充、去描边 ---------- */
 
 .label {
   display: block;
-  font-size: 24px;
+  font-size: 24rpx;
   font-weight: 600;
-  color: #57514a;
-  margin-bottom: 10px;
+  color: var(--ink-2);
+  margin-bottom: 12rpx;
 }
 
 .field {
-  margin-top: 20px;
+  margin-top: 24rpx;
 }
 
 .field Input,
 .field Textarea,
 Input,
 Textarea {
-  background: #ffffff;
-  border: 1px solid #e4dfd6;
-  border-radius: 12px;
-  padding: 14px 18px;
-  font-size: 26px;
-  color: #221f1c;
+  background: var(--surface-2);
+  border: none;
+  border-radius: 16rpx;
+  padding: 18rpx 22rpx;
+  font-size: 26rpx;
+  color: var(--ink);
   width: auto;
   box-sizing: border-box;
 }
@@ -138,23 +164,22 @@ Textarea {
 .field Textarea,
 Textarea {
   width: 100%;
-  min-height: 140px;
+  min-height: 140rpx;
 }
 
 .picker-value {
-  background: #ffffff;
-  border: 1px solid #e4dfd6;
-  border-radius: 12px;
-  padding: 14px 18px;
-  font-size: 26px;
-  color: #57514a;
+  background: var(--surface-2);
+  border-radius: 16rpx;
+  padding: 18rpx 22rpx;
+  font-size: 26rpx;
+  color: var(--ink-2);
 }
 
 .err {
   display: block;
-  margin-top: 8px;
-  color: #a3231d;
-  font-size: 22px;
+  margin-top: 8rpx;
+  color: var(--danger);
+  font-size: 22rpx;
 }
 
 /* ---------- chips / 按钮 ---------- */
@@ -162,67 +187,74 @@ Textarea {
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
-  margin-top: 10px;
+  gap: 14rpx;
+  margin-top: 12rpx;
 }
 
 .chip {
-  padding: 8px 24px;
-  border-radius: 999px;
-  background: #ffffff;
-  border: 1px solid #e4dfd6;
-  color: #57514a;
-  font-size: 24px;
+  padding: 10rpx 26rpx;
+  border-radius: 999rpx;
+  background: var(--surface-2);
+  border: none;
+  color: var(--ink-2);
+  font-size: 24rpx;
   line-height: 1.4;
 }
 
 .chip.active {
-  background: #8c2f24;
-  border-color: #8c2f24;
+  background: var(--brand);
   color: #ffffff;
   font-weight: 600;
 }
 
 .btn-primary {
-  margin-top: 20px;
-  background: #8c2f24;
+  margin-top: 24rpx;
+  height: 92rpx;
+  line-height: 92rpx;
+  padding: 0 36rpx;
+  background: var(--brand);
   color: #ffffff;
-  font-size: 27px;
+  font-size: 28rpx;
   font-weight: 600;
-  border-radius: 14px;
+  border-radius: 20rpx;
+  box-shadow: 0 2px 6px rgba(140, 47, 36, 0.28);
 }
 
 .btn-primary[disabled] {
   background: #e8e2d8;
   color: #a89f92;
+  box-shadow: none;
 }
 
 .btn-plain {
-  margin-top: 16px;
-  background: #ffffff;
-  color: #57514a;
-  font-size: 25px;
-  border-radius: 14px;
-  border: 1px solid #e4dfd6;
+  margin-top: 18rpx;
+  height: 84rpx;
+  line-height: 84rpx;
+  padding: 0 32rpx;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 25rpx;
+  border-radius: 20rpx;
+  border: 1px solid var(--line);
 }
 
 .btn-plain[disabled] {
-  background: #f0ece4;
+  background: var(--surface-2);
   color: #b3aa9d;
   border-color: transparent;
 }
 
 .btn-plain.danger {
-  color: #a3231d;
+  color: var(--danger);
   border-color: #e6c3bd;
-  background: #fffefb;
+  background: var(--surface);
 }
 
 .btn-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
-  margin-top: 14px;
+  gap: 14rpx;
+  margin-top: 16rpx;
 }
 
 .btn-row Button {
@@ -232,8 +264,8 @@ Textarea {
 /* ---------- 列表行 ---------- */
 
 .row {
-  padding: 14px 0;
-  border-bottom: 1px solid #f0ece4;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid rgba(34, 31, 28, 0.06);
 }
 
 .row:last-child {
@@ -242,67 +274,68 @@ Textarea {
 
 .row-main {
   display: block;
-  font-size: 26px;
-  color: #221f1c;
+  font-size: 26rpx;
+  color: var(--ink);
 }
 
 .row-sub {
   display: block;
-  font-size: 22px;
-  color: #8a8379;
-  margin-top: 4px;
+  font-size: 22rpx;
+  color: var(--ink-3);
+  margin-top: 6rpx;
 }
 
 /* ---------- 状态与提示 ---------- */
 
 .alert {
-  margin-top: 16px;
-  padding: 16px 20px;
-  border-radius: 14px;
-  font-size: 24px;
-  line-height: 1.5;
+  margin-top: 18rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 18rpx;
+  font-size: 24rpx;
+  line-height: 1.55;
 }
 
 .alert.ok {
   background: #eef7f1;
-  color: #1f6f43;
+  color: var(--ok);
 }
 
 .alert.bad {
   background: #fdf2f1;
-  color: #a3231d;
+  color: var(--danger);
 }
 
 .status {
-  margin-top: 20px;
-  padding: 70px 30px;
+  margin-top: 24rpx;
+  padding: 76rpx 32rpx;
   text-align: center;
-  color: #57514a;
-  font-size: 27px;
-  background: #fffefb;
-  border: 2rpx dashed #d2cbbc;
-  border-radius: 20px;
+  color: var(--ink-2);
+  font-size: 27rpx;
+  background: var(--surface);
+  border: 2rpx dashed var(--line-strong);
+  border-radius: 24rpx;
 }
 
 .status.bad {
-  color: #a3231d;
+  color: var(--danger);
 }
 
 .empty {
-  padding: 60px 0;
+  padding: 72rpx 0;
   text-align: center;
-  color: #8a8379;
-  font-size: 24px;
+  color: var(--ink-3);
+  font-size: 24rpx;
 }
 
 /* ---------- 地图页 ---------- */
 
 .map-wrap {
   position: relative;
-  height: 640px;
-  border-radius: 20px;
+  height: 640rpx;
+  border-radius: 24rpx;
   overflow: hidden;
-  margin-top: 16px;
+  margin-top: 20rpx;
+  box-shadow: var(--shadow-card);
 }
 
 .the-map {
@@ -311,240 +344,242 @@ Textarea {
 }
 
 .toolbar {
-  padding: 20px 24px;
+  padding: 22rpx 26rpx;
   background: rgba(255, 254, 251, 0.86);
-  backdrop-filter: blur(16rpx);
-  border-radius: 20px;
-  margin-top: 16px;
+  backdrop-filter: blur(20rpx);
+  border-radius: 24rpx;
+  margin-top: 20rpx;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  box-shadow: 0 2px 4px rgba(28, 26, 24, 0.05), 0 10px 26px rgba(28, 26, 24, 0.09);
+  gap: 14rpx;
+  box-shadow: var(--shadow-card);
 }
 
 .search-input {
   background: #ffffff;
-  border-radius: 999px;
-  padding: 14px 24px;
-  font-size: 26px;
+  border-radius: 999rpx;
+  padding: 16rpx 28rpx;
+  font-size: 26rpx;
   box-shadow: 0 2px 8px rgba(28, 26, 24, 0.06);
 }
 
 .statusline {
   position: absolute;
-  top: 16px;
-  left: 16px;
+  top: 20rpx;
+  left: 20rpx;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10rpx;
 }
 
 .pill {
   display: inline-block;
-  padding: 6px 16px;
-  border-radius: 999px;
+  padding: 8rpx 18rpx;
+  border-radius: 999rpx;
   background: rgba(255, 254, 251, 0.88);
-  backdrop-filter: blur(12rpx);
-  color: #57514a;
-  font-size: 22px;
+  backdrop-filter: blur(16rpx);
+  color: var(--ink-2);
+  font-size: 22rpx;
   box-shadow: 0 2px 8px rgba(28, 26, 24, 0.08);
 }
 
 .pill.warn {
-  color: #a3231d;
+  color: var(--danger);
 }
 
 .list-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  padding: 20px 0 8px;
+  padding: 24rpx 0 10rpx;
 }
 
 .list-title {
-  font-family: 'Noto Serif SC', 'Songti SC', 'STZhongsong', serif;
-  font-size: 31px;
+  font-family: var(--font-display);
+  font-size: 32rpx;
   font-weight: 700;
-  color: #221f1c;
+  color: var(--ink);
 }
 
 .list-hint {
-  font-size: 20px;
-  color: #8a8379;
+  font-size: 20rpx;
+  color: var(--ink-3);
 }
 
 .list {
-  height: 640px;
+  height: 640rpx;
 }
 
 .list-footer {
-  padding: 16px 0 40px;
+  padding: 20rpx 0 48rpx;
   text-align: center;
 }
 
 /* ---------- 详情页专有 ---------- */
 
 .price {
-  font-size: 40px;
+  font-family: var(--font-display);
+  font-size: 42rpx;
   font-weight: 700;
 }
 
 .price-unit {
-  font-size: 22px;
+  font-size: 22rpx;
   font-weight: 400;
-  color: #8a8379;
+  color: var(--ink-3);
 }
 
 .basis {
-  border-left: 8px solid #1f6f43;
+  border-left: 8rpx solid var(--ok);
   background: #f4faf6;
-  border-radius: 0 16px 16px 0;
-  padding: 18px 20px;
-  margin-top: 20px;
+  border-radius: 0 18rpx 18rpx 0;
+  padding: 20rpx 24rpx;
+  margin-top: 24rpx;
 }
 
 .basis.warn {
-  border-left-color: #96650b;
+  border-left-color: var(--warn);
   background: #fffaef;
 }
 
 .basis-title {
   display: block;
   font-weight: 700;
-  color: #96650b;
-  font-size: 27px;
+  color: var(--warn);
+  font-size: 27rpx;
 }
 
 .basis-item {
   display: block;
-  margin-top: 6px;
-  font-size: 24px;
-  color: #57514a;
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  color: var(--ink-2);
 }
 
 .basis-text {
-  font-size: 25px;
-  color: #221f1c;
-  line-height: 1.6;
+  font-size: 25rpx;
+  color: var(--ink);
+  line-height: 1.65;
 }
 
 .fact {
   display: flex;
-  gap: 16px;
-  padding: 14px 0;
+  gap: 16rpx;
+  padding: 16rpx 0;
 }
 
 .dt {
-  flex: 0 0 140px;
-  font-size: 26px;
-  color: #8a8379;
+  flex: 0 0 150rpx;
+  font-size: 26rpx;
+  color: var(--ink-3);
 }
 
 .dd {
   flex: 1;
-  font-size: 27px;
-  color: #221f1c;
+  font-size: 27rpx;
+  color: var(--ink);
   line-height: 1.5;
 }
 
 .dish-chip {
   display: inline-block;
-  margin: 8px 10px 0 0;
-  padding: 4px 18px;
-  border-radius: 999px;
+  margin: 10rpx 12rpx 0 0;
+  padding: 6rpx 20rpx;
+  border-radius: 999rpx;
   background: #fdf1ef;
-  color: #8c2f24;
-  font-size: 23px;
+  color: var(--brand);
+  font-size: 23rpx;
 }
 
 /* 打卡/选点小地图 */
 .picker-map {
-  height: 300px;
-  border-radius: 14px;
+  height: 300rpx;
+  border-radius: 16rpx;
   overflow: hidden;
-  margin-top: 8px;
+  margin-top: 10rpx;
 }
 
 .report-box {
-  margin-top: 14px;
+  margin-top: 16rpx;
 }
 
 .report-box Textarea {
-  margin-top: 10px;
+  margin-top: 12rpx;
 }
 
 /* ---------- 徽标 / 卡片行（后台与清单页共用） ---------- */
 
 .badge {
   display: inline-block;
-  padding: 2px 14px;
-  border-radius: 999px;
-  font-size: 20px;
+  padding: 4rpx 16rpx;
+  border-radius: 999rpx;
+  font-size: 20rpx;
   line-height: 1.5;
 }
 
 .badge.ok {
   background: #eef7f1;
-  color: #1f6f43;
+  color: var(--ok);
 }
 
 .badge.warn {
   background: #fff5e6;
-  color: #96650b;
+  color: var(--warn);
 }
 
 .badge.danger {
   background: #fdf2f1;
-  color: #a3231d;
+  color: var(--danger);
 }
 
 .badge.muted {
-  background: #f1eee7;
-  color: #8a8379;
+  background: var(--surface-2);
+  color: var(--ink-3);
 }
 
 .badge.editorial {
   background: #eaf2fb;
-  color: #2e5f86;
+  color: var(--indigo);
 }
 
 .badge-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 8px;
+  gap: 10rpx;
+  margin-top: 10rpx;
 }
 
 .card-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 10rpx;
 }
 
 .card-row {
-  margin-top: 8px;
+  margin-top: 10rpx;
 }
 
-/* 后台分区切片的选中态放大一点，方便点按 */
+/* 后台分区切片 */
 .tab-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 16px;
+  gap: 12rpx;
+  margin-top: 18rpx;
 }
 
 .radio-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 8px;
+  gap: 12rpx;
+  margin-top: 10rpx;
 }
 
 .section-title {
   display: block;
-  font-size: 28px;
+  font-family: var(--font-display);
+  font-size: 30rpx;
   font-weight: 700;
-  color: #221f1c;
-  margin: 20px 0 8px;
+  color: var(--ink);
+  margin: 24rpx 0 10rpx;
 }
