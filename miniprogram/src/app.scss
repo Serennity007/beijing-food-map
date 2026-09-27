@@ -18,7 +18,21 @@ page {
 }
 
 .head {
+  position: relative;
   margin-bottom: 20px;
+  padding-top: 20rpx;
+}
+
+/* 蜡染靛蓝织带：页头品牌点缀（靛蓝 → 黔红渐变短条），与 Web 版装饰语言一致 */
+.head::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 2rpx;
+  width: 112rpx;
+  height: 10rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(90deg, #2e5f86, #8c2f24);
 }
 
 .h1 {
@@ -56,7 +70,7 @@ page {
   border-radius: 24px;
   padding: 24px;
   margin-top: 20px;
-  box-shadow: 0 2px 10px rgba(28, 26, 24, 0.05);
+  box-shadow: 0 2px 4px rgba(28, 26, 24, 0.05), 0 12px 32px rgba(28, 26, 24, 0.08);
 }
 
 .card {
@@ -65,7 +79,7 @@ page {
   border-radius: 20px;
   padding: 20px;
   margin-bottom: 16px;
-  box-shadow: 0 2px 8px rgba(28, 26, 24, 0.05);
+  box-shadow: 0 1px 2px rgba(28, 26, 24, 0.05), 0 8px 22px rgba(28, 26, 24, 0.07);
 }
 
 .card.picked {
@@ -178,6 +192,11 @@ Textarea {
   border-radius: 14px;
 }
 
+.btn-primary[disabled] {
+  background: #e8e2d8;
+  color: #a89f92;
+}
+
 .btn-plain {
   margin-top: 16px;
   background: #ffffff;
@@ -185,6 +204,18 @@ Textarea {
   font-size: 25px;
   border-radius: 14px;
   border: 1px solid #e4dfd6;
+}
+
+.btn-plain[disabled] {
+  background: #f0ece4;
+  color: #b3aa9d;
+  border-color: transparent;
+}
+
+.btn-plain.danger {
+  color: #a3231d;
+  border-color: #e6c3bd;
+  background: #fffefb;
 }
 
 .btn-row {
@@ -243,10 +274,14 @@ Textarea {
 }
 
 .status {
-  padding: 80px 0;
+  margin-top: 20px;
+  padding: 70px 30px;
   text-align: center;
   color: #57514a;
   font-size: 27px;
+  background: #fffefb;
+  border: 2rpx dashed #d2cbbc;
+  border-radius: 20px;
 }
 
 .status.bad {
@@ -277,13 +312,14 @@ Textarea {
 
 .toolbar {
   padding: 20px 24px;
-  background: rgba(255, 254, 251, 0.92);
+  background: rgba(255, 254, 251, 0.86);
+  backdrop-filter: blur(16rpx);
   border-radius: 20px;
   margin-top: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  box-shadow: 0 2px 8px rgba(28, 26, 24, 0.05);
+  box-shadow: 0 2px 4px rgba(28, 26, 24, 0.05), 0 10px 26px rgba(28, 26, 24, 0.09);
 }
 
 .search-input {
@@ -307,9 +343,11 @@ Textarea {
   display: inline-block;
   padding: 6px 16px;
   border-radius: 999px;
-  background: rgba(255, 254, 251, 0.92);
+  background: rgba(255, 254, 251, 0.88);
+  backdrop-filter: blur(12rpx);
   color: #57514a;
   font-size: 22px;
+  box-shadow: 0 2px 8px rgba(28, 26, 24, 0.08);
 }
 
 .pill.warn {
@@ -324,7 +362,8 @@ Textarea {
 }
 
 .list-title {
-  font-size: 30px;
+  font-family: 'Noto Serif SC', 'Songti SC', 'STZhongsong', serif;
+  font-size: 31px;
   font-weight: 700;
   color: #221f1c;
 }

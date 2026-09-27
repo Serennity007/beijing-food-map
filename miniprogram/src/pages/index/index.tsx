@@ -85,6 +85,7 @@ export default function Index() {
   const [layer, setLayer] = useState<'qualified' | 'pending_verification'>('qualified')
   const [term, setTerm] = useState('')
   const [hits, setHits] = useState<Restaurant[] | null>(null)
+  const [searchFailed, setSearchFailed] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -152,20 +153,47 @@ export default function Index() {
     void load()
   }, [load])
 
-  // 门店搜索（防抖 300ms），结果叠在地图列表之上
+  // 门店搜索（防抖 300ms），结果叠在地图列表之上；失败保留关键词进入可重试态
   useEffect(() => {
     const t = term.trim()
     if (!t) {
       setHits(null)
+      setSearchFailed(false)
       return
     }
     const timer = setTimeout(() => {
       void searchStores(t)
-        .then((r) => setHits(r.own))
-        .catch(() => setHits(null))
+        .then((r) => {
+          setHits(r.own)
+          setSearchFailed(false)
+        })
+        .catch(() => {
+          setHits(null)
+          setSearchFailed(true)
+        })
     }, 300)
     return () => clearTimeout(timer)
   }, [term])
+
+  const rerunSearch = useCallback(() => {
+    const t = term.trim()
+    if (!t) return
+    setSearchFailed(false)
+    void searchStores(t)
+      .then((r) => {
+        setHits(r.own)
+        setSearchFailed(false)
+      })
+      .catch(() => {
+        setHits(null)
+        setSearchFailed(true)
+      })
+  }, [term])
+
+  /** 搜索结果「在地图查看」：相机飞至该门店（与 Web 搜索定位同一交互意图） */
+  const flyTo = useCallback((r: Restaurant) => {
+    setRegion({ lat: r.lat, lng: r.lng, zoom: 16 })
+  }, [])
 
   const onMarkerTap = useCallback(
     (e: CommonEvent<{ markerId: number | string }>) => {
@@ -279,8 +307,26 @@ export default function Index() {
                 {r.branch ? `（${r.branch}）` : ''}
               </Text>
               <Text className="row-sub">{r.address}</Text>
+              <Text
+                className="dish-chip"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  flyTo(r)
+                }}
+              >
+                在地图查看
+              </Text>
             </View>
           ))}
+        </View>
+      )}
+      {searchFailed && (
+        <View className="panel">
+          <Text className="label">搜索没有成功</Text>
+          <Text className="hint">关键词「{term.trim()}」已保留，可重试，或直接浏览下方列表。</Text>
+          <Button className="btn-plain" onClick={rerunSearch}>
+            重试搜索
+          </Button>
         </View>
       )}
       {hits && hits.length === 0 && (
@@ -288,6 +334,15 @@ export default function Index() {
           <Text className="label">没有匹配的已收录门店</Text>
           <Button className="btn-plain" onClick={() => Taro.navigateTo({ url: '/pages/submit/index' })}>
             去申请建店
+          </Button>
+        </View>
+      )}
+      {error && (
+        <View className="panel">
+          <Text className="label">列表数据加载失败</Text>
+          <Text className="hint">{error} 列表保留上次结果，可重试或调整筛选。</Text>
+          <Button className="btn-plain" onClick={() => void load()}>
+            重试
           </Button>
         </View>
       )}

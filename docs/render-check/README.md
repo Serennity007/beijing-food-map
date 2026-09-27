@@ -70,3 +70,15 @@
 | `54-miniprogram-ui-endorsement-revoked.png` | 背书核验→填理由撤销→徽标转「背书已撤销」 |
 
 > 51–54 由 `miniprogram/scripts/verify-share-endorse.mjs` 自动拍摄（HTTP 造数 + UI 断言，16/16 项通过，详见 status.md）。
+
+完整对齐与视觉打磨轮（2026-09-27，与 Web /privacy /terms 及地图交互对齐）：
+
+| 文件 | 看到的关键点 |
+| --- | --- |
+| `55-miniprogram-ui-legal-privacy.png` | 隐私说明页：织带页头点缀 + 衬线标题 + 收集/可见/删除注销三区块 |
+| `56-miniprogram-ui-legal-terms.png` | 用户条款页：页内互切后内容规则/推荐规则/免责声明 |
+| `57-miniprogram-ui-me-legal.png` | 我的页：隐私说明/用户条款入口 + 全面板（投稿/建店/举报/打卡/清单） |
+| `58-miniprogram-ui-index-flyto.png` | 地图页搜索「酸汤」→ 结果带「在地图查看」→ 相机飞至望京门店（callout 显示店名） |
+| `59-miniprogram-ui-admin-polish.png` | 内容后台七分区回归（待审队列/地点核验/举报复核/门店状态/合并/编辑背书/审计日志） |
+
+> 55–59 由 `miniprogram/scripts/verify-polish.mjs` 自动拍摄（14/14 项断言通过，详见 status.md）。

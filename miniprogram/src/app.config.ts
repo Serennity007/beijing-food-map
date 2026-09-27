@@ -9,6 +9,7 @@ export default defineAppConfig({
     'pages/collection-edit/index',
     'pages/admin/index',
     'pages/share/index',
+    'pages/legal/index',
   ],
   window: {
     backgroundTextStyle: 'light',

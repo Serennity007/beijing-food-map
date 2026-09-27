@@ -1,0 +1,18 @@
+/* 法律页局部样式：要点列表 */
+.legal-item {
+  display: flex;
+  gap: 12rpx;
+  padding: 8rpx 0;
+}
+
+.legal-dot {
+  color: #2e5f86;
+  font-weight: 700;
+}
+
+.legal-text {
+  flex: 1;
+  font-size: 24px;
+  color: #57514a;
+  line-height: 1.65;
+}

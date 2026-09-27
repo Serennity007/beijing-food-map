@@ -285,7 +285,21 @@ export default function Me() {
       {user && (
         <View className="panel">
           <Text className="label">账号</Text>
-          <Button className="btn-plain" onClick={() => void doDeleteAccount()}>
+          <View className="btn-row">
+            <Button
+              className="btn-plain"
+              onClick={() => Taro.navigateTo({ url: '/pages/legal/index?kind=privacy' })}
+            >
+              隐私说明
+            </Button>
+            <Button
+              className="btn-plain"
+              onClick={() => Taro.navigateTo({ url: '/pages/legal/index?kind=terms' })}
+            >
+              用户条款
+            </Button>
+          </View>
+          <Button className="btn-plain danger" onClick={() => void doDeleteAccount()}>
             注销账号
           </Button>
           <Text className="hint">注销会立即撤销本机会话与本人分享、隐藏 UGC、退出计票，不可撤销。</Text>
