@@ -23,6 +23,7 @@ import type {
   RestaurantDetail,
   RiskStatus,
   SessionUser,
+  SharedCollectionSnapshot,
   Submission,
 } from '@qianwei/contracts'
 
@@ -44,6 +45,7 @@ export type {
   RestaurantDetail,
   RiskStatus,
   SessionUser,
+  SharedCollectionSnapshot,
   Submission,
 }
 
@@ -313,6 +315,23 @@ export function requestPublication(collectionId: string, shareItemIds: string[])
 
 export function unpublish(collectionId: string): Promise<Collection> {
   return req(`/collections/${encodeURIComponent(collectionId)}/unpublish`, 'POST')
+}
+
+// ---------------- 公开分享快照（匿名可读，与 Web /s/:token 同一接口） ----------------
+
+export function sharedSnapshot(token: string): Promise<SharedCollectionSnapshot> {
+  return req(`/shared-collections/${encodeURIComponent(token)}`)
+}
+
+/** 已通过审核的图片公开 URL（未过审的图片不出现在快照里） */
+export function mediaUrl(id: string): string {
+  return `${BASE}/media/${encodeURIComponent(id)}`
+}
+
+// ---------------- 编辑背书（moderator / admin） ----------------
+
+export function editorialEndorsement(input: { restaurant_id: string; action: 'verify' | 'revoke'; reason?: string }): Promise<Restaurant> {
+  return req(`/admin/editorial-endorsements/${input.action}`, 'POST', input)
 }
 
 // ---------------- 后台审核（moderator / admin，否则 403） ----------------

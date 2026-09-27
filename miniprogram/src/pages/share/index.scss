@@ -1,0 +1,14 @@
+/* 分享页复用全局样式；缩略图行是该页新增的局部布局 */
+.thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+  margin: 8rpx 0;
+}
+
+.thumb {
+  width: 128rpx;
+  height: 128rpx;
+  border-radius: 12rpx;
+  background: #ece7dd;
+}

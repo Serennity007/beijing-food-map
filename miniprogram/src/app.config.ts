@@ -8,6 +8,7 @@ export default defineAppConfig({
     'pages/revise/index',
     'pages/collection-edit/index',
     'pages/admin/index',
+    'pages/share/index',
   ],
   window: {
     backgroundTextStyle: 'light',

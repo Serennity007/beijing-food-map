@@ -16,8 +16,11 @@ import {
   REPORT_KIND_LABEL,
   REPORT_STATUS_LABEL,
   RISK_STATUSES,
+  SCORING_WINDOW_DAYS,
+  addDays,
   type AuditRec,
   type BusinessStatus,
+  type EndorsementStatus,
   type ModerationQueueEntry,
   type PlaceVerificationStatus,
   type ReportQueueEntry,
@@ -33,6 +36,7 @@ import {
   candidateQueue,
   decideCandidate,
   decideReport,
+  editorialEndorsement,
   fetchDetail,
   me,
   mergeRestaurants,
@@ -98,7 +102,7 @@ function failureText(e: unknown): string {
   return e instanceof Error ? e.message : '请求失败'
 }
 
-type TabKey = 'queue' | 'candidates' | 'reports' | 'status' | 'merge' | 'audit'
+type TabKey = 'queue' | 'candidates' | 'reports' | 'status' | 'merge' | 'endorsement' | 'audit'
 
 export default function Admin() {
   const [user, setUser] = useState<SessionUser | null>(null)
@@ -183,6 +187,7 @@ export default function Admin() {
     { key: 'reports', label: '举报复核' },
     { key: 'status', label: '门店状态' },
     { key: 'merge', label: '合并', adminOnly: true },
+    { key: 'endorsement', label: '编辑背书' },
     { key: 'audit', label: '审计日志' },
   ]
   const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin)
@@ -221,6 +226,15 @@ export default function Admin() {
       {tab === 'reports' && <ReportsPanel onPick={(id) => void loadDetail(id)} />}
       {tab === 'status' && <StatusPanel picked={detail} busy={detailBusy} error={detailError} onPick={(id) => void loadDetail(id)} />}
       {tab === 'merge' && <MergePanel source={detail} onReload={(id) => void loadDetail(id)} />}
+      {tab === 'endorsement' && (
+        <EndorsementPanel
+          picked={detail}
+          busy={detailBusy}
+          error={detailError}
+          onPick={(r) => void loadDetail(r.id)}
+          onReload={(id) => void loadDetail(id)}
+        />
+      )}
       {tab === 'audit' && <AuditPanel />}
 
       <View className="footer-note">
@@ -910,6 +924,127 @@ function MergePanel({ source, onReload }: { source: RestaurantDetail | null; onR
       <Button className="btn-primary" disabled={saving || !source || !target} onClick={() => void run()}>
         {saving ? '合并中…' : '执行合并'}
       </Button>
+    </View>
+  )
+}
+
+const ENDORSEMENT_LABEL: Record<EndorsementStatus, string> = {
+  NONE: '无编辑背书',
+  ACTIVE: '背书有效',
+  EXPIRED: '背书已过期',
+  REVOKED: '背书已撤销',
+}
+
+function EndorsementPanel({
+  picked,
+  busy,
+  error,
+  onPick,
+  onReload,
+}: {
+  picked: RestaurantDetail | null
+  busy: boolean
+  error: string | null
+  onPick: (r: Restaurant) => void
+  onReload: (id: string) => void
+}) {
+  const [reason, setReason] = useState('')
+  const [notice, setNotice] = useState<string | null>(null)
+  const [localError, setLocalError] = useState<string | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  async function run(action: 'verify' | 'revoke') {
+    if (!picked) return
+    if (action === 'revoke' && reason.trim() === '') {
+      setLocalError('撤销背书必须写明理由')
+      return
+    }
+    setLocalError(null)
+    setSubmitError(null)
+    setSaving(true)
+    try {
+      const r = await editorialEndorsement({
+        restaurant_id: picked.id,
+        action,
+        reason: reason.trim() === '' ? undefined : reason.trim(),
+      })
+      setNotice(
+        action === 'verify'
+          ? `背书已核验，当前状态 ${ENDORSEMENT_LABEL[r.basis.editorial]}；到期仍按实吃日期计算`
+          : `背书已撤销，门店 ${r.id} 的背书来源已移除，票数已重算`,
+      )
+      setReason('')
+      onReload(picked.id)
+    } catch (e) {
+      const code = e instanceof ApiError ? e.code : undefined
+      setSubmitError(code === 'NOT_FOUND' ? '该门店没有编辑背书' : failureText(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <View className="panel">
+      <Text className="label">编辑背书</Text>
+      <Text className="hint">
+        背书有效期由真实实吃日期决定：实吃日为第 1 天，到实吃日 +{SCORING_WINDOW_DAYS - 1} 天自然结束即失效，重新核验不会把到期日往后推。核验必须由背书作者之外的人执行，作者即使是 admin 也会被判 FORBIDDEN。
+      </Text>
+      <StorePicker label="检索门店" pickedName={picked ? `${picked.name} · ${picked.id}` : null} onPick={onPick} />
+      {error && (
+        <View className="alert bad">
+          <Text>{error}</Text>
+        </View>
+      )}
+      {busy && !picked && (
+        <View className="status">
+          <Text>门店详情读取中…</Text>
+        </View>
+      )}
+      {picked && (
+        <>
+          <View className="card">
+            <View className="badge-row">
+              <Text className={picked.basis.editorial === 'ACTIVE' ? 'badge ok' : 'badge muted'}>
+                {ENDORSEMENT_LABEL[picked.basis.editorial]}
+              </Text>
+            </View>
+            <Text className="card-meta">作者 {picked.basis.editorial_detail ? picked.basis.editorial_detail.author : '—'}</Text>
+            {picked.basis.editorial_detail ? (
+              <Text className="card-meta">
+                实吃日期 {picked.basis.editorial_detail.visited_date}（有效期至 {addDays(picked.basis.editorial_detail.visited_date, SCORING_WINDOW_DAYS - 1)}）
+              </Text>
+            ) : (
+              <Text className="hint">该门店没有编辑背书记录（门店级 basis.editorial 为 {picked.basis.editorial}）</Text>
+            )}
+            {picked.basis.editorial_detail && <Text className="card-meta">理由 {picked.basis.editorial_detail.reason}</Text>}
+            <Text className="hint">公开来源：{picked.basis.sources.length ? picked.basis.sources.join('、') : '无'}</Text>
+          </View>
+          <View className="field">
+            <Text className="label">理由（撤销必填，建议核验也写明依据）</Text>
+            <Textarea value={reason} onInput={(e) => setReason(e.detail.value)} placeholder="例：本人于该日到店复核，菜单与照片一致" />
+          </View>
+          {localError && <Text className="err">{localError}</Text>}
+          {notice && (
+            <View className="alert ok">
+              <Text>{notice}</Text>
+            </View>
+          )}
+          {submitError && (
+            <View className="alert bad">
+              <Text>{submitError}</Text>
+            </View>
+          )}
+          <View className="btn-row">
+            <Button className="btn-primary" disabled={saving} onClick={() => void run('verify')}>
+              {saving ? '处理中…' : '核验'}
+            </Button>
+            <Button className="btn-plain" disabled={saving} onClick={() => void run('revoke')}>
+              撤销
+            </Button>
+          </View>
+        </>
+      )}
     </View>
   )
 }

@@ -403,6 +403,13 @@ export default function CollectionEdit() {
           {col.publication_status === 'PUBLISHED' && col.active_token && (
             <View className="alert ok">
               <Text>已公开，生效令牌 {col.active_token}</Text>
+              <Button
+                className="btn-plain"
+                disabled={busy}
+                onClick={() => Taro.navigateTo({ url: `/pages/share/index?token=${encodeURIComponent(col.active_token ?? '')}` })}
+              >
+                预览公开页
+              </Button>
             </View>
           )}
           {col.publication_status === 'PENDING_REVIEW' && <Text className="hint">有一份发布申请正在审核中，通过后才会生成新的公开链接。</Text>}

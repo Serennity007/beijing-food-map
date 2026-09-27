@@ -59,3 +59,14 @@
 | `50-miniprogram-ui-account-deleted.png` | U05 注销（showModal 确认）：回执 DELJOB…、回到未登录态 |
 
 > 45–50 由 `miniprogram/scripts/verify-write-ui.mjs` 自动拍摄（showModal 经 mockWxMethod 自动确认，业务接口零 mock，18/18 项断言通过，详见 status.md）。
+
+分享只读页与编辑背书 tab（2026-09-27，与 Web `/s/:token` 及后台背书面板对齐）：
+
+| 文件 | 看到的关键点 |
+| --- | --- |
+| `51-miniprogram-ui-share-snapshot.png` | 清单分享只读页（Web /s/:token 对应）：有效 token 渲染快照全要素（标题/作者/发布时间/条目/笔记/不可变提示） |
+| `52-miniprogram-ui-share-entry.png` | 清单编辑页「预览公开页」入口 → 跳转分享页且渲染同一快照 |
+| `53-miniprogram-ui-endorsement.png` | 后台编辑背书 tab：检索 R05 → 背书有效徽标/作者/实吃日期/有效期至 |
+| `54-miniprogram-ui-endorsement-revoked.png` | 背书核验→填理由撤销→徽标转「背书已撤销」 |
+
+> 51–54 由 `miniprogram/scripts/verify-share-endorse.mjs` 自动拍摄（HTTP 造数 + UI 断言，16/16 项通过，详见 status.md）。
