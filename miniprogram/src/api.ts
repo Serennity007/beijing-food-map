@@ -50,8 +50,26 @@ export type {
   Submission,
 }
 
-/** 后端基准地址。发布前换成已备案的 HTTPS 域名。 */
-export const BASE = 'http://127.0.0.1:8787/api/v1'
+/**
+ * 后端基准地址，按运行环境自动分离（同一份 dist 两处可用）：
+ * - develop（开发者工具 / 真机调试）→ 本机后端，工具里需勾选「不校验合法域名」；
+ * - trial / release（体验版、正式版）→ 线上 API，与 render.yaml 服务名对应。
+ *   正式发布前要把该域名配置到小程序后台的 request 合法域名（onrender.com 未备案，仅可体验）。
+ */
+const DEV_BASE = 'http://127.0.0.1:8787/api/v1'
+const PROD_BASE = 'https://qianwei-api-demo.onrender.com/api/v1'
+
+function resolveBase(): string {
+  try {
+    const env = Taro.getAccountInfoSync().miniProgram.envVersion
+    return env === 'develop' ? DEV_BASE : PROD_BASE
+  } catch {
+    // 取不到环境信息（如单测/异常宿主）时回退本机，保持本地演示可用
+    return DEV_BASE
+  }
+}
+
+export const BASE = resolveBase()
 
 const COOKIE_KEY = 'qw.cookie'
 
