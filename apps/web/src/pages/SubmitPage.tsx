@@ -117,7 +117,7 @@ function newIdempotencyKey(): string {
 }
 
 export function SubmitPage() {
-  const { api, user, ready } = useApi();
+  const { api, user, ready, meta } = useApi();
   const [params] = useSearchParams();
   const revise = params.get('revise') === '1';
   const presetId = params.get('restaurant');
@@ -355,6 +355,19 @@ export function SubmitPage() {
     if (!v) return;
     setDishNames((cur) => (cur.includes(v) ? cur : [...cur, v]));
     setDishInput('');
+  }
+
+  async function addRealPhoto(file: File): Promise<void> {
+    setBusy(true);
+    setFailure(null);
+    try {
+      const id = await api.uploadPhoto(file);
+      setMediaIds((cur) => (cur.length >= MAX_MEDIA ? cur : [...cur, id]));
+    } catch (e) {
+      setFailure(readFailure(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function addPhoto(): Promise<void> {
@@ -831,17 +844,33 @@ export function SubmitPage() {
         <div className="field">
           <span className="label">图片（最多 {MAX_MEDIA} 张，推荐态度至少 1 张）</span>
           <div className="btn-row">
-            <button
-              className="btn small"
-              type="button"
-              disabled={busy || !user || restaurantId === null || mediaIds.length >= MAX_MEDIA}
-              title={!user ? '需要登录' : restaurantId === null ? '先选择门店' : '生成一张标注为合成的演示图片'}
-              onClick={() => void addPhoto()}
-            >
-              添加一张演示图片
-            </button>
+            <label className="btn small" style={{ opacity: busy || !user || restaurantId === null || mediaIds.length >= MAX_MEDIA ? 0.5 : 1 }}>
+              上传图片（自动剥离位置信息）
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                style={{ display: 'none' }}
+                disabled={busy || !user || restaurantId === null || mediaIds.length >= MAX_MEDIA}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = '';
+                  if (f) void addRealPhoto(f);
+                }}
+              />
+            </label>
+            {meta !== null && meta.env !== 'production' && (
+              <button
+                className="btn small plain"
+                type="button"
+                disabled={busy || !user || restaurantId === null || mediaIds.length >= MAX_MEDIA}
+                title={!user ? '需要登录' : restaurantId === null ? '先选择门店' : '生成一张标注为合成的演示图片'}
+                onClick={() => void addPhoto()}
+              >
+                添加一张演示图片
+              </button>
+            )}
             <span className="hint" style={{ margin: 0 }}>
-              本演示不接真实相册：图片由服务端登记为合成素材并绑定当前账号，只有本人能在投稿中使用。
+              上传的图片先审核后公开；服务端会剥离 EXIF 位置信息（含 GPS）。
             </span>
           </div>
           <FieldErr msg={fieldError('media_ids')} />

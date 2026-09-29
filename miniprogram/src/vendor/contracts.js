@@ -100,6 +100,7 @@ __export(index_exports, {
   isValidGcj02: () => isValidGcj02,
   matchDuplicates: () => matchDuplicates,
   normalizeStoreName: () => normalizeStoreName,
+  phoneHash: () => phoneHash,
   shanghaiDateTime: () => shanghaiDateTime,
   shanghaiDay: () => shanghaiDay,
   shanghaiToday: () => shanghaiToday,
@@ -944,6 +945,11 @@ var ApiError = class extends Error {
     __publicField(this, "fieldErrors", fieldErrors);
   }
 };
+function phoneHash(phone) {
+  let h = 5381;
+  for (let i = 0; i < phone.length; i++) h = (h << 5) + h + phone.charCodeAt(i) >>> 0;
+  return `ph${h.toString(16)}-${phone.length}`;
+}
 var SYSTEM_KINDS = [
   { kind: "want", title: "\u60F3\u5403" },
   { kind: "visited", title: "\u5403\u8FC7" },
@@ -1342,6 +1348,11 @@ var Store = class {
       updated_at: rec.updated_at
     };
   }
+  /** 真实上传的存储键（/media/:id 据此从对象存储取字节）；demo data-uri 媒体为 null。 */
+  mediaStorageKey(id) {
+    var _a, _b;
+    return (_b = (_a = this.media.get(id)) == null ? void 0 : _a.storage_key) != null ? _b : null;
+  }
   mediaOf(id) {
     const m = this.media.get(id);
     if (!m) return null;
@@ -1350,6 +1361,7 @@ var Store = class {
       owner_user_id: m.owner_user_id,
       kind: "photo",
       url: m.url,
+      content_type: m.content_type,
       width: m.width,
       height: m.height,
       review_status: m.review_status,
@@ -1384,6 +1396,32 @@ var Store = class {
       publication_id: null,
       restaurant_id: restaurantId,
       created_at: this.stamp()
+    };
+    this.media.set(id, rec);
+    return this.mediaOf(id);
+  }
+  /**
+   * 真实上传：只登记元数据（待审核），字节由 API 层写入对象存储（storage_key 关联）。
+   * 尺寸在上传侧解析或按 0 处理，不影响审核与计票逻辑。
+   */
+  addUserMedia(sessionId, m) {
+    const user = this.requireUser(sessionId);
+    const id = this.nextId("MM");
+    const rec = {
+      id,
+      owner_user_id: user.id,
+      url: "",
+      width: 0,
+      height: 0,
+      review_status: "PENDING",
+      is_test_data: this.env !== "production",
+      context: "private",
+      publication_id: null,
+      restaurant_id: null,
+      created_at: this.stamp(),
+      storage_key: m.storage_key,
+      content_type: m.content_type,
+      size: m.size
     };
     this.media.set(id, rec);
     return this.mediaOf(id);
@@ -1663,6 +1701,36 @@ var Store = class {
     const sid = `sess-${this.nextId("S")}`;
     this.sessions.set(sid, { user_id: u.id, created_at: this.stamp() });
     return { session_id: sid, user: this.sessionUser(u.id) };
+  }
+  /**
+   * 手机号验证码登录（真实路径）：验证码校验在 API 层完成，这里只负责
+   * 按手机号哈希找到或创建账号并发会话。不存明文手机号，只存掩码与去标识哈希。
+   * 静态引擎也运行本方法，故哈希用纯 JS 实现、不引运行时相关依赖。
+   */
+  loginByPhone(phone) {
+    const hash2 = phoneHash(phone);
+    let u = [...this.users.values()].find((x) => x.phone_hash === hash2);
+    let created = false;
+    if (!u) {
+      created = true;
+      const id = this.nextId("U");
+      const rec = {
+        id,
+        display_name: `\u7528\u6237${phone.slice(-4)}`,
+        roles: ["user"],
+        phone_masked: `${phone.slice(0, 3)}****${phone.slice(-4)}`,
+        status: "active",
+        is_test_data: this.env !== "production",
+        phone_hash: hash2
+      };
+      this.users.set(id, rec);
+      u = rec;
+      this.ensureSystemCollections(id);
+    }
+    if (u.status !== "active") throw new ApiError("UNAUTHORIZED", "\u8D26\u53F7\u4E0D\u53EF\u7528", 401);
+    const sid = `sess-${this.nextId("S")}`;
+    this.sessions.set(sid, { user_id: u.id, created_at: this.stamp() });
+    return { session_id: sid, user: this.sessionUser(u.id), created };
   }
   sessionUser(userId) {
     const u = this.users.get(userId);

@@ -104,6 +104,11 @@ export interface ApiClient {
   readonly mode: 'static' | 'http';
   /** 部署自描述：环境与测试数据装载状态（决定演示水印显隐）。 */
   meta(): Promise<DeploymentMeta>;
+  /** 手机验证码登录（真实路径；静态模式不可用）。 */
+  phoneCode(phone: string): Promise<{ ok: true; ttl_seconds: number }>;
+  phoneLogin(phone: string, code: string): Promise<SessionUser>;
+  /** 真实图片上传：返回登记后的 media id（PENDING 待审）。 */
+  uploadPhoto(file: File): Promise<string>;
   mapItems(q: MapQueryInput, snapshotId?: string | null): Promise<MapItemsResponse>;
   listRestaurants(q: MapQueryInput, snapshotId: string | null, cursor: string | null, limit: number): Promise<Page<Restaurant>>;
   search(q: string): Promise<SearchResult>;
@@ -213,6 +218,21 @@ export class StaticClient implements ApiClient {
 
   async meta(): Promise<DeploymentMeta> {
     return this.store.deploymentMeta();
+  }
+
+  async phoneCode(): Promise<{ ok: true; ttl_seconds: number }> {
+    throw new ClientError('SMS_UNCONFIGURED', '静态演示不支持手机登录，请在有后端的部署上使用', 503);
+  }
+
+  async phoneLogin(): Promise<SessionUser> {
+    throw new ClientError('SMS_UNCONFIGURED', '静态演示不支持手机登录，请在有后端的部署上使用', 503);
+  }
+
+  async uploadPhoto(file: File): Promise<string> {
+    // 静态模式没有对象存储：登记为合成素材（与后端演示上传同一语义）
+    const id = await this.uploadTestPhoto(null);
+    void file;
+    return id;
   }
 
   async listRestaurants(q: MapQueryInput, snapshotId: string | null, cursor: string | null, limit: number) {

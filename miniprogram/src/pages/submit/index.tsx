@@ -26,6 +26,7 @@ import {
   searchStores,
   submitFeedback,
   today,
+  uploadPhoto,
   uploadTestPhoto,
   type Restaurant,
 } from '../../api'
@@ -159,6 +160,26 @@ export default function Submit() {
       setCErr({ message: f?.message ?? '提交失败', fields: f?.fields ?? {} })
     } finally {
       setCBusy(false)
+    }
+  }
+
+  // 真实上传：选一张图 → 读字节 → 服务端 EXIF 剥离 + 待审核
+  async function addRealPhoto() {
+    if (!restaurant) return
+    try {
+      const chosen = await Taro.chooseMedia({ count: 1, mediaType: ['image'], sizeType: ['compressed'] })
+      const file = chosen.tempFiles[0]
+      if (!file) return
+      setBusy(true)
+      setErr(null)
+      const m = await uploadPhoto(file.tempFilePath)
+      setMediaIds((cur) => (cur.includes(m.id) ? cur : [...cur, m.id]))
+      setMediaCount((n) => n + 1)
+      void Taro.showToast({ title: '已上传，待审核', icon: 'none' })
+    } catch (e) {
+      setErr({ message: e instanceof ApiError ? e.message : e instanceof Error ? e.message : '图片上传失败', fields: {} })
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -404,10 +425,15 @@ export default function Submit() {
           </View>
           <View className="field">
             <Text className="label">图片（演示合成图，{mediaCount} 张）</Text>
-            <Button className="btn-plain" disabled={busy} onClick={() => void addPhoto()}>
-              添加一张演示图片
-            </Button>
-            <Text className="hint">本演示不接真实相册：图片由服务端登记为合成素材。</Text>
+            <View className="btn-row">
+              <Button className="btn-primary" disabled={busy} onClick={() => void addRealPhoto()}>
+                从相册上传图片
+              </Button>
+              <Button className="btn-plain" disabled={busy} onClick={() => void addPhoto()}>
+                添加一张演示图片
+              </Button>
+            </View>
+            <Text className="hint">上传的图片会剥离位置信息（EXIF），先审核后公开；演示图为服务端合成素材。</Text>
           </View>
           <Button className="btn-primary" disabled={busy || !loggedIn} onClick={() => void send()}>
             {busy ? '提交中…' : '提交到审核'}

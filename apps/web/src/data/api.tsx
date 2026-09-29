@@ -8,6 +8,8 @@ interface ApiState {
   api: ApiClient;
   user: SessionUser | null;
   ready: boolean;
+  /** 部署自描述（获取失败为 null，水印走保守显示）。 */
+  meta: DeploymentMeta | null;
   /** demo 数据水印：静态模式或后端 demo 模式都必须显示。 */
   demoBadge: string;
   refresh: () => Promise<void>;
@@ -62,6 +64,7 @@ export function ApiProvider({ children }: { children: ReactNode }) {
     api,
     user,
     ready,
+    meta,
     demoBadge,
     refresh,
     setUser,

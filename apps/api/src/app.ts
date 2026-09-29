@@ -10,6 +10,9 @@ import { buildOpenApi } from './http/openapi';
 import { clientIp, classify, isExpectedClientError, readSessionCookie, sendFailure, sendOk, type Failure, type HttpHeaders } from './http/responses';
 import { assertWriteAllowed, corsHeaders, RateLimiter } from './http/security';
 import type { Ctx, RouteDef, Router as RouterType } from './http/router';
+import { createSmsProvider, SmsChallengeStore } from './services/sms';
+import { createContentModeration } from './services/moderation';
+import { DiskStorage } from './services/storage';
 import type { DatabaseSync } from 'node:sqlite';
 
 /**
@@ -34,6 +37,8 @@ export interface App {
   close: () => Promise<void>;
   /** 供测试断言：某类记录是否真的落盘。 */
   lastPersisted: () => DocKind[];
+  /** 外部服务（短信/审核/存储）。测试可整体替换某个成员（handlers 动态读取）。 */
+  services: Services;
 }
 
 const ROOT_INFO = {
@@ -58,6 +63,19 @@ function rawSegments(url: string): { path: string[]; search: URLSearchParams } {
     }
   }
   return { path: segments, search };
+}
+
+/** 二进制请求体（图片上传）：原样字节，上限独立于 JSON body。 */
+async function readRawBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
+    size += buf.length;
+    if (size > maxBytes) throw new ApiError('VALIDATION_ERROR', `图片超过上限 ${Math.floor(maxBytes / 1024 / 1024)}MB`, 400);
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks);
 }
 
 async function readBody(req: IncomingMessage, maxBytes: number): Promise<JsonRecord> {
@@ -90,7 +108,18 @@ function toApiPath(segments: string[]): string[] | null {
 export function createApp(deps: AppDeps): App {
   const { config, store, repo } = deps;
   const logins = new RateLimiter(config.loginRateLimit.max, config.loginRateLimit.windowMs);
-  const services: Services = { store, cfg: config, readiness: deps.readiness, logins };
+  const services: Services = {
+    store,
+    cfg: config,
+    readiness: deps.readiness,
+    logins,
+    sms: createSmsProvider(config),
+    smsChallenges: new SmsChallengeStore(),
+    smsSend: new RateLimiter(config.smsSendRateLimit.max, config.smsSendRateLimit.windowMs),
+    smsSendIp: new RateLimiter(10, 3_600_000),
+    moderation: createContentModeration(config),
+    storage: new DiskStorage(config.uploadDir),
+  };
   const router = buildRouter(services);
   let persisted: DocKind[] = [];
 
@@ -123,7 +152,14 @@ export function createApp(deps: AppDeps): App {
       if (!matched) throw new ApiError('NOT_FOUND', '接口不存在', 404);
       assertWriteAllowed(config, req, method);
 
-      const body = method === 'GET' || method === 'HEAD' ? {} : await readBody(req, config.maxBodyBytes);
+      const isBinary = matched.route.binary === true;
+      const body =
+        method === 'GET' || method === 'HEAD'
+          ? {}
+          : isBinary
+            ? ({} as JsonRecord)
+            : await readBody(req, config.maxBodyBytes);
+      const bodyBuffer = isBinary && method !== 'GET' && method !== 'HEAD' ? await readRawBody(req, config.maxUploadBytes) : undefined;
       const sessionId = verifySession(readSessionCookie(req), config.sessionSecret);
       const ctx: Ctx = {
         store,
@@ -133,6 +169,7 @@ export function createApp(deps: AppDeps): App {
         params: matched.params,
         search,
         body,
+        bodyBuffer,
         sessionId,
         ip: clientIp(req),
         secureCookie: config.nodeEnv === 'production' || config.secureCookie === true,
@@ -206,6 +243,7 @@ export function createApp(deps: AppDeps): App {
       }
     },
     lastPersisted: () => persisted,
+    services,
   };
 }
 

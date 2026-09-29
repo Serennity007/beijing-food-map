@@ -14,6 +14,8 @@ export interface Ctx {
   search: URLSearchParams;
   /** 已解析 JSON；无 body 时为 {}。 */
   body: JsonRecord;
+  /** binary 路由的原始字节（图片上传）；非 binary 路由为 undefined。 */
+  bodyBuffer?: Buffer;
   sessionId: string | null;
   ip: string;
   secureCookie: boolean;
@@ -38,6 +40,8 @@ export interface RouteDef {
   writes?: boolean;
   /** 处理器自己写响应体（图片等非 JSON 资源）；返回 true 表示已写完。 */
   raw?: boolean;
+  /** 请求体是原始字节（图片上传）：ctx.bodyBuffer 有值，跳过 JSON 解析，按 maxUploadBytes 限长。 */
+  binary?: boolean;
 }
 
 interface Compiled {

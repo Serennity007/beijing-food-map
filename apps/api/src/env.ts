@@ -1,8 +1,11 @@
 /**
  * 配置入口：只读 PORT / HOST / NODE_ENV / SQLITE_PATH / ALLOWED_ORIGINS
- * （外加登录限流、SESSION_SECRET、SESSION_TTL_SECONDS、COOKIE_SECURE）。
+ * （外加登录限流、SESSION_SECRET、SESSION_TTL_SECONDS、COOKIE_SECURE，
+ *   以及短信发送、微信内容安全、上传存储的上线上线配置）。
  * 任何校验失败只报"变量名"，绝不把变量值写进日志或响应。
  */
+
+import path from 'node:path';
 
 export type NodeEnv = 'production' | 'development' | 'test';
 
@@ -17,6 +20,18 @@ export interface AppConfig {
   sessionSecret?: string;
   sessionTtlSeconds?: number;
   secureCookie?: boolean;
+  /** 短信验证码发送方式：console=写日志（非生产）；http=通用 Webhook 网关；none=未配置（production 缺省）。 */
+  smsProvider: 'console' | 'http' | 'none';
+  smsHttpUrl?: string;
+  smsHttpToken?: string;
+  /** 同手机号发码限流（默认 1 条/分钟；测试可放宽窗口）。 */
+  smsSendRateLimit: { max: number; windowMs: number };
+  /** 微信内容安全（msgSecCheck）凭据；两者齐备才启用。 */
+  wechatAppid?: string;
+  wechatAppSecret?: string;
+  /** 真实图片上传的对象存储目录（磁盘适配）。 */
+  uploadDir: string;
+  maxUploadBytes: number;
 }
 
 export const API_BASE_PATH = '/api/v1';
@@ -87,7 +102,26 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (secure && !['true', 'false'].includes(secure)) throw new ConfigError('COOKIE_SECURE 必须为 true 或 false');
   if (nodeEnv === 'production' && secure === 'false') throw new ConfigError('生产环境必须开启 COOKIE_SECURE');
   const sessionTtlSeconds = parseIntEnv(trim(env.SESSION_TTL_SECONDS) || '2592000', 'SESSION_TTL_SECONDS');
-  if (sessionTtlSeconds < 60 || sessionTtlSeconds > 2592000) throw new ConfigError('SESSION_TTL_SECONDS 必须为 60—2592000');
+  if (sessionTtlSeconds < 60 || sessionTtlSeconds > 2592000) throw new ConfigError('SESSION_TTL_SECONDS 必须在 60—2592000 之间');
+
+  const smsRaw = trim(env.SMS_PROVIDER).toLowerCase();
+  let smsProvider: 'console' | 'http' | 'none' = smsRaw === '' ? (nodeEnv === 'production' ? 'none' : 'console') : (smsRaw as 'console' | 'http' | 'none');
+  if (!['console', 'http', 'none'].includes(smsProvider)) throw new ConfigError('SMS_PROVIDER 只接受 console | http | none（当前值非法，未回显）');
+  const smsHttpUrl = trim(env.SMS_HTTP_URL) || undefined;
+  if (smsProvider === 'http' && !smsHttpUrl) throw new ConfigError('SMS_PROVIDER=http 时必须提供 SMS_HTTP_URL');
+  if (smsProvider === 'console' && nodeEnv === 'production') throw new ConfigError('生产环境禁止 SMS_PROVIDER=console（验证码会写进日志），请用 http 或 none');
+  const smsHttpToken = trim(env.SMS_HTTP_TOKEN) || undefined;
+
+  const wechatAppid = trim(env.WECHAT_APPID) || undefined;
+  const wechatAppSecret = trim(env.WECHAT_APP_SECRET) || undefined;
+  if (!!wechatAppid !== !!wechatAppSecret) throw new ConfigError('WECHAT_APPID 与 WECHAT_APP_SECRET 必须成对提供');
+
+  const uploadDir = trim(env.UPLOAD_DIR) || path.join(path.dirname(sqlitePath), 'uploads');
+  const maxUploadMbRaw = trim(env.MAX_UPLOAD_MB) || '8';
+  if (!/^\d+$/.test(maxUploadMbRaw)) throw new ConfigError('MAX_UPLOAD_MB 必须是整数字符串（当前值非法，未回显）');
+  const maxUploadBytes = Number(maxUploadMbRaw) * 1024 * 1024;
+  if (maxUploadBytes < 64 * 1024 || maxUploadBytes > 32 * 1024 * 1024) throw new ConfigError('MAX_UPLOAD_MB 必须在 0.0625—32 之间（按字节校验 64KB—32MB）');
+
   return {
     sessionSecret: sessionSecret || undefined,
     sessionTtlSeconds,
@@ -99,6 +133,14 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     allowedOrigins: parseAllowedOrigins(env.ALLOWED_ORIGINS),
     loginRateLimit: { max, windowMs: 60_000 },
     maxBodyBytes: 256 * 1024,
+    smsProvider,
+    smsHttpUrl,
+    smsHttpToken,
+    smsSendRateLimit: { max: 1, windowMs: 60_000 },
+    wechatAppid,
+    wechatAppSecret,
+    uploadDir,
+    maxUploadBytes,
   };
 }
 

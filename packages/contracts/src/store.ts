@@ -134,6 +134,15 @@ export interface UserRec {
   deletion_completed_at?: string;
   /** 合成测试账号标记：种子/邀请账号 true；真实短信注册 false（读取缺字段按 true 兜底）。 */
   is_test_data?: boolean;
+  /** 手机号去标识哈希（仅用于登录查找同一手机号；不存明文）。 */
+  phone_hash?: string;
+}
+
+/** 手机号 → 去标识查找键（djb2 变体，纯 JS；静态引擎与后端共用）。 */
+export function phoneHash(phone: string): string {
+  let h = 5381;
+  for (let i = 0; i < phone.length; i++) h = ((h << 5) + h + phone.charCodeAt(i)) >>> 0;
+  return `ph${h.toString(16)}-${phone.length}`;
 }
 
 export interface EditorialRec {
@@ -200,6 +209,10 @@ export interface MediaRec {
   created_at?: string;
   /** 合成图片标记：种子/演示上传 true；真实上传 false。 */
   is_test_data?: boolean;
+  /** 真实上传：对象存储键（存在时 /media/:id 从存储读字节，而非 url data-uri）。 */
+  storage_key?: string;
+  content_type?: string;
+  size?: number;
 }
 
 export interface PublicationRec {
@@ -733,6 +746,11 @@ export class Store {
     };
   }
 
+  /** 真实上传的存储键（/media/:id 据此从对象存储取字节）；demo data-uri 媒体为 null。 */
+  mediaStorageKey(id: string): string | null {
+    return this.media.get(id)?.storage_key ?? null;
+  }
+
   mediaOf(id: string): MediaAsset | null {
     const m = this.media.get(id);
     if (!m) return null;
@@ -741,6 +759,7 @@ export class Store {
       owner_user_id: m.owner_user_id,
       kind: 'photo',
       url: m.url,
+      content_type: m.content_type,
       width: m.width,
       height: m.height,
       review_status: m.review_status,
@@ -776,6 +795,36 @@ export class Store {
       publication_id: null,
       restaurant_id: restaurantId,
       created_at: this.stamp(),
+    };
+    this.media.set(id, rec);
+    return this.mediaOf(id)!;
+  }
+
+  /**
+   * 真实上传：只登记元数据（待审核），字节由 API 层写入对象存储（storage_key 关联）。
+   * 尺寸在上传侧解析或按 0 处理，不影响审核与计票逻辑。
+   */
+  addUserMedia(
+    sessionId: string | null,
+    m: { storage_key: string; content_type: string; size: number },
+  ): MediaAsset {
+    const user = this.requireUser(sessionId);
+    const id = this.nextId('MM');
+    const rec: MediaRec = {
+      id,
+      owner_user_id: user.id,
+      url: '',
+      width: 0,
+      height: 0,
+      review_status: 'PENDING',
+      is_test_data: this.env !== 'production',
+      context: 'private',
+      publication_id: null,
+      restaurant_id: null,
+      created_at: this.stamp(),
+      storage_key: m.storage_key,
+      content_type: m.content_type,
+      size: m.size,
     };
     this.media.set(id, rec);
     return this.mediaOf(id)!;
@@ -1100,6 +1149,37 @@ export class Store {
     const sid = `sess-${this.nextId('S')}`;
     this.sessions.set(sid, { user_id: u.id, created_at: this.stamp() });
     return { session_id: sid, user: this.sessionUser(u.id) };
+  }
+
+  /**
+   * 手机号验证码登录（真实路径）：验证码校验在 API 层完成，这里只负责
+   * 按手机号哈希找到或创建账号并发会话。不存明文手机号，只存掩码与去标识哈希。
+   * 静态引擎也运行本方法，故哈希用纯 JS 实现、不引运行时相关依赖。
+   */
+  loginByPhone(phone: string): { session_id: string; user: SessionUser; created: boolean } {
+    const hash = phoneHash(phone);
+    let u = [...this.users.values()].find((x) => x.phone_hash === hash);
+    let created = false;
+    if (!u) {
+      created = true;
+      const id = this.nextId('U');
+      const rec: UserRec = {
+        id,
+        display_name: `用户${phone.slice(-4)}`,
+        roles: ['user'],
+        phone_masked: `${phone.slice(0, 3)}****${phone.slice(-4)}`,
+        status: 'active',
+        is_test_data: this.env !== 'production',
+        phone_hash: hash,
+      };
+      this.users.set(id, rec);
+      u = rec;
+      this.ensureSystemCollections(id);
+    }
+    if (u.status !== 'active') throw new ApiError('UNAUTHORIZED', '账号不可用', 401);
+    const sid = `sess-${this.nextId('S')}`;
+    this.sessions.set(sid, { user_id: u.id, created_at: this.stamp() });
+    return { session_id: sid, user: this.sessionUser(u.id), created };
   }
 
   sessionUser(userId: string): SessionUser {

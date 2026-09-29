@@ -25,6 +25,7 @@ import type {
   SessionUser,
   SharedCollectionSnapshot,
   Submission,
+  DeploymentMeta,
 } from '@qianwei/contracts'
 
 export type {
@@ -199,10 +200,27 @@ export function today(): Promise<string> {
   return req('/today')
 }
 
+/** 部署自描述（进程内缓存一次）：演示水印与"真实上传/演示上传"按钮的显隐依据。 */
+let metaCache: DeploymentMeta | null = null
+export async function fetchMeta(): Promise<DeploymentMeta> {
+  if (metaCache) return metaCache
+  metaCache = await req<DeploymentMeta>('/meta')
+  return metaCache
+}
+
 // ---------------- 会话 ----------------
 
 export function login(userId: string, code: string): Promise<SessionUser> {
   return req('/auth/login', 'POST', { user_id: userId, code })
+}
+
+/** 发送手机验证码（真实登录路径；供应商由后端 SMS_PROVIDER 决定）。 */
+export function phoneCode(phone: string): Promise<{ ok: true; ttl_seconds: number }> {
+  return req('/auth/phone/code', 'POST', { phone })
+}
+
+export function phoneLogin(phone: string, code: string): Promise<SessionUser> {
+  return req('/auth/phone/login', 'POST', { phone, code })
 }
 
 export function logout(): Promise<unknown> {
@@ -245,6 +263,35 @@ export function withdrawFeedback(restaurantId: string): Promise<{ ok: true }> {
 
 export function uploadTestPhoto(restaurantId: string | null): Promise<{ id: string }> {
   return req('/uploads/test-photo', 'POST', { restaurant_id: restaurantId })
+}
+
+/**
+ * 真实图片上传：选一张图（Taro.chooseMedia）→ 读字节 → POST 原始字节到 /media/uploads。
+ * 服务端做魔数校验 + EXIF 剥离（含 GPS），登记为待审核图片。
+ */
+export async function uploadPhoto(filePath: string): Promise<{ id: string }> {
+  const meta = await fetchMeta()
+  const fsm = Taro.getFileSystemManager()
+  const data = await new Promise<ArrayBuffer>((resolve, reject) => {
+    fsm.readFile({
+      filePath,
+      success: (r) => resolve(r.data as ArrayBuffer),
+      fail: (e) => reject(new Error(e.errMsg ?? '读取图片失败')),
+    })
+  })
+  const r = await Taro.request({
+    url: `${BASE}/media/uploads`,
+    method: 'POST',
+    data,
+    header: { 'content-type': 'image/jpeg', Cookie: loadCookie() },
+    timeout: 30000,
+  })
+  saveCookieFrom(r.header as Record<string, unknown>)
+  const json = (typeof r.data === 'string' ? JSON.parse(r.data) : r.data) as Envelope<{ id: string }>
+  if (r.statusCode >= 400 || json?.error) {
+    throw new ApiError(json?.error?.code ?? 'PROVIDER_UNAVAILABLE', json?.error?.message ?? '图片上传失败', json?.error?.fieldErrors ?? {})
+  }
+  return (json?.data ?? null) as { id: string }
 }
 
 // ---------------- 建店候选 ----------------

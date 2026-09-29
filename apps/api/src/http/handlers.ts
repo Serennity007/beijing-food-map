@@ -30,6 +30,11 @@ import { RateLimiter } from './security';
 import { signSession } from './session';
 import { sessionCookie, sendBinary } from './responses';
 import { bBool, bDate, bEnum, bNum, bNumRaw, bStr, bStrArray, need } from './body';
+import type { SmsChallengeStore, SmsProvider } from '../services/sms';
+import { isCnPhone } from '../services/sms';
+import type { ContentModeration } from '../services/moderation';
+import type { ObjectStorage } from '../services/storage';
+import { MAX_UPLOAD_BYTES, UPLOAD_CONTENT_TYPES, sniffImageType, stripImageExif } from '../services/storage';
 
 const MODERATION_ACTIONS = ['approve', 'reject', 'hide'] as const;
 const CANDIDATE_ACTIONS = ['verify', 'reject', 'merge'] as const;
@@ -43,6 +48,40 @@ export interface Services {
   /** 就绪探针：真的往 SQLite 写一行再删掉。 */
   readiness: () => boolean;
   logins: RateLimiter;
+  /** 短信验证码发送（真实登录路径）。 */
+  sms: SmsProvider;
+  smsChallenges: SmsChallengeStore;
+  /** 发码限流：同一手机号 1 条/分钟；同一 IP 10 条/小时。 */
+  smsSend: RateLimiter;
+  smsSendIp: RateLimiter;
+  /** UGC 文本内容审核（微信 msgSecCheck / 直通）。 */
+  moderation: ContentModeration;
+  /** 真实图片上传的对象存储（磁盘适配）。 */
+  storage: ObjectStorage;
+}
+
+/**
+ * UGC 文本先过内容安全再落库（微信 msgSecCheck）。
+ * 命中违规 → 400；审核服务不可达 → production 拒绝（503，宁停勿漏），非生产直通并记日志。
+ */
+async function moderateText(svc: Services, text: string, scene: string): Promise<void> {
+  const trimmed = text.trim();
+  if (trimmed === '') return;
+  let v;
+  try {
+    v = await svc.moderation.checkText(trimmed.slice(0, 2500), scene);
+  } catch {
+    v = { ok: false as const, message: 'CONTENT_CHECK_UNAVAILABLE' };
+  }
+  if (v.ok) return;
+  if (v.message === 'CONTENT_CHECK_UNAVAILABLE') {
+    if (svc.cfg.nodeEnv === 'production') {
+      throw new ApiError('CONTENT_CHECK_UNAVAILABLE', '内容审核服务暂时不可用，请稍后再试', 503);
+    }
+    process.stderr.write(`[moderation] 非生产环境审核服务不可用，已放行（scene=${scene}）\n`);
+    return;
+  }
+  throw new ApiError('CONTENT_REJECTED', v.message ?? '内容包含不允许的信息，请修改后再提交', 400);
 }
 
 function idParam(ctx: Ctx, name: string): string {
@@ -237,10 +276,45 @@ export function buildRouter(svc: Services): Router {
         if (!asset || !store.canViewMedia(ctx.sessionId, mediaId)) {
           throw new ApiError('NOT_FOUND', '内容不存在', 404);
         }
+        const storageKey = store.mediaStorageKey(mediaId);
+        if (storageKey) {
+          const obj = svc.storage.get(storageKey);
+          if (!obj) throw new ApiError('NOT_FOUND', '内容不存在', 404);
+          sendBinary(ctx.res, obj.data, asset.content_type ?? 'application/octet-stream', { requestId: ctx.requestId });
+          return undefined;
+        }
         const dataUri = /^data:([^;,]+);base64,([\s\S]+)$/.exec(asset.url);
         if (!dataUri) throw new ApiError('NOT_FOUND', '内容不存在', 404);
         sendBinary(ctx.res, Buffer.from(dataUri[2]!, 'base64'), dataUri[1]!, { requestId: ctx.requestId });
         return undefined;
+      },
+    },
+    {
+      method: 'POST',
+      path: '/media/uploads',
+      status: 201,
+      summary: '真实图片上传：原始字节体（content-type 声明类型），魔数校验 + EXIF 剥离后入对象存储，登记为待审核图片',
+      writes: true,
+      binary: true,
+      handler: (ctx) => {
+        ctx.user();
+        const buf = ctx.bodyBuffer;
+        if (!buf || buf.length === 0) throw new ApiError('VALIDATION_ERROR', '缺少图片字节（请求体为原始图片数据）', 400);
+        const declared = (ctx.req.headers['content-type'] ?? '').split(';')[0]!.trim().toLowerCase();
+        if (!UPLOAD_CONTENT_TYPES.includes(declared as (typeof UPLOAD_CONTENT_TYPES)[number])) {
+          throw new ApiError('VALIDATION_ERROR', '只支持 JPEG / PNG / WebP 图片', 400);
+        }
+        if (buf.length > MAX_UPLOAD_BYTES) {
+          throw new ApiError('VALIDATION_ERROR', `图片超过上限 ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)}MB`, 400);
+        }
+        const sniffed = sniffImageType(buf);
+        if (sniffed === null || sniffed !== declared) {
+          throw new ApiError('VALIDATION_ERROR', '文件内容与声明的图片类型不符', 400);
+        }
+        const clean = stripImageExif(buf, declared);
+        const key = `${ctx.uid()}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+        svc.storage.put(key, clean);
+        return store.addUserMedia(ctx.sessionId, { storage_key: key, content_type: declared, size: clean.length });
       },
     },
     {
@@ -267,6 +341,45 @@ export function buildRouter(svc: Services): Router {
         const r = store.login(userId, code);
         ctx.setCookie.push(sessionCookie(signSession(r.session_id, cfg.sessionSecret, cfg.sessionTtlSeconds ?? 2592000), { secure: ctx.secureCookie, ttl: cfg.sessionTtlSeconds ?? 2592000 }));
         return { user: r.user };
+      },
+    },
+    {
+      method: 'POST',
+      path: '/auth/phone/code',
+      summary: '发送手机验证码（真实登录路径；供应商由 SMS_PROVIDER 配置）',
+      writes: true,
+      handler: async (ctx) => {
+        const phone = need(bStr(ctx.body, 'phone', { required: true, max: 11 }), 'phone');
+        if (!isCnPhone(phone)) throw new ApiError('VALIDATION_ERROR', '手机号格式不正确', 400, { phone: '请输入 11 位大陆手机号' });
+        const perPhone = svc.smsSend.take(`p|${phone}`);
+        if (!perPhone.ok) throw new ApiError('RATE_LIMITED', `发送过于频繁，请 ${perPhone.retryAfterSec} 秒后再试`, 429);
+        const perIp = svc.smsSendIp.take(ctx.ip);
+        if (!perIp.ok) throw new ApiError('RATE_LIMITED', '请求过于频繁，请稍后再试', 429);
+        const code = String(Math.floor(100000 + Math.random() * 900000));
+        process.stderr.write('[dbg] handler sees sms=' + svc.sms.name + '\n');
+        await svc.sms.send(phone, code);
+        // 发送成功才落验证码，失败的发送不消耗次数
+        svc.smsChallenges.save(phone, code);
+        return { ok: true as const, ttl_seconds: 300 };
+      },
+    },
+    {
+      method: 'POST',
+      path: '/auth/phone/login',
+      summary: '手机验证码登录：校验通过即创建/复用账号并发会话（生产的真实登录路径）',
+      writes: true,
+      handler: (ctx) => {
+        const phone = need(bStr(ctx.body, 'phone', { required: true, max: 11 }), 'phone');
+        const code = need(bStr(ctx.body, 'code', { required: true, max: 6 }), 'code');
+        if (!isCnPhone(phone)) throw new ApiError('VALIDATION_ERROR', '手机号格式不正确', 400, { phone: '请输入 11 位大陆手机号' });
+        const budget = svc.logins.take(`${ctx.ip}|phone:${phone}`);
+        if (!budget.ok) throw new ApiError('RATE_LIMITED', '登录尝试过于频繁，请稍后再试', 429);
+        if (!svc.smsChallenges.consume(phone, code)) {
+          throw new ApiError('VALIDATION_ERROR', '验证码错误或已过期', 400, { code: '请输入收到的 6 位验证码' });
+        }
+        const r = store.loginByPhone(phone);
+        ctx.setCookie.push(sessionCookie(signSession(r.session_id, cfg.sessionSecret, cfg.sessionTtlSeconds ?? 2592000), { secure: ctx.secureCookie, ttl: cfg.sessionTtlSeconds ?? 2592000 }));
+        return { user: r.user, created: r.created };
       },
     },
     {
@@ -347,19 +460,24 @@ export function buildRouter(svc: Services): Router {
       method: 'POST',
       path: '/submissions',
       status: 201,
-      summary: '提交实吃反馈（Idempotency-Key 幂等）',
+      summary: '提交实吃反馈（Idempotency-Key 幂等；理由与菜名先过内容安全）',
       writes: true,
-      handler: (ctx) => {
-        const rid = need(bStr(ctx.body, 'restaurant_id', { required: true, max: 16 }), 'restaurant_id');
-        return store.submitFeedback(submitInputFrom(ctx, assertId(rid, 'restaurant_id')), ctx.sessionId).submission;
+      handler: async (ctx) => {
+        const input = submitInputFrom(ctx, assertId(need(bStr(ctx.body, 'restaurant_id', { required: true, max: 16 }), 'restaurant_id'), 'restaurant_id'));
+        await moderateText(svc, [input.reason, ...input.dish_names].join('\n'), 'comment');
+        return store.submitFeedback(input, ctx.sessionId).submission;
       },
     },
     {
       method: 'PUT',
       path: '/restaurants/:id/my-feedback',
-      summary: '对该门店提交/更新我的反馈',
+      summary: '对该门店提交/更新我的反馈（先过内容安全）',
       writes: true,
-      handler: (ctx) => store.submitFeedback(submitInputFrom(ctx, idParam(ctx, 'id')), ctx.sessionId).submission,
+      handler: async (ctx) => {
+        const input = submitInputFrom(ctx, idParam(ctx, 'id'));
+        await moderateText(svc, [input.reason, ...input.dish_names].join('\n'), 'comment');
+        return store.submitFeedback(input, ctx.sessionId).submission;
+      },
     },
     {
       method: 'DELETE',
@@ -392,14 +510,14 @@ export function buildRouter(svc: Services): Router {
       method: 'POST',
       path: '/collections',
       status: 201,
-      summary: '新建自定义清单',
+      summary: '新建自定义清单（标题/说明先过内容安全）',
       writes: true,
-      handler: (ctx) =>
-        store.createCollection(
-          ctx.uid(),
-          need(bStr(ctx.body, 'title', { required: true, max: 60 }), 'title'),
-          bStr(ctx.body, 'description', { max: 300 }),
-        ),
+      handler: async (ctx) => {
+        const title = need(bStr(ctx.body, 'title', { required: true, max: 60 }), 'title');
+        const description = bStr(ctx.body, 'description', { max: 300 });
+        await moderateText(svc, [title, description ?? ''].join('\n'), 'comment');
+        return store.createCollection(ctx.uid(), title, description);
+      },
     },
     {
       method: 'GET',
@@ -410,9 +528,10 @@ export function buildRouter(svc: Services): Router {
     {
       method: 'PATCH',
       path: '/collections/:id',
-      summary: '改标题/描述',
+      summary: '改标题/描述（先过内容安全）',
       writes: true,
-      handler: (ctx) => {
+      handler: async (ctx) => {
+        await moderateText(svc, [bStr(ctx.body, 'title', { max: 60 }) ?? '', bStr(ctx.body, 'description', { max: 300 }) ?? ''].join('\n'), 'comment');
         const col = store.requireCollection(idParam(ctx, 'id'), ctx.uid());
         if (ctx.body['title'] !== undefined) {
           const title = bStr(ctx.body, 'title', { max: 60 });
@@ -437,9 +556,12 @@ export function buildRouter(svc: Services): Router {
       path: '/collections/:id/items/:restaurantId',
       summary: '新增或更新清单条目（笔记/可公开/排序）',
       writes: true,
-      handler: (ctx) => {
+      handler: async (ctx) => {
         const patch: Partial<CollectionItemRecord> & { remove?: boolean } = {};
-        if (ctx.body['note'] !== undefined) patch.note = bStr(ctx.body, 'note', { max: 300 });
+        if (ctx.body['note'] !== undefined) {
+          patch.note = bStr(ctx.body, 'note', { max: 300 });
+          await moderateText(svc, patch.note ?? '', 'comment');
+        }
         if (ctx.body['note_shareable'] !== undefined) patch.note_shareable = bBool(ctx.body, 'note_shareable', false);
         if (ctx.body['position'] !== undefined) patch.position = bNumRaw(ctx.body['position'], 'position', { integer: true, min: 0, max: 999 }) ?? 0;
         if (ctx.body['media_ids'] !== undefined) patch.media_ids = bStrArray(ctx.body, 'media_ids', { max: 10, itemMax: 64 });
@@ -485,18 +607,21 @@ export function buildRouter(svc: Services): Router {
       method: 'POST',
       path: '/reports',
       status: 201,
-      summary: '举报门店问题（闭店结论仍需人工确认证据）',
+      summary: '举报门店问题（内容先过安全，闭店结论仍需人工确认证据）',
       writes: true,
-      handler: (ctx) =>
-        store.createReport(
+      handler: async (ctx) => {
+        const detail = bStr(ctx.body, 'detail', { required: true, max: 500 }) ?? '';
+        await moderateText(svc, detail, 'report');
+        return store.createReport(
           {
             restaurant_id: assertId(need(bStr(ctx.body, 'restaurant_id', { required: true, max: 16 }), 'restaurant_id'), 'restaurant_id'),
             kind: need(bEnum<ReportKind>(ctx.body, 'kind', REPORT_KINDS, { required: true }), 'kind'),
-            detail: bStr(ctx.body, 'detail', { required: true, max: 500 }) ?? '',
+            detail,
             feedback_target: bStr(ctx.body, 'feedback_target', { max: 80 }) ?? null,
           },
           ctx.sessionId,
-        ),
+        );
+      },
     },
 
     // ------------------------------------------------------------ 新门店候选（阶段 1A）
@@ -504,9 +629,13 @@ export function buildRouter(svc: Services): Router {
       method: 'POST',
       path: '/restaurant-candidates',
       status: 201,
-      summary: '提交新门店候选：同时落一家地点待核验的门店，不自动推荐',
+      summary: '提交新门店候选（名称/地址/证据先过内容安全）：同时落一家地点待核验的门店，不自动推荐',
       writes: true,
-      handler: (ctx) => store.createCandidate(candidateCreateFrom(ctx), ctx.sessionId),
+      handler: async (ctx) => {
+        const facts = candidateCreateFrom(ctx);
+        await moderateText(svc, [facts.name, facts.address, facts.evidence_note].join('\n'), 'comment');
+        return store.createCandidate(facts, ctx.sessionId);
+      },
     },
     {
       method: 'GET',
@@ -517,13 +646,16 @@ export function buildRouter(svc: Services): Router {
     {
       method: 'POST',
       path: '/restaurant-candidates/:id/materials',
-      summary: '被驳回的建店申请补充材料，回到待核验（revision 递增）',
+      summary: '被驳回的建店申请补充材料（先过内容安全，revision 递增）',
       writes: true,
-      handler: (ctx) =>
-        store.resubmitCandidateMaterials(
-          { id: idParam(ctx, 'id'), patch: candidatePatchFrom(ctx), expected_version: expectedVersion(ctx) },
+      handler: async (ctx) => {
+        const patch = candidatePatchFrom(ctx);
+        await moderateText(svc, [patch.name ?? '', patch.address ?? '', patch.evidence_note ?? ''].join('\n'), 'comment');
+        return store.resubmitCandidateMaterials(
+          { id: idParam(ctx, 'id'), patch, expected_version: expectedVersion(ctx) },
           ctx.sessionId,
-        ),
+        );
+      },
     },
     {
       method: 'GET',

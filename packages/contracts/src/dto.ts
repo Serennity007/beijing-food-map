@@ -107,8 +107,10 @@ export interface MediaAsset {
   id: string;
   owner_user_id: string;
   kind: 'photo';
-  /** demo 用内联 SVG/PNG data URI，避免未审核对象直链。 */
+  /** demo 用内联 SVG/PNG data URI，避免未审核对象直链；真实上传为空串（字节经 /media/:id 鉴权直出）。 */
   url: string;
+  /** 真实上传的字节类型；demo data-uri 为 undefined。 */
+  content_type?: string;
   width: number;
   height: number;
   review_status: ContentVersionStatus;

@@ -213,6 +213,29 @@ export class Http implements ApiClient {
     return this.req<C.DeploymentMeta>('/meta');
   }
 
+  phoneCode(phone: string) {
+    return this.req<{ ok: true; ttl_seconds: number }>('/auth/phone/code', { method: 'POST' }, { phone });
+  }
+
+  phoneLogin(phone: string, code: string) {
+    return this.req<C.SessionUser>('/auth/phone/login', { method: 'POST' }, { phone, code });
+  }
+
+  async uploadPhoto(file: File): Promise<string> {
+    const bytes = await file.arrayBuffer();
+    const type = file.type || 'image/jpeg';
+    const res = await fetch(this.base + '/media/uploads', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': type },
+      body: bytes,
+    });
+    const j = (await res.json().catch(() => null)) as { data?: { id: string }; error?: { code: string; message: string } } | null;
+    if (!res.ok || !j || j.error) throw new ClientError(j?.error?.code ?? 'PROVIDER_UNAVAILABLE', j?.error?.message ?? '图片上传失败', res.status);
+    if (!j.data) throw new ClientError('PROVIDER_UNAVAILABLE', '图片上传失败', res.status);
+    return j.data.id;
+  }
+
   createReport(input: ReportInput) {
     return this.req<C.ReportTicket>('/reports', { method: 'POST' }, input);
   }

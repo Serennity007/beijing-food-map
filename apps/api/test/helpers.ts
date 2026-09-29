@@ -26,6 +26,10 @@ export function makeConfig(overrides: Partial<AppConfig> = {}): { cfg: AppConfig
     allowedOrigins: ['http://localhost:5173'],
     loginRateLimit: { max: 1000, windowMs: 60_000 },
     maxBodyBytes: 256 * 1024,
+    smsProvider: 'console',
+    smsSendRateLimit: { max: 1, windowMs: 60_000 },
+    uploadDir: join(dir, 'uploads'),
+    maxUploadBytes: 8 * 1024 * 1024,
     ...overrides,
   };
   return { cfg, dir };
@@ -127,6 +131,10 @@ export class Client {
 
   get<T = unknown>(path: string) {
     return this.req<T>('GET', path);
+  }
+
+  post<T = unknown>(path: string, body?: unknown, useCookie = true) {
+    return this.req<T>('POST', path, { body, useCookie });
   }
 }
 
