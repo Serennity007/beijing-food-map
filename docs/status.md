@@ -32,6 +32,7 @@
 | --- | --- |
 | `npm run typecheck` | 3 个 workspace 全绿（`strict` + `noUncheckedIndexedAccess` + `noUnusedLocals`） |
 | `npm test` | **135 项 0 失败**：contracts 92（store 63 + candidates 21 + reports 8）/ web 14 / api 29 |
+| `npm run typecheck` + `npm test`（**2026-09-30 部署前复跑**） | 全绿；**150 项 0 失败**：contracts 97 / api 39（较 9/26 新增短信验证码登录、msgSecCheck 适配、真实图片上传共 10 个用例）/ web 14；同轮 `miniprogram typecheck:mp` 0 错误、`build:weapp` 生产构建成功 |
 | `npx tsx scripts/http-contract-check.mts` | **61 项断言通过**（前端真实 `Http` 客户端 × 已监听后端；本轮用全新独立库 `work/contract-check.sqlite`） |
 | `npm run build` | 退出码 0。`index.js` 473.03 kB（gzip 144.16）、`maplibre.js` 1 052.94 kB（gzip 284.54）、`react.js` 50.95 kB（gzip 18.03）（2026-09-27 设计精修轮实测） |
 | `node scripts/demo-check.mjs --api` | **ALL GREEN（14 项）**（独立库 `work/demo-check.sqlite`） |
@@ -44,7 +45,7 @@
 
 **当前状态快照（2026-09-26，全部实测）**
 
-- **线上演示已上线**：https://serennity007.github.io/beijing-food-map/ （公开仓库 `Serennity007/beijing-food-map`，gh-pages 分支静态部署；静态演示模式 = 浏览器内引擎 + localStorage）。实测首页 200、地图渲染与标记交互、深链接 `/restaurants/R01` 经 404 回退直达详情。源码 `main` 分支待 gh 补 `workflow` scope 后推送（见 blockers.md 第 2 条）；真实后端等 Render 授权后按 `render.yaml` 部署。
+- **线上演示已上线**：https://serennity007.github.io/beijing-food-map/ （公开仓库 `Serennity007/beijing-food-map`，gh-pages 分支静态部署；静态演示模式 = 浏览器内引擎 + localStorage）。实测首页 200、地图渲染与标记交互、深链接 `/restaurants/R01` 经 404 回退直达详情。**2026-09-30 已重推最新构建**（gh-pages `454e3e9` ← main `0e0a468`：短信登录/msgSecCheck/真实图片上传两端接线 + 设计系统 v2），线上 bundle `index-D0rLvk_5.js` 实测 200、旧 `index-BmzMaq7N.js` 已 404。源码 `main` 分支推送在 2026-09-30 实测仍被 GitHub 拒绝（gh OAuth token 无 `workflow` scope，见 blockers.md 第 2 条）；全量备份 `beijing-food-map-backup-20260930.bundle`（17 MB，`git bundle verify` 通过）已放在交接包根目录。真实后端等 Render 授权后按 `render.yaml` 部署。
 - **视口覆盖**：390×844、360×640、1440×900 真实设置视口实测（不再只有 531×568）；真机与读屏仍未验（见 not verified）。
 - **地图与搜索**：搜索结果跨视野定位（结果坐标驱动相机，不要求目标已在视野）、被筛选排除时如实解释并给详情入口；搜索五态（加载/有结果/无结果/失败可重试，关键词保留）；首屏两行工具栏 + 抽屉默认低档 + 遮挡实测（缩放控件与底图署名不被遮）。
 - **投稿与建店**：表单内嵌选点地图（点击即填 GCJ-02 坐标，端到端提交回执 RC0123）；坐标进本机草稿，选点往返零丢失；地图页无结果带词跳转投稿页预填。
@@ -56,6 +57,7 @@
 - **高德数据管线**：`scripts/import-amap-candidates.mts` 校验/去重/暂存（不进引擎不上图层），供数路径见 `database/import/README.md`；**真实数据仍为零，等待高德 Key 或人工记录**。
 - **贵州元素与审美**：蜡染靛蓝织带、黔字徽标、黔味小词典、空态引导文案；衬线显示标题、毛玻璃工具栏、去边框分层的编辑感排版。
 - **微信小程序功能对齐完整版**（`miniprogram/`，Taro 4.2.1 + React 18 + TS）：10 页 —— 首页（腾讯原生 `<map>` + 聚合/门店标记 + 好店列表；搜索失败保留关键词可重试、数据加载失败保留上次结果可重试、搜索结果「在地图查看」相机飞至门店）、门店详情（含「已有一条我的反馈」修改/撤回、打卡·记账）、投稿（搜索选店 → 建店申请 → 实吃反馈）、我的（投稿/建店/举报/打卡记账/清单 + 新建清单 + 隐私说明/用户条款入口 + 注销账号 + 后台入口）、登录、修订反馈、清单编辑（搜索加店/移除/笔记与公开开关/排序/发布申请/撤销发布/删除）、内容后台（待审队列/地点核验/举报复核/门店状态/合并·仅 admin/编辑背书/审计日志）、清单分享只读页（对应 Web `/s/:token` 的匿名快照页：标题/作者/发布时间/条目笔记/已过审图片缩略/「作者个人推荐」显式标识，无效或已撤销令牌统一提示「链接无效或已撤销」，支持微信转发 onShareAppMessage）、隐私与条款页（对应 Web `/privacy` `/terms`，页内互切）。视觉为设计系统 v2：WXSS 令牌变量与 Web 同源（色板/圆角/双层投影/衬线字体），大气简约——去边框白卡、填充式表单、蜡染靛蓝织带页头点缀、毛玻璃工具栏、禁用态对比度修正、价格锚点衬线化。数据连后端 HTTP；DTO 类型从 `@qianwei/contracts` 直连导入（esbuild vendor 预打包），api.ts 不再手写第二份契约。**开发者工具模拟器实测**：五页渲染与投稿端到端（截图 `32-`–`36-`）；功能对齐轮——admin 六分区渲染（含真实待审条目与操作按钮）、清单编辑全要素（COL0001 已公开 + 3 条目笔记）、修订页预填与提交写路径（VF001#v2 新版本 PENDING，详情徽标正确显示「公开第 1 版 + 第 2 版待审」）、A01 的后台/注销入口（截图 `37-`–`44-`）。仅开发模式（本机后端 + 不校验合法域名）；正式发布前置（企业主体、备案 HTTPS 域名、微信内容安全接口）仍未闭合，见 NEXT.md。写路径：**全部模拟器 UI 端到端**——修订（VF001#v2 PENDING，截图 `44-`）；清单生命周期/后台处置/注销由 `scripts/verify-write-ui.mjs` × DevTools 自动化（ws://127.0.0.1:9420）× 全新库 2026-09-27 实测 **18/18 项通过**（新建清单→搜索加店→提交发布 PUB0005→A01 队列通过→已公开+生效令牌 tok-→撤销分享→删除清单；详情撤回反馈→票数重算→反馈区消失；U05 注销→回未登录态；showModal 以 mockWxMethod 自动确认，业务接口零 mock，截图 `45-`–`50-`）；分享只读页与编辑背书 tab 由 `scripts/verify-share-endorse.mjs` × 全新库实测 **16/16 项通过**（HTTP 造数→UI 断言：有效 token 渲染快照全要素/无效 token 提示/「预览公开页」入口跳转；R05 编辑背书检索→展示作者/实吃日期/有效期至（`addDays`+`SCORING_WINDOW_DAYS` 取自 contracts）→核验→填理由撤销→徽标转「背书已撤销」，截图 `51-`–`54-`）；完整对齐轮（法律页双栏、me 页法律入口、地图搜索飞到定位、七分区后台回归）由 `scripts/verify-polish.mjs` 实测 **14/14 项通过**（截图 `55-`–`59-`）。API 级全绿另由 `scripts/verify-write-api.mjs` 覆盖。DevTools 环境恢复记录：上轮 `reg.exe` 黑名单已解除；真正阻断是 IDE 非正常退出把 `User Data/<hash>/Default/.ide-status` 清成 0 字节，CLI 因此报"服务端口已关闭"——把该文件恢复为 `On` 后 `cli.bat auto` 正常拉起（2026-09-27 实测）。
+- **真实能力接线（2026-09-29，两端同契约）**：短信验证码登录（`SMS_PROVIDER=console|http|none`，console 仅非生产写日志，production 未配置时发码一律 503）、微信 `msgSecCheck` 内容安全（`WECHAT_APPID/SECRET` 成对提供才启用，production 未配置启动显著提醒）、真实图片上传（磁盘对象存储 `UPLOAD_DIR`，魔数校验 + EXIF 剥离，单图 64KB—32MB 可配 `MAX_UPLOAD_MB`）；口径见 `.env.example`。小程序 `BASE` 按 `envVersion` 自动分离（2026-09-30）：develop→本机 `127.0.0.1:8787`（本地演示链路不变），trial/release→`https://qianwei-api-demo.onrender.com/api/v1`（与 render.yaml 服务名对应）；同一份 dist 既可本地演示又可直接上传体验版。正式发布前置（企业主体、备案 HTTPS 域名、小程序后台 request 合法域名、Render 后端实际部署）仍未闭合。
 
 **浏览器实测行为基线（2026-09-25 基线轮 + 各轮交互证据见 render-check `9-`–`30-`）**
 

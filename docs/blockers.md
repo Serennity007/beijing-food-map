@@ -11,7 +11,7 @@
 
 2. **[部分闭合 2026-09-26] 托管平台授权与仓库推送**
    ✅ **GitHub Pages 线上演示已上线**：https://serennity007.github.io/beijing-food-map/ （公开仓库 `Serennity007/beijing-food-map`，gh-pages 分支静态部署，静态演示模式 = 浏览器内引擎 + localStorage）。深链接与 404 回退已实测。
-   ⏳ **剩余**：① `main` 源码分支未推上（gh OAuth 缺 `workflow` scope，设备码授权两次未在有效期内完成；授权后 `git push -u origin main` 即补齐，Actions 流水线随之生效）；② 真实后端托管仍待你在 render.com 用 GitHub 登录接同仓库，读 `render.yaml` 一键部署（`docs/runbooks/deploy-api.md`）；③ `Dockerfile` 仍未构建过（本机无 Docker）。
+   ⏳ **剩余**：① `main` 源码分支未推上（gh OAuth 缺 `workflow` scope，设备码授权两次未在有效期内完成；**2026-09-30 实测 HTTPS 推送仍被拒**：`refusing to allow an OAuth App to create or update workflow '.github/workflows/deploy-web.yml' without 'workflow' scope`。两条路任选其一：终端跑 `gh auth refresh -h github.com -s workflow` 浏览器授权补 scope；或把本机 `~/.ssh/id_ed25519.pub` 加进 GitHub 账号（Settings → SSH keys）后用 SSH 推——SSH 密钥不受 OAuth scope 限制，实测本机密钥尚未注册（`ssh -T git@github.com` 返回 Permission denied）。补齐后 `git push -u origin main` 即生效；注意 deploy-web.yml 用 `actions/deploy-pages`，main 推上后还需在仓库 Settings → Pages 把源从「分支部署」切到「GitHub Actions」，此后 push 即自动构建部署，gh-pages 手工通道退役）。在 scope 补齐前，最新构建已按原手工通道重推 gh-pages 保住线上更新（gh-pages `454e3e9` ← main `0e0a468`，2026-09-30 实测线上已是新 bundle）；② 真实后端托管仍待你在 render.com 用 GitHub 登录接同仓库，读 `render.yaml` 一键部署（`docs/runbooks/deploy-api.md`）；③ `Dockerfile` 仍未构建过（本机无 Docker）。
    提交身份 `Pasteliangzhengtao <cse.ztliang22@gzu.edu.cn>` 在 public 仓库会公开可见 —— 改不改由你决定，**AI 不会擅自改 git config**。
 
 3. **[未闭合] 真实门店与核验数据源**
