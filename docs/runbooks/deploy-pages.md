@@ -64,6 +64,24 @@ git ls-files --others --ignored --exclude-standard # 被忽略的未跟踪文件
 
 ## 验证与回退
 
+### 手工通道：直推 gh-pages（2026-09-30 起实际生效）
+
+CI 源切换被 `workflow` scope 阻断期间（见 [../blockers.md](../blockers.md) 第 2 条），Pages 跑的是「从分支部署」模式 + `gh-pages` 分支，手工更新流程：
+
+```bash
+git worktree add --detach ../gh-pages-deploy origin/gh-pages
+find ../gh-pages-deploy -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+cp -r apps/web/dist/. ../gh-pages-deploy/
+touch ../gh-pages-deploy/.nojekyll        # dist 里没有这个文件；丢了 Jekyll 会接管处理
+sed -i "s|__BASE__|/beijing-food-map/|g" ../gh-pages-deploy/404.html
+cd ../gh-pages-deploy && git add -A && git commit -m "Pages: ..." && git push origin HEAD:gh-pages
+```
+
+- **上线判据是浏览器，不是 curl**：200 + 正确 Content-Type 只证明"文件在"，路径错或 MIME 不对时页面照样白屏且没有报错。部署完必须用真实浏览器打开 `/` 与 `/map` 确认渲染——2026-09-30 就是靠这一步抓到了一次 MSYS 坏构建（页面空挂载、无任何 console 错误）。
+- 构建必须带 `MSYS_NO_PATHCONV=1`（上节的坑，这次在推送通道上真实踩中：产物资源前缀变成了 `/Program/Git/beijing-food-map/`），推前先跑本地预演四连检查。
+- 推送遇 `TLS unexpected eof`（本机代理间歇抖动）时提交不会丢：分离 HEAD 上的提交用 `git branch tmp <sha>` 捞回，再 `git push origin tmp:gh-pages` 重试。
+- CI（deploy-web.yml + Actions 源）就绪后本通道退役。
+
 - 部署完在 Actions 的 deploy job 日志里读 `Page URL`；浏览器直接访问 `/map`、`/restaurants/R01` 这类深链接并刷新，确认能停在原页面而不是 404。
 - 回退：`gh api` 或直接重新运行上一个 commit 的 workflow（Actions → 对应 run → Re-run jobs）。Pages 的 artifact 由 workflow 覆盖，历史 release 里能取回旧构建。
 - 注意 Pages 有 CDN 缓存：改了 `404.html` 或 `index.html` 后强刷或等 10 分钟左右。
