@@ -21,19 +21,20 @@
 | DTO 生产可装载 | `is_test_data` 由字面量 `true` 宽化为 `boolean`（Restaurant/MediaAsset/SessionUser/Submission/RestaurantCandidate），真实数据类型可编译 |
 | 记录级标记 | 种子写入 `true`；产品流创建（建店候选转正等）按环境判定（demo=true，production=false）；老库缺字段按 true 兜底（保守显示水印） |
 | 生产启动护栏 | `SESSION_SECRET`（≥32 字符）缺失直接拒绝启动 |
+| **真实登录（短信验证码）** | `POST /auth/phone/code` + `/auth/phone/login`：6 位码 5 分钟有效、单次使用、最多试 5 次；同手机号 1 条/分钟、同 IP 10 条/小时；同手机号哈希复用同一账号。供应商抽象 `SmsProvider`：`console`（日志，生产禁止）/ `http`（通用 Webhook 网关，配 `SMS_HTTP_URL`+`SMS_HTTP_TOKEN` 即接聚合短信）/ `none`（未配置一律 503）。**缺的只是真实供应商凭据** |
+| **内容安全（msgSecCheck）** | `ContentModeration` 抽象：微信 `msgSecCheck` 适配器（stable_token 缓存单飞、87014 拒绝、errcode≠0 按服务不可用）；接入全部 UGC 文本写路径（投稿理由与菜名/举报/建店候选与补材料/清单标题说明/条目笔记）；production 审核服务不可达 → 503 宁停勿漏。**缺的只是 WECHAT_APPID/SECRET** |
+| **真实图片上传** | `POST /media/uploads`（原始字节体）：魔数嗅探防改后缀、8MB 上限、JPEG/PNG/WebP EXIF（含 GPS）剥离（实测 50→26 字节 GPS 串消失）、磁盘对象存储（`UPLOAD_DIR`，S3 兼容为同一接口的换点）、登记 PENDING 未过审仅作者与审核可见。`/media/:id` 按存储键鉴权直出。客户端：小程序 `chooseMedia`→字节上传、Web 文件选择器；演示合成图按钮仅在非生产部署显示。**缺的只是生产部署的持久磁盘或 S3** |
 
 ## 3. 上线前人的清单（按顺序，缺一不可）
 
 1. **真实核验数据供数**（唯一的"内容"来源，走 `database/import/README.md` 的管线）：
    高德开放平台 Key → 搜索 POI 导出 → `npx tsx scripts/import-amap-candidates.mts` 暂存 → 人工核验（门牌/在营/菜系）→ 走产品自身流程：建店候选（`provider:'amap'` + `poi_id`，引擎自动去重）→ 审核员地点核验 → 进图。**绕过核验的批量写入不允许。**
-2. **凭据与环境变量**（全都不进仓库，见 `.env.example`）：`SESSION_SECRET`（≥32 字符随机）、高德 Key、短信服务商凭据、对象存储凭据、备案域名。
-3. **真实登录**：接入短信服务商（`store.ts` 预留外部供应商适配点；production 已拒绝邀请账号与固定码）。上线后验证码：短时有效、单次使用、限频与费用上限在服务端。
-4. **微信小程序发布前置**：企业主体小程序账号、备案 HTTPS 域名（替换 `miniprogram/src/api.ts` 的 `BASE`）、`msgSecCheck` 内容安全接口接入（M2）。
-5. **法律文本复核**：隐私说明/用户条款中描述当前部署事实的句子（如"不接入短信服务""图片为服务端合成"）在接入真实能力后**必须同步更新**。
-6. **对象存储**：演示用合成图（data-uri）替换为真实上传 + 审核管线。
-7. **真机验证**：微信真机 + 读屏走查（模拟器验证已覆盖逻辑层）。
-8. **部署**：API 用 `render.yaml` / 自管 Node ≥22.5 + SQLite（或按 repository 层换 Postgres）；Web 静态部署 GitHub Pages（`docs/runbooks/deploy-pages.md`）或同域托管。
-9. **N1 规则拍板**（decisions.md D21）：核验清票规则待人拍板，属产品决策。
+2. **凭据与环境变量**（全都不进仓库，见 `.env.example`）：`SESSION_SECRET`（≥32 字符随机）、高德 Key、`SMS_PROVIDER=http` + 网关地址与令牌、`WECHAT_APPID`/`WECHAT_APP_SECRET`、备案域名、上传持久磁盘（render.com persistent disk / 自管卷）。
+3. **微信小程序发布前置**：企业主体小程序账号、备案 HTTPS 域名（替换 `miniprogram/src/api.ts` 的 `BASE`）、msgSecCheck 已接入但需真实 AppID 联调。
+4. **法律文本复核**：隐私说明/用户条款中描述当前部署事实的句子（如"不接入短信服务""图片为服务端合成"）在接入真实能力后**必须同步更新**。
+5. **真机验证**：微信真机 + 读屏走查（模拟器验证已覆盖逻辑层）。
+6. **部署**：API 用 `render.yaml` / 自管 Node ≥22.5 + SQLite（或按 repository 层换 Postgres）；Web 静态部署 GitHub Pages（`docs/runbooks/deploy-pages.md`）或同域托管。
+7. **N1 规则拍板**（decisions.md D21）：核验清票规则待人拍板，属产品决策。
 
 ## 4. 上线态自检（部署后跑一遍）
 
