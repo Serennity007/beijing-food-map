@@ -63,26 +63,26 @@ const FALLBACK_STYLE_TIMEOUT_MS = 6000;
 const ERROR_BEFORE_FALLBACK = 2;
 const ERROR_AFTER_FALLBACK = 4;
 
-/** 兜底栅格底图：CARTO/OSM 公共瓦片，零 Key；VITE_MAP_FALLBACK_STYLE 可整体替换。 */
+/**
+ * 兜底栅格底图：OSM 标准瓦片，零 Key；VITE_MAP_FALLBACK_STYLE 可整体替换。
+ * 原用 CARTO light_all——其无 Key 服务 2026 年起不再返回瓦片，而是 200 状态的
+ * "API KEY REQUIRED" 水印占位图，应用无法察觉，等于兜底失效，故换 OSM 标准瓦片。
+ */
 export function fallbackRasterStyle(): StyleSpecification {
   const override = readEnv('VITE_MAP_FALLBACK_STYLE');
   if (override) return override as unknown as StyleSpecification;
   return {
     version: 8,
     sources: {
-      'qm-carto': {
+      'qm-osm': {
         type: 'raster',
-        tiles: [
-          'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-          'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-          'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-        ],
+        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
         tileSize: 256,
         maxzoom: 19,
-        attribution: '© OpenStreetMap contributors © CARTO',
+        attribution: '© OpenStreetMap contributors',
       },
     },
-    layers: [{ id: 'qm-carto-layer', type: 'raster', source: 'qm-carto', maxzoom: 19 }],
+    layers: [{ id: 'qm-osm-layer', type: 'raster', source: 'qm-osm', maxzoom: 19 }],
   } as unknown as StyleSpecification;
 }
 
