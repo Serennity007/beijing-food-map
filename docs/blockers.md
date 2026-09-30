@@ -8,6 +8,7 @@
 
 1. **[未闭合] 高德 JS API 2.0 Key + 安全密钥**
    填 `VITE_AMAP_KEY` / `VITE_AMAP_SECURITY_CODE`（控制台里把 Key 限定到部署域名）。双适配器已实现并有纯函数单测，但**没在真实高德地图上渲染过**，地图选点的高德分支同样未验。没有 Key 时走 MapLibre + 公共瓦片（OpenFreeMap / CARTO）—— 公共瓦片有配额与商用限制，只适合演示。
+   2026-09-30 补充：**CARTO 无 Key 瓦片已停止服务**——不再返回瓦片，而是 200 状态的 "API KEY REQUIRED" 水印占位图，应用无法察觉、兜底等于失效（当日线上实测复现）。已把栅格兜底换成 OSM 标准瓦片（`tile.openstreetmap.org`，main `28db85c`，gh-pages `29227df` 已上线，实测直连用户走 OpenFreeMap 主图、代理用户主图超时后落 OSM 兜底，两头都有真实街道）。仍有的边界：慢代理下 OpenFreeMap 主图屡超时是常态，长期正解还是高德 Key。
 
 2. **[部分闭合 2026-09-26] 托管平台授权与仓库推送**
    ✅ **GitHub Pages 线上演示已上线**：https://serennity007.github.io/beijing-food-map/ （公开仓库 `Serennity007/beijing-food-map`，gh-pages 分支静态部署，静态演示模式 = 浏览器内引擎 + localStorage）。深链接与 404 回退已实测。
