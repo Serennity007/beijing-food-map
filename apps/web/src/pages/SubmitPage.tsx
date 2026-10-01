@@ -117,7 +117,7 @@ function newIdempotencyKey(): string {
 }
 
 export function SubmitPage() {
-  const { api, user, ready, meta } = useApi();
+  const { api, user, ready, meta, seedProfile } = useApi();
   const [params] = useSearchParams();
   const revise = params.get('revise') === '1';
   const presetId = params.get('restaurant');
@@ -978,7 +978,9 @@ export function SubmitPage() {
       </details>
 
       <div className="stale-note">
-        演示版本：门店、图片与实吃记录均为合成测试数据，不代表任何真实餐馆；服务端还会复核账号、日期、图片归属与北京范围。
+        {seedProfile === 'real'
+          ? '预览版：收录中的门店来自公开资料整理，地点与营业状态待核验；你的实吃投稿经审核后会计入社区票数。'
+          : '演示版本：门店、图片与实吃记录均为合成测试数据，不代表任何真实餐馆；服务端还会复核账号、日期、图片归属与北京范围。'}
       </div>
     </div>
   );

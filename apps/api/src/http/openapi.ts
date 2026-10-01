@@ -548,7 +548,7 @@ function documentOperations(): Record<string, Record<string, unknown>> {
       security: [],
       responses: {
         '200': ok(
-          obj({ env: { type: 'string', enum: ['development', 'test', 'demo_static', 'production'] }, test_data_loaded: { type: 'boolean' } }, ['env', 'test_data_loaded']),
+          obj({ env: { type: 'string', enum: ['development', 'test', 'demo_static', 'production'] }, test_data_loaded: { type: 'boolean' }, seed_profile: { type: 'string', enum: ['synthetic', 'real'] } }, ['env', 'test_data_loaded', 'seed_profile']),
         ),
       },
     },

@@ -14,6 +14,8 @@ import {
 /** 有后端时（VITE_API_BASE 指向已部署 API）走这条路径；静态部署用 StaticClient。 */
 export class Http implements ApiClient {
   readonly mode = 'http' as const;
+  /** 后端演示库当前仍装载合成种子（真实档案接入后端前保持一致）。 */
+  readonly seedProfile = 'synthetic' as const;
   private base: string;
 
   constructor(base: string) {

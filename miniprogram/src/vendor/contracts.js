@@ -59,6 +59,7 @@ __export(index_exports, {
   PLACE_STATUSES: () => PLACE_STATUSES,
   PLACE_STATUS_LABEL: () => PLACE_STATUS_LABEL,
   PUBLICATION_STATUSES: () => PUBLICATION_STATUSES,
+  REAL_ALIASES: () => REAL_ALIASES,
   REPORT_ACTIONS: () => REPORT_ACTIONS,
   REPORT_ACTION_LABEL: () => REPORT_ACTION_LABEL,
   REPORT_ACTION_TARGET: () => REPORT_ACTION_TARGET,
@@ -73,6 +74,8 @@ __export(index_exports, {
   RuleViolation: () => RuleViolation,
   SCORING_WINDOW_DAYS: () => SCORING_WINDOW_DAYS,
   SEED_FEEDBACK: () => SEED_FEEDBACK,
+  SEED_REAL_RESTAURANTS: () => SEED_REAL_RESTAURANTS,
+  SEED_REAL_USERS: () => SEED_REAL_USERS,
   SEED_RESTAURANTS: () => SEED_RESTAURANTS,
   SEED_USERS: () => SEED_USERS,
   SOUTHWEST_CUISINES: () => SOUTHWEST_CUISINES,
@@ -898,6 +901,189 @@ var DISH_KEYWORDS = Array.from(
   )
 );
 
+// ../packages/contracts/src/seed-real.ts
+var SEED_REAL_USERS = [
+  { id: "U01", display_name: "\u4E3B\u7406\u4EBA", roles: ["user"], phone: "138****0001" },
+  { id: "U02", display_name: "\u670B\u53CB02", roles: ["user"], phone: "138****0002" },
+  { id: "U03", display_name: "\u670B\u53CB03", roles: ["user"], phone: "138****0003" },
+  { id: "U04", display_name: "\u670B\u53CB04", roles: ["user"], phone: "138****0004" },
+  { id: "U05", display_name: "\u670B\u53CB05", roles: ["user"], phone: "138****0005" },
+  { id: "U06", display_name: "\u7528\u623706\uFF08\u5DF2\u6CE8\u9500\uFF09", roles: ["user"], phone: "138****0006" },
+  { id: "E01", display_name: "\u7F16\u8F9101", roles: ["user", "editor"], phone: "138****0101" },
+  { id: "M01", display_name: "\u5BA1\u6838\u545801", roles: ["user", "moderator"], phone: "138****0201" },
+  { id: "A01", display_name: "\u7BA1\u7406\u545801", roles: ["user", "moderator", "admin"], phone: "138****0301" }
+];
+var SOURCE = "\u6765\u6E90\uFF1ATripadvisor / \u643A\u7A0B\u7F8E\u98DF / \u7F51\u6613\u65C5\u6E38\u7B49\u516C\u5F00\u9875\uFF082026-09-30 \u68C0\u7D22\uFF09";
+function rr(id, name, branch, cuisines, address, lng, lat, dish_highlights, taste_tags, source, extra = {}) {
+  return {
+    id,
+    name,
+    branch,
+    cuisines,
+    address,
+    floor_info: null,
+    lng,
+    lat,
+    price_avg: null,
+    price_reports: 0,
+    dish_highlights,
+    taste_tags,
+    profile_public: true,
+    place_status: "PENDING",
+    place_verified_days_ago: null,
+    business_status: "OPEN",
+    risk_status: "CLEAR",
+    location_version: 1,
+    ever_qualified: false,
+    note: `${source}\uFF1B${SOURCE}`,
+    ...extra
+  };
+}
+var SEED_REAL_RESTAURANTS = [
+  // ---------------------------------------------------------- 贵州菜
+  rr(
+    "R50",
+    "\u4E09\u4E2A\u8D35\u5DDE\u4EBA",
+    "\u5EFA\u5916SOHO\u5E97",
+    ["guizhou"],
+    "\u5317\u4EAC\u5E02\u671D\u9633\u533A\u4E1C\u4E09\u73AF\u4E2D\u8DEF39\u53F7\u5EFA\u5916SOHO\u4E1C\u533A",
+    116.4565,
+    39.9089,
+    ["\u9178\u6C64\u9C7C", "\u4E1D\u5A03\u5A03", "\u8568\u7C91", "\u53F6\u513F\u7C91"],
+    ["\u9178", "\u8FA3"],
+    "\u5317\u4EAC\u5F00\u8BBE\u8F83\u65E9\u7684\u4EE3\u8868\u6027\u8D35\u5DDE\u83DC\u9986\u4E4B\u4E00\uFF08\u4E09\u4F4D\u8D35\u5DDE\u753B\u5BB6\u521B\u7ACB\uFF09\uFF0C\u62DB\u724C\u7EA2\u9178\u6C64\u7CFB\u5217"
+  ),
+  rr(
+    "R51",
+    "\u8D35\u5DDE\u5927\u53A6\u9A7B\u4EAC\u529E\u9910\u5385",
+    null,
+    ["guizhou"],
+    "\u5317\u4EAC\u5E02\u671D\u9633\u533A\u5317\u4E09\u73AF\u6A31\u82B1\u897F\u885718\u53F7\u8D35\u5DDE\u5927\u53A62\u697C",
+    116.4135,
+    39.9675,
+    ["\u9178\u6C64\u9C7C", "\u4E1D\u5A03\u5A03", "\u7C73\u8C46\u8150", "\u82B1\u6EAA\u725B\u8089\u7C89", "\u6298\u8033\u6839"],
+    ["\u9178", "\u8FA3", "\u9ED4\u5473"],
+    "\u9A7B\u4EAC\u529E\u9910\u5385\uFF0C\u516C\u5F00\u8BC4\u4EF7\u4E2D\u516C\u8BA4\u8F83\u5730\u9053\u7684\u8D35\u5DDE\u5473"
+  ),
+  rr(
+    "R52",
+    "\u4E09\u4E2A\u8D35\u5DDE\u4EBA",
+    "\u84DD\u8272\u6E2F\u6E7E\u5E97",
+    ["guizhou"],
+    "\u5317\u4EAC\u5E02\u671D\u9633\u533A\u671D\u9633\u516C\u56ED\u8DEF6\u53F7\u84DD\u8272\u6E2F\u6E7E",
+    116.4735,
+    39.947,
+    ["\u9178\u6C64\u9C7C", "\u53F6\u513F\u7C91"],
+    ["\u9178", "\u8FA3"],
+    "\u4E0E\u5EFA\u5916SOHO\u5E97\u540C\u54C1\u724C\u4E0D\u540C\u5206\u5E97\uFF0C\u516C\u5F00\u8D44\u6599\u4EBA\u5747\u7EA6114\u5143"
+  ),
+  rr(
+    "R53",
+    "2\u8D35\u9178\u6C64\u9C7C\u571F\u5BB6\u83DC",
+    "\u7518\u9732\u56ED\u5E97",
+    ["guizhou"],
+    "\u5317\u4EAC\u5E02\u671D\u9633\u533A\u9752\u5E74\u8DEF\u7518\u9732\u56ED\u5357\u91CC\u4E00\u533A",
+    116.492,
+    39.9235,
+    ["\u9178\u6C64\u9C7C", "\u571F\u5BB6\u814A\u5473"],
+    ["\u9178", "\u8FA3"],
+    "\u793E\u533A\u9ED4\u83DC\u9986\uFF0C\u516C\u5F00\u8D44\u6599\u4EBA\u5747\u7EA676\u5143",
+    { business_status: "UNKNOWN" }
+  ),
+  rr(
+    "R54",
+    "\u82D7\u5CAD\u9178\u6C64\u9C7C\xB7\u8D35\u5DDE\u83DC",
+    "\u4EA6\u5E84\u5E97",
+    ["guizhou"],
+    "\u5317\u4EAC\u5E02\u5927\u5174\u533A\u4EA6\u5E84\u51C9\u6C34\u6CB3\u4E00\u8857\uFF08\u8D62\u6D77\u5E84\u56ED\u9662\u5185\uFF09",
+    116.505,
+    39.7905,
+    ["\u9178\u6C64\u9C7C", "\u82D7\u5BB6\u5C0F\u7092"],
+    ["\u9178", "\u8FA3"],
+    "\u516C\u5F00\u8BC4\u5206 4.3/5\uFF08Trip.com\uFF09",
+    { business_status: "UNKNOWN" }
+  ),
+  // ---------------------------------------------------------- 云南菜
+  rr(
+    "R55",
+    "\u4E00\u5750\u4E00\u5FD8\u4E91\u5357\u83DC",
+    "\u4E09\u91CC\u5C6F\u5E97",
+    ["yunnan"],
+    "\u5317\u4EAC\u5E02\u671D\u9633\u533A\u4E09\u91CC\u5C6F\u5317\u5C0F\u88571\u53F7",
+    116.452,
+    39.9455,
+    ["\u6C7D\u9505\u9E21", "\u5C0F\u9505\u7C73\u7EBF", "\u83CC\u5B50\u65F6\u852C"],
+    ["\u9C9C", "\u6EC7\u5473"],
+    "\u5317\u4EAC\u6587\u827A\u4E91\u5357\u83DC\u4EE3\u8868\u5E97\uFF0C\u4E3B\u6253\u6C7D\u9505\u9E21"
+  ),
+  rr(
+    "R56",
+    "\u4E2D8\u697C",
+    "\u592A\u53E4\u91CC\u5E97",
+    ["yunnan"],
+    "\u5317\u4EAC\u5E02\u671D\u9633\u533A\u4E09\u91CC\u5C6F\u8DEF19\u53F7\u4E09\u91CC\u5C6F\u592A\u53E4\u91CC\u5357\u533A4\u5C42",
+    116.455,
+    39.9375,
+    ["\u6C7D\u9505\u9E21", "\u9C9C\u82B1\u997C", "\u6539\u826F\u6EC7\u83DC"],
+    ["\u9C9C"],
+    "\u6539\u826F\u6EC7\u83DC\uFF0C\u4E0E\u4E00\u5750\u4E00\u5FD8\u540C\u533A\u57DF"
+  ),
+  rr(
+    "R57",
+    "\u4E2D8\u697C",
+    "\u9890\u5824\u6E2F\u5E97",
+    ["yunnan"],
+    "\u5317\u4EAC\u5E02\u671D\u9633\u533A\u9152\u4ED9\u6865\u8DEF18\u53F7\u9890\u5824\u6E2F",
+    116.4935,
+    39.9685,
+    ["\u6C7D\u9505\u9E21", "\u5C0F\u9505\u7C73\u7EBF"],
+    ["\u9C9C"],
+    "\u516C\u5F00\u8D44\u6599\u4EBA\u5747\u7EA698\u5143"
+  ),
+  // ---------------------------------------------------------- 北京经典（「北京其他」视图）
+  rr(
+    "R58",
+    "\u56DB\u5B63\u6C11\u798F\u70E4\u9E2D\u5E97",
+    "\u6545\u5BAB\u5E97",
+    ["other"],
+    "\u5317\u4EAC\u5E02\u4E1C\u57CE\u533A\u5357\u6C60\u5B50\u5927\u885711\u53F7",
+    116.4022,
+    39.913,
+    ["\u5317\u4EAC\u70E4\u9E2D", "\u8D1D\u52D2\u70E4\u8089", "\u5BAB\u5EF7\u674F\u4EC1\u8C46\u8150"],
+    ["\u4EAC\u5473", "\u70E4\u9E2D"],
+    "\u6545\u5BAB\u4E1C\u534E\u95E8\u65C1\uFF0C\u516C\u5F00\u8D44\u6599\u4EBA\u5747\u7EA6160\u5143"
+  ),
+  rr(
+    "R59",
+    "\u62A4\u56FD\u5BFA\u5C0F\u5403",
+    "\u603B\u5E97",
+    ["other"],
+    "\u5317\u4EAC\u5E02\u897F\u57CE\u533A\u62A4\u56FD\u5BFA\u5927\u885793\u53F7",
+    116.374,
+    39.935,
+    ["\u8C46\u6C41\u7126\u5708", "\u8C4C\u8C46\u9EC4", "\u9A74\u6253\u6EDA", "\u9762\u8336"],
+    ["\u5C0F\u5403", "\u4EAC\u5473"],
+    "1956 \u5E74\u5F00\u4E1A\u7684\u4EAC\u5473\u5C0F\u5403\u8001\u5B57\u53F7"
+  ),
+  rr(
+    "R60",
+    "\u805A\u5B9D\u6E90",
+    "\u725B\u8857\u5E97",
+    ["other"],
+    "\u5317\u4EAC\u5E02\u897F\u57CE\u533A\u725B\u8857",
+    116.3655,
+    39.8875,
+    ["\u94DC\u9505\u6DAE\u8089", "\u624B\u5207\u9C9C\u7F8A\u8089"],
+    ["\u6E05\u771F", "\u6DAE\u8089"],
+    "\u725B\u8857\u77E5\u540D\u6E05\u771F\u6DAE\u8089"
+  )
+];
+var REAL_ALIASES = {
+  \u70E4\u9E2D: ["\u5317\u4EAC\u70E4\u9E2D"],
+  \u6DAE\u8089: ["\u94DC\u9505\u6DAE\u8089"],
+  \u9A7B\u4EAC\u529E: ["\u8D35\u5DDE\u5927\u53A6"]
+};
+
 // ../packages/contracts/src/photos.ts
 function esc(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -958,6 +1144,7 @@ var SYSTEM_KINDS = [
 var Store = class {
   constructor(opts = {}) {
     __publicField(this, "env");
+    __publicField(this, "seedProfile");
     __publicField(this, "clock");
     __publicField(this, "restaurants", /* @__PURE__ */ new Map());
     __publicField(this, "candidates", /* @__PURE__ */ new Map());
@@ -975,11 +1162,12 @@ var Store = class {
     __publicField(this, "resultsVersion", 1);
     __publicField(this, "seq", 1);
     __publicField(this, "lastComputedDay", null);
-    var _a, _b;
+    var _a, _b, _c;
     this.env = (_a = opts.env) != null ? _a : "development";
-    this.clock = { now: (_b = opts.now) != null ? _b : (() => Date.now()) };
+    this.seedProfile = (_b = opts.seedProfile) != null ? _b : "synthetic";
+    this.clock = { now: (_c = opts.now) != null ? _c : (() => Date.now()) };
     if (opts.seed === false) return;
-    if (this.env === "production") {
+    if (this.env === "production" && this.seedProfile === "synthetic") {
       throw new RuleViolation("production \u73AF\u5883\u62D2\u7EDD\u88C5\u8F7D\u6D4B\u8BD5\u79CD\u5B50\uFF0C\u8BF7\u5148\u63A5\u5165\u771F\u5B9E\u6838\u9A8C\u6570\u636E");
     }
     this.loadSeed();
@@ -999,18 +1187,21 @@ var Store = class {
   }
   // ---------------------------------------------------------------- 种子
   loadSeed() {
-    for (const u of SEED_USERS) {
+    const real = this.seedProfile === "real";
+    const users = real ? SEED_REAL_USERS : SEED_USERS;
+    for (const u of users) {
       this.users.set(u.id, {
         id: u.id,
         display_name: u.display_name,
         roles: [...u.roles],
         phone_masked: u.phone,
         status: u.id === "U06" ? "deleted" : "active",
-        is_test_data: true
+        is_test_data: !real
       });
     }
-    for (const s of SEED_RESTAURANTS) {
-      const photos = [`M${s.id}a`, `M${s.id}b`].map((id, i) => {
+    const restaurants = real ? SEED_REAL_RESTAURANTS : SEED_RESTAURANTS;
+    for (const s of restaurants) {
+      const photos = real ? [] : [`M${s.id}a`, `M${s.id}b`].map((id, i) => {
         this.media.set(id, {
           id,
           owner_user_id: "A01",
@@ -1028,7 +1219,7 @@ var Store = class {
       });
       const rec = {
         ...s,
-        is_test_data: true,
+        is_test_data: !real,
         place_verified_date: s.place_verified_days_ago === null ? null : addDays(this.today(), -s.place_verified_days_ago),
         photo_media_ids: photos,
         lng: s.lng,
@@ -1056,6 +1247,11 @@ var Store = class {
         ineligibility_reasons: []
       };
       this.restaurants.set(rec.id, rec);
+    }
+    if (real) {
+      for (const u of this.users.values()) this.ensureSystemCollections(u.id);
+      this.recomputeAll();
+      return;
     }
     for (const f of SEED_FEEDBACK) {
       const rest = this.restaurants.get(f.restaurant_id);
@@ -2268,7 +2464,8 @@ var Store = class {
   deploymentMeta() {
     return {
       env: this.env,
-      test_data_loaded: [...this.restaurants.values()].some((r2) => r2.is_test_data !== false)
+      test_data_loaded: [...this.restaurants.values()].some((r2) => r2.is_test_data !== false),
+      seed_profile: this.seedProfile
     };
   }
   sharedSnapshot(token) {

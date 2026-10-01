@@ -12,6 +12,8 @@ interface ApiState {
   meta: DeploymentMeta | null;
   /** demo 数据水印：静态模式或后端 demo 模式都必须显示。 */
   demoBadge: string;
+  /** 种子档案（同步可得，决定默认图层与页脚文案）。 */
+  seedProfile: 'synthetic' | 'real';
   refresh: () => Promise<void>;
   setUser: (u: SessionUser | null) => void;
   signOut: () => Promise<void>;
@@ -52,13 +54,18 @@ export function ApiProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, [api]);
 
-  // 演示水印跟着部署事实走：production 且未装载测试种子 = 干净上线态，不显示任何演示标记
+  // 演示水印跟着部署事实走：production 且未装载测试种子 = 干净上线态，不显示任何演示标记；
+  // 真实档案（real）显示「预览版」——门店是真实事实、坐标待核验，与合成档案的「演示数据」区分
   const showDemoBadge = meta === null || meta.env !== 'production' || meta.test_data_loaded;
-  const demoBadge = showDemoBadge
-    ? api.mode === 'static'
-      ? '演示数据 · 存在本机浏览器'
-      : '演示数据 · 含合成测试内容'
-    : '';
+  const demoBadge = !showDemoBadge
+    ? ''
+    : api.seedProfile === 'real'
+      ? api.mode === 'static'
+        ? '预览版 · 门店坐标待核验'
+        : '预览版 · 数据待核验'
+      : api.mode === 'static'
+        ? '演示数据 · 存在本机浏览器'
+        : '演示数据 · 含合成测试内容';
 
   const value: ApiState = {
     api,
@@ -66,6 +73,7 @@ export function ApiProvider({ children }: { children: ReactNode }) {
     ready,
     meta,
     demoBadge,
+    seedProfile: api.seedProfile,
     refresh,
     setUser,
     signOut,

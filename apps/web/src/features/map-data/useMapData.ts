@@ -13,7 +13,7 @@ import { describeError, readErrorCode } from '../../data/errors';
 import type { MapViewportState } from '../map/types';
 import { VIEWPORT_DEBOUNCE_MS } from '../map/types';
 
-const LS_FILTERS = 'qianwei.mapfilters';
+const LS_FILTERS = 'qianwei.mapfilters.v2';
 const LS_VIEW = 'qianwei.mapviewport';
 
 export interface MapFilters {
@@ -24,13 +24,19 @@ export interface MapFilters {
   dish: string | null;
 }
 
-const DEFAULT_FILTERS: MapFilters = {
-  view: 'guizhou',
-  layer: 'qualified',
-  budget_max: null,
-  include_unknown_budget: false,
-  dish: null,
-};
+/**
+ * 真实档案（预览版）默认显示「新收录门店」层：零票数时合格层必然为空，
+ * 待核验层才是真实内容的所在；合成档案维持「好店层」默认。
+ */
+function defaultFilters(seedProfile: 'synthetic' | 'real'): MapFilters {
+  return {
+    view: 'guizhou',
+    layer: seedProfile === 'real' ? 'pending_verification' : 'qualified',
+    budget_max: null,
+    include_unknown_budget: false,
+    dish: null,
+  };
+}
 
 const DEFAULT_VIEWPORT: MapViewportState = {
   bounds: BEIJING_BOUNDS,
@@ -55,7 +61,10 @@ export function useMapData(api: ApiClient) {
   const [viewport, setViewportState] = useState<MapViewportState>(() => readJson<MapViewportState>(LS_VIEW) ?? DEFAULT_VIEWPORT);
   // 首次（本机没有可恢复的视角）就请求复位，让相机真的装下北京全图而不是停在默认缩放的中心
   const [fitSignal, setFitSignal] = useState(() => (readJson<MapViewportState>(LS_VIEW) ? 0 : 1));
-  const [filters, setFiltersState] = useState<MapFilters>(() => ({ ...DEFAULT_FILTERS, ...(readJson<Partial<MapFilters>>(LS_FILTERS) ?? {}) }));
+  const [filters, setFiltersState] = useState<MapFilters>(() => ({
+    ...defaultFilters(api.seedProfile),
+    ...(readJson<Partial<MapFilters>>(LS_FILTERS) ?? {}),
+  }));
   const [entities, setEntities] = useState<MapEntity[]>([]);
   const [list, setList] = useState<Restaurant[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);

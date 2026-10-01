@@ -102,6 +102,8 @@ export interface ReportInput {
 
 export interface ApiClient {
   readonly mode: 'static' | 'http';
+  /** 种子档案：real = 真实门店事实预览（静态演示默认）；synthetic = 合成测试数据。 */
+  readonly seedProfile: 'synthetic' | 'real';
   /** 部署自描述：环境与测试数据装载状态（决定演示水印显隐）。 */
   meta(): Promise<DeploymentMeta>;
   /** 手机验证码登录（真实路径；静态模式不可用）。 */
@@ -167,8 +169,14 @@ export class ClientError extends Error {
 }
 
 const LS_SESSION = 'qianwei.session';
-const LS_STATE = 'qianwei.state';
+/** v2：真实门店事实档案上线，旧键里的合成种子状态整体退役（老访客也拿到新数据）。 */
+const LS_STATE = 'qianwei.state.v2';
 export const LS_DRAFT_PREFIX = 'qianwei.draft.';
+
+function readEnvVar(key: string): string {
+  const value = (import.meta as unknown as { env?: Record<string, unknown> }).env?.[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
 
 /** 投稿草稿是账号内容，只存在这台浏览器里；注销时随账号数据一起清掉。 */
 export function clearLocalDraft(userId: string): void {
@@ -182,11 +190,14 @@ export function clearLocalDraft(userId: string): void {
 /** 静态部署：浏览器内跑同一份领域引擎，状态存 localStorage。 */
 export class StaticClient implements ApiClient {
   readonly mode = 'static' as const;
+  /** 网页演示默认装载真实门店事实档案（VITE_SEED_PROFILE=synthetic 可切回合成档案做自检）。 */
+  readonly seedProfile: 'synthetic' | 'real' =
+    readEnvVar('VITE_SEED_PROFILE') === 'synthetic' ? 'synthetic' : 'real';
   private store: Store;
   private session: string | null;
 
   constructor() {
-    this.store = new Store({ env: 'demo_static' });
+    this.store = new Store({ env: 'demo_static', seedProfile: this.seedProfile });
     const saved = safeGet(LS_STATE);
     if (saved) {
       try {

@@ -49,7 +49,8 @@ interface FocusTarget {
  * 聚合点击按 expansion_bounds 放大；搜索把自有收录与第三方地点候选分开。
  */
 export function MapPage() {
-  const { api, user } = useApi();
+  const { api, user, seedProfile } = useApi();
+  const realSeed = seedProfile === 'real';
   const d = useMapData(api);
   const [params] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(() => params.get('focus'));
@@ -402,10 +403,18 @@ export function MapPage() {
                       changeFilters({ layer: d.filters.layer === 'pending_verification' ? 'qualified' : 'pending_verification' })
                     }
                   >
-                    {d.filters.layer === 'pending_verification' ? '显示待验证' : '待验证图层'}
+                    {realSeed
+                      ? d.filters.layer === 'pending_verification'
+                        ? '新收录门店'
+                        : '看新收录'
+                      : d.filters.layer === 'pending_verification'
+                        ? '显示待验证'
+                        : '待验证图层'}
                   </button>
                   <span className="hint" style={{ margin: 0 }}>
-                    待验证门店不代表平台推荐，需要显式开启才会显示。
+                    {realSeed
+                      ? '新收录门店来自公开资料整理、地点待核验，不代表平台推荐。'
+                      : '待验证门店不代表平台推荐，需要显式开启才会显示。'}
                   </span>
                 </div>
                 {d.filters.budget_max !== null && (
@@ -556,9 +565,11 @@ export function MapPage() {
             </button>
           )}
           <p className="hint">
-            {d.list.some((r) => r.is_test_data)
-              ? '演示版本：门店、图片、实吃与票数均为合成测试数据。'
-              : ''}
+            {realSeed
+              ? '预览版：门店信息来自公开资料、地点待核验，票数等你和朋友的实吃投稿。'
+              : d.list.some((r) => r.is_test_data)
+                ? '演示版本：门店、图片、实吃与票数均为合成测试数据。'
+                : ''}
             {user ? '' : ' 登录后可投稿并建立自己的地图。'}
           </p>
         </Drawer>

@@ -47,6 +47,13 @@ async function get(url, expectStatus = 200) {
 
 const DIST = join(ROOT, 'apps', 'web', 'dist');
 
+/** 从构建产物推导应用挂载前缀：项目页部署是 /beijing-food-map，根域名部署是空串。 */
+function appBase() {
+  const html = readFileSync(join(DIST, 'index.html'), 'utf8');
+  const m = html.match(/src="([^"]*?)\/assets\//);
+  return m?.[1] ?? '';
+}
+
 await check('构建产物存在', async () => {
   must(existsSync(join(DIST, 'index.html')), '缺 apps/web/dist/index.html，先跑 npm run build 或 node scripts/serve-demo.mjs');
   return 'apps/web/dist';
@@ -60,20 +67,21 @@ await check('演示站可达', async () => {
 });
 
 await check('深链接可直达（刷新不 404）', async () => {
-  const res = await get(`${BASE}/restaurants/R01`);
+  const res = await get(`${BASE}${appBase()}/restaurants/R01`);
   must((res.headers.get('content-type') ?? '').includes('text/html'), '深链接没回退到 index.html');
-  return '/restaurants/R01';
+  return `${appBase()}/restaurants/R01`;
 });
 
 await check('未知路由回退而不是白屏', async () => {
-  await get(`${BASE}/this-route-does-not-exist`);
+  await get(`${BASE}${appBase()}/this-route-does-not-exist`);
   return '回退到应用外壳';
 });
 
 await check('首页引用的资源都能取到', async () => {
   const html = readFileSync(join(DIST, 'index.html'), 'utf8');
-  const refs = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((m) => m[1] ?? '');
-  must(refs.length > 0, 'index.html 里没有 /assets 引用');
+  // 项目页部署时资源带 base 前缀（/beijing-food-map/assets/...），不能假设以 /assets 开头
+  const refs = [...html.matchAll(/(?:src|href)="([^"]*\/assets\/[^"]+)"/g)].map((m) => m[1] ?? '');
+  must(refs.length > 0, 'index.html 里没有 assets 引用');
   for (const ref of refs) await get(`${BASE}${ref}`);
   return `${refs.length} 个`;
 });

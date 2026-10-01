@@ -63,6 +63,7 @@ import {
   SEED_USERS,
   type SeedRestaurant,
 } from './seed';
+import { SEED_REAL_RESTAURANTS, SEED_REAL_USERS } from './seed-real';
 import {
   CANDIDATE_MAX_DUP_HINTS,
   CANDIDATE_MAX_EVIDENCE_CHARS,
@@ -299,6 +300,11 @@ interface StoreOptions {
    * loadState 恢复真实核验数据；此时构造器不再抛「拒绝种子」。
    */
   seed?: boolean;
+  /**
+   * 种子档案：synthetic = 合成测试数据（默认，测试套件与后端演示用）；
+   * real = 真实门店事实档案（零票数、地点待核验，网页预览版用），见 seed-real.ts。
+   */
+  seedProfile?: 'synthetic' | 'real';
   now?: () => number;
 }
 
@@ -314,6 +320,7 @@ const SYSTEM_KINDS: Array<{ kind: SystemCollectionKind; title: string }> = [
  */
 export class Store {
   readonly env: NonNullable<StoreOptions['env']>;
+  readonly seedProfile: NonNullable<StoreOptions['seedProfile']>;
   private clock: Clock;
   restaurants = new Map<string, RestaurantRec>();
   candidates = new Map<string, CandidateRec>();
@@ -334,9 +341,10 @@ export class Store {
 
   constructor(opts: StoreOptions = {}) {
     this.env = opts.env ?? 'development';
+    this.seedProfile = opts.seedProfile ?? 'synthetic';
     this.clock = { now: opts.now ?? (() => Date.now()) };
     if (opts.seed === false) return;
-    if (this.env === 'production') {
+    if (this.env === 'production' && this.seedProfile === 'synthetic') {
       throw new RuleViolation('production 环境拒绝装载测试种子，请先接入真实核验数据');
     }
     this.loadSeed();
@@ -359,36 +367,42 @@ export class Store {
   // ---------------------------------------------------------------- 种子
 
   private loadSeed(): void {
-    for (const u of SEED_USERS) {
+    const real = this.seedProfile === 'real';
+    const users = real ? SEED_REAL_USERS : SEED_USERS;
+    for (const u of users) {
       this.users.set(u.id, {
         id: u.id,
         display_name: u.display_name,
         roles: [...u.roles],
         phone_masked: u.phone,
         status: u.id === 'U06' ? 'deleted' : 'active',
-        is_test_data: true,
+        is_test_data: !real,
       });
     }
-    for (const s of SEED_RESTAURANTS) {
-      const photos = [`M${s.id}a`, `M${s.id}b`].map((id, i) => {
-        this.media.set(id, {
-          id,
-          owner_user_id: 'A01',
-          url: testPhotoDataUri(`${s.name}${s.branch ? `·${s.branch}` : ''}`, i === 0 ? '测试图片 · 非真实门店' : '测试图片 · 合成占位'),
-          width: 640,
-          height: 420,
-          review_status: 'APPROVED',
-          is_test_data: true,
-          context: 'private',
-          publication_id: null,
-          restaurant_id: s.id,
-          created_at: this.stamp(),
-        });
-        return id;
-      });
+    const restaurants = real ? SEED_REAL_RESTAURANTS : SEED_RESTAURANTS;
+    for (const s of restaurants) {
+      // 真实档案不放占位图：没有真实授权图片就不显示，比合成占位图诚实
+      const photos = real
+        ? ([] as string[])
+        : [`M${s.id}a`, `M${s.id}b`].map((id, i) => {
+            this.media.set(id, {
+              id,
+              owner_user_id: 'A01',
+              url: testPhotoDataUri(`${s.name}${s.branch ? `·${s.branch}` : ''}`, i === 0 ? '测试图片 · 非真实门店' : '测试图片 · 合成占位'),
+              width: 640,
+              height: 420,
+              review_status: 'APPROVED',
+              is_test_data: true,
+              context: 'private',
+              publication_id: null,
+              restaurant_id: s.id,
+              created_at: this.stamp(),
+            });
+            return id;
+          });
       const rec: RestaurantRec = {
         ...s,
-        is_test_data: true,
+        is_test_data: !real,
         place_verified_date:
           s.place_verified_days_ago === null ? null : addDays(this.today(), -s.place_verified_days_ago),
         photo_media_ids: photos,
@@ -419,6 +433,12 @@ export class Store {
         ineligibility_reasons: [],
       };
       this.restaurants.set(rec.id, rec);
+    }
+    if (real) {
+      // 真实档案：零反馈、零举报、零演示清单——好店资格只能由真实实吃投稿或编辑实吃背书产生
+      for (const u of this.users.values()) this.ensureSystemCollections(u.id);
+      this.recomputeAll();
+      return;
     }
     for (const f of SEED_FEEDBACK) {
       const rest = this.restaurants.get(f.restaurant_id);
@@ -1768,6 +1788,7 @@ export class Store {
     return {
       env: this.env,
       test_data_loaded: [...this.restaurants.values()].some((r) => r.is_test_data !== false),
+      seed_profile: this.seedProfile,
     };
   }
 

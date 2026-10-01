@@ -283,6 +283,8 @@ export interface DeploymentMeta {
   env: 'development' | 'test' | 'demo_static' | 'production';
   /** 当前库内是否装载了合成测试数据（演示种子）。 */
   test_data_loaded: boolean;
+  /** 种子档案：synthetic=合成测试数据；real=真实门店事实档案（预览版）。 */
+  seed_profile: 'synthetic' | 'real';
 }
 
 export interface SessionUser {
