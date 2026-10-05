@@ -13,7 +13,7 @@ import { describeError, readErrorCode } from '../../data/errors';
 import type { MapViewportState } from '../map/types';
 import { VIEWPORT_DEBOUNCE_MS } from '../map/types';
 
-const LS_FILTERS = 'qianwei.mapfilters.v2';
+const LS_FILTERS = 'qianwei.mapfilters.v3';
 const LS_VIEW = 'qianwei.mapviewport';
 
 export interface MapFilters {
@@ -25,13 +25,14 @@ export interface MapFilters {
 }
 
 /**
- * 真实档案（预览版）默认显示「新收录门店」层：零票数时合格层必然为空，
- * 待核验层才是真实内容的所在；合成档案维持「好店层」默认。
+ * 真实档案默认「全部门店」层：打开就是全部收录（待核验+已核验），
+ * 好店层与新收录层作为子集筛看；合成档案维持「好店层」默认。
+ * v3：图层默认值随档案升级变化，旧筛选快照键一并退役。
  */
 function defaultFilters(seedProfile: 'synthetic' | 'real'): MapFilters {
   return {
     view: 'guizhou',
-    layer: seedProfile === 'real' ? 'pending_verification' : 'qualified',
+    layer: seedProfile === 'real' ? 'all' : 'qualified',
     budget_max: null,
     include_unknown_budget: false,
     dish: null,

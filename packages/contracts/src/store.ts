@@ -926,11 +926,13 @@ export class Store {
     return rec.lng >= b.west && rec.lng <= b.east && rec.lat >= b.south && rec.lat <= b.north;
   }
 
-  /** 默认可见层：符合公共谓词；待验证层：显式开启后显示未验证候选。 */
+  /** 默认可见层：符合公共谓词；all 层浏览一切未驳回未阻断门店；待验证层：显式开启后显示未验证候选。 */
   visibleFor(rec: RestaurantRec, layer: MapQuery['layer']): boolean {
     if (rec.deleted || rec.merged_into || !rec.profile_public) return false;
     // 核验未通过的门店不是"待验证"，不该继续以候选名义出现在公开地图上
     if (layer === 'pending_verification') return !rec.in_default_layer && rec.place_status === 'PENDING';
+    // all 层是浏览层：地点待核验与已核验都收，只排除核验未通过与风险阻断（都不该以正常门店面目出现）
+    if (layer === 'all') return rec.place_status !== 'REJECTED' && rec.risk_status !== 'BLOCKED';
     return rec.in_default_layer;
   }
 

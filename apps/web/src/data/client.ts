@@ -104,6 +104,8 @@ export interface ApiClient {
   readonly mode: 'static' | 'http';
   /** 种子档案：real = 真实门店事实预览（静态演示默认）；synthetic = 合成测试数据。 */
   readonly seedProfile: 'synthetic' | 'real';
+  /** 真实档案里是否还有坐标待核验的门店（「预览版」徽标按它显示；后端演示恒 false）。 */
+  readonly previewPending: boolean;
   /** 部署自描述：环境与测试数据装载状态（决定演示水印显隐）。 */
   meta(): Promise<DeploymentMeta>;
   /** 手机验证码登录（真实路径；静态模式不可用）。 */
@@ -169,8 +171,8 @@ export class ClientError extends Error {
 }
 
 const LS_SESSION = 'qianwei.session';
-/** v2：真实门店事实档案上线，旧键里的合成种子状态整体退役（老访客也拿到新数据）。 */
-const LS_STATE = 'qianwei.state.v2';
+/** v3：真实档案扩容并逐店核验坐标，旧键里的旧快照整体退役（老访客也拿到新数据）。 */
+const LS_STATE = 'qianwei.state.v3';
 export const LS_DRAFT_PREFIX = 'qianwei.draft.';
 
 function readEnvVar(key: string): string {
@@ -193,6 +195,7 @@ export class StaticClient implements ApiClient {
   /** 网页演示默认装载真实门店事实档案（VITE_SEED_PROFILE=synthetic 可切回合成档案做自检）。 */
   readonly seedProfile: 'synthetic' | 'real' =
     readEnvVar('VITE_SEED_PROFILE') === 'synthetic' ? 'synthetic' : 'real';
+  readonly previewPending: boolean;
   private store: Store;
   private session: string | null;
 
@@ -209,6 +212,10 @@ export class StaticClient implements ApiClient {
     if (this.store.processDeletionJobs()) this.persist();
     this.session = safeGet(LS_SESSION);
     if (this.session && !this.store.sessions.has(this.session)) this.session = null;
+    // 徽标跟着种子事实走：还有 PENDING 门店就如实显示「待核验」，全部核验后自动收起。
+    this.previewPending = [...this.store.restaurants.values()].some(
+      (r) => !r.deleted && r.place_status === 'PENDING',
+    );
   }
 
   private persist(): void {

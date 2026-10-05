@@ -97,6 +97,9 @@ export class AmapAdapter implements MapAdapter {
   private selectedId: string | null = null;
   private debouncer: { schedule(): void; cancel(): void } | null = null;
   private lastViewport: MapViewportState | null = null;
+  /** 挂载窗口里（JSAPI 异步加载中）到达的点位/定位：记下来，地图就绪后补画。 */
+  private pendingItems: MapEntity[] | null = null;
+  private pendingUserLocation: { lng: number; lat: number } | null = null;
   private destroyed = false;
   private ready = false;
   private errorReported = false;
@@ -160,6 +163,13 @@ export class AmapAdapter implements MapAdapter {
         if (lng === null || lat === null) return;
         this.events?.onMapPoint({ lng: Number(lng.toFixed(5)), lat: Number(lat.toFixed(5)) });
       });
+      // 补画挂载窗口里到达的点位与定位：切底图后的第一批实体不再等下一次视野变化。
+      const pendingItems = this.pendingItems;
+      this.pendingItems = null;
+      if (pendingItems) this.setItems(pendingItems);
+      const pendingUser = this.pendingUserLocation;
+      this.pendingUserLocation = null;
+      if (pendingUser) this.setUserLocation(pendingUser);
     } catch (error) {
       console.warn('[map/amap] JSAPI 加载失败', error);
       this.reportFailure(BASEMAP_ERROR);
@@ -202,6 +212,8 @@ export class AmapAdapter implements MapAdapter {
     this.map = null;
     this.events = null;
     this.lastViewport = null;
+    this.pendingItems = null;
+    this.pendingUserLocation = null;
     this.NS = null;
   }
 
@@ -216,7 +228,13 @@ export class AmapAdapter implements MapAdapter {
   setItems(items: MapEntity[]): void {
     const map = this.map;
     const NS = this.NS;
-    if (!map || !NS || this.destroyed) return;
+    if (!map || !NS || this.destroyed) {
+      // mount() 后页面层立刻 setItems，而 JSAPI 还在异步加载：不记下来第一批实体就被丢了
+      //（线上实测：切到高德后标记为空，直到下一次视野变化才出现）。
+      if (!this.destroyed) this.pendingItems = items;
+      return;
+    }
+    this.pendingItems = null;
     const alive = new Set<string>();
     for (const entity of items) {
       alive.add(entity.id);
@@ -364,7 +382,11 @@ export class AmapAdapter implements MapAdapter {
   setUserLocation(point: { lng: number; lat: number } | null): void {
     const map = this.map;
     const NS = this.NS;
-    if (!map || !NS || this.destroyed) return;
+    if (!map || !NS || this.destroyed) {
+      // 与 setItems 同因：地图就绪前到来的定位记下非空值，就绪后补画。
+      if (point && !this.destroyed) this.pendingUserLocation = point;
+      return;
+    }
     if (!point || !Number.isFinite(point.lng) || !Number.isFinite(point.lat)) {
       safeCall(() => this.userMarker?.setMap(null), '定位点移除失败');
       this.userMarker = null;

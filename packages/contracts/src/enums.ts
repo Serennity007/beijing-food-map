@@ -154,7 +154,8 @@ export const REPORT_ACTION_LABEL: Record<ReportAction, string> = {
 export const ROLES = ['user', 'editor', 'moderator', 'admin'] as const;
 export type Role = (typeof ROLES)[number];
 
-export const LAYERS = ['qualified', 'pending_verification'] as const;
+/** 图层：all=浏览全部收录（待核验+已核验，驳回与阻断除外）；qualified=好店层；pending_verification=新收录待核验。 */
+export const LAYERS = ['all', 'qualified', 'pending_verification'] as const;
 export type MapLayer = (typeof LAYERS)[number];
 
 export const ERROR_CODES = [

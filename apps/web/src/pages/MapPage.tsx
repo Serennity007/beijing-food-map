@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
+  LAYERS,
   VIEW_LABEL,
   isValidGcj02,
   straightLineMeters,
@@ -49,7 +50,7 @@ interface FocusTarget {
  * 聚合点击按 expansion_bounds 放大；搜索把自有收录与第三方地点候选分开。
  */
 export function MapPage() {
-  const { api, user, seedProfile } = useApi();
+  const { api, user, seedProfile, previewPending } = useApi();
   const realSeed = seedProfile === 'real';
   const d = useMapData(api);
   const [params] = useSearchParams();
@@ -224,9 +225,9 @@ export function MapPage() {
     if (d.filters.budget_max !== null) n += 1;
     if (d.filters.budget_max !== null && d.filters.include_unknown_budget) n += 1;
     if (d.filters.dish) n += 1;
-    if (d.filters.layer === 'pending_verification') n += 1;
+    if (d.filters.layer !== (realSeed ? 'all' : 'qualified')) n += 1;
     return n;
-  }, [d.filters]);
+  }, [d.filters, realSeed]);
 
   /**
    * 点底图空白处选一个点，把 GCJ-02 坐标带进建店申请 —— 之前只能手填经纬度。
@@ -393,24 +394,33 @@ export function MapPage() {
                     onChange={(e) => changeFilters({ dish: e.target.value === '' ? null : e.target.value })}
                   />
                 </div>
-                <div className="chips" role="group" aria-label="待验证门店图层">
-                  <button
-                    type="button"
-                    className={d.filters.layer === 'pending_verification' ? 'chip active' : 'chip'}
-                    aria-pressed={d.filters.layer === 'pending_verification'}
-                    title="待验证门店单独用空心标记显示，不冒充平台推荐"
-                    onClick={() =>
-                      changeFilters({ layer: d.filters.layer === 'pending_verification' ? 'qualified' : 'pending_verification' })
-                    }
-                  >
-                    {realSeed
-                      ? d.filters.layer === 'pending_verification'
-                        ? '新收录门店'
-                        : '看新收录'
-                      : d.filters.layer === 'pending_verification'
-                        ? '显示待验证'
-                        : '待验证图层'}
-                  </button>
+                <div className="chips" role="group" aria-label="图层筛选">
+                  {LAYERS.map((l) => (
+                    <button
+                      key={l}
+                      type="button"
+                      className={d.filters.layer === l ? 'chip active' : 'chip'}
+                      aria-pressed={d.filters.layer === l}
+                      title={
+                        l === 'all'
+                          ? '全部收录门店：含待核验与已核验'
+                          : l === 'qualified'
+                            ? '好店层：社区票达标或编辑背书才入图，不冒充平台推荐'
+                            : '新收录门店单独显示，不冒充平台推荐'
+                      }
+                      onClick={() => changeFilters({ layer: l })}
+                    >
+                      {l === 'all'
+                        ? '全部门店'
+                        : l === 'qualified'
+                          ? realSeed
+                            ? '好店推荐'
+                            : '好店层'
+                          : realSeed
+                            ? '新收录·待核验'
+                            : '待验证'}
+                    </button>
+                  ))}
                   <span className="hint" style={{ margin: 0 }}>
                     {realSeed
                       ? '新收录门店来自公开资料整理、地点待核验，不代表平台推荐。'
@@ -538,7 +548,9 @@ export function MapPage() {
                   ? '当前视野没有待验证门店。'
                   : deepZoom
                     ? `你已经放到 ${zoomLabel} 级，视野只有约 ${spanLabel}，这个范围通常覆盖不到任何门店。请缩小地图（往外拉）或回到全图。`
-                    : '当前视野内没有符合推荐资格的门店。贵州味常藏在街巷里——你知道哪家，就来报。可以移动地图、切换"北京其他"，或提交你吃过的店。'
+                    : d.filters.layer === 'all'
+                      ? '当前视野没有收录门店。可以移动地图、切换菜系视图，或把你吃过的店补进地图。'
+                      : '当前视野内没有符合推荐资格的门店。贵州味常藏在街巷里——你知道哪家，就来报。可以移动地图、切换"北京其他"，或提交你吃过的店。'
               }
               action={
                 <div className="btn-row">
@@ -566,7 +578,9 @@ export function MapPage() {
           )}
           <p className="hint">
             {realSeed
-              ? '预览版：门店信息来自公开资料、地点待核验，票数等你和朋友的实吃投稿。'
+              ? previewPending
+                ? '预览版：门店信息来自公开资料、部分地点待核验，票数等你和朋友的实吃投稿。'
+                : '门店信息来自公开资料整理，票数等你和朋友的实吃投稿。'
               : d.list.some((r) => r.is_test_data)
                 ? '演示版本：门店、图片、实吃与票数均为合成测试数据。'
                 : ''}

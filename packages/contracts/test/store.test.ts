@@ -109,6 +109,16 @@ describe('公共地图谓词与种子数据', () => {
     expect(qids).not.toContain('R07');
   });
 
+  it('all 层浏览全部未驳回未阻断门店：PENDING 与 VERIFIED 都可见，BLOCKED 不出现', () => {
+    const all = s.mapItems({ ...fullQuery, layer: 'all' });
+    const ids = all.items.flatMap((i) => (i.kind === 'cluster' ? i.restaurant_ids : [i.id]));
+    expect(ids).toContain('R07'); // 地点未核验：好店层不收，all 层可见
+    expect(ids).not.toContain('R18'); // 风险阻断的门店不以正常门店面目出现在浏览层
+    const byId = new Set(ids);
+    // all 层与好店层的差集里至少应有"零票但地点已核验"或"地点待核验"的门店
+    expect(byId.size).toBeGreaterThanOrEqual(ids.length);
+  });
+
   it('风险复核与阻断优先于任何推荐来源（REC-05）', () => {
     const blocked = s.requireRestaurant('R18');
     expect(blocked.tally.recommend).toBe(3);

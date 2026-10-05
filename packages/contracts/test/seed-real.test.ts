@@ -8,16 +8,17 @@ describe('真实种子档案（seedProfile=real）', () => {
   it('装载真实门店：无合成测试数据、无任何反馈与占位图', () => {
     const store = new Store({ env: 'test', seedProfile: 'real' });
     expect(store.restaurants.size).toBe(SEED_REAL_RESTAURANTS.length);
+    const seedById = new Map(SEED_REAL_RESTAURANTS.map((s) => [s.id, s] as const));
     for (const r of store.restaurants.values()) {
       expect(r.is_test_data).toBe(false);
-      expect(r.place_status).toBe('PENDING');
+      expect(r.place_status).toBe(seedById.get(r.id)?.place_status ?? 'PENDING');
       expect(r.photo_media_ids).toEqual([]);
       expect(r.tally.total).toBe(0);
       expect(r.community).toBe('PENDING');
       expect(r.endorsement).toBe('NONE');
       expect(r.in_default_layer).toBe(false);
       expect(r.ineligibility_reasons).toContain('无有效推荐来源');
-      expect(r.ineligibility_reasons).toContain('地点未核验通过');
+      if (r.place_status === 'PENDING') expect(r.ineligibility_reasons).toContain('地点未核验通过');
     }
     expect(store.visits).toHaveLength(0);
     expect(store.media.size).toBe(0);
@@ -34,7 +35,7 @@ describe('真实种子档案（seedProfile=real）', () => {
     expect(synth.test_data_loaded).toBe(true);
   });
 
-  it('待验证图层可见新收录门店；默认合格层为空（等待真实实吃）', () => {
+  it('all 层浏览全部贵州视图收录；待核验层只含 PENDING；好店层为空（等待真实实吃）', () => {
     const store = new Store({ env: 'test', seedProfile: 'real' });
     const base = {
       bounds: { west: 116.0, south: 39.5, east: 116.8, north: 40.2 },
@@ -45,12 +46,25 @@ describe('真实种子档案（seedProfile=real）', () => {
       dish_or_tag: null,
       contract_version: CONTRACT_VERSION,
     };
-    const pending = store.mapItems({ ...base, layer: 'pending_verification' });
-    const pendingIds = pending.items.filter((i) => i.kind === 'restaurant').map((i) => i.id);
-    expect(pendingIds).toEqual(['R50', 'R51', 'R52', 'R53', 'R54']);
+    const flatten = (resp: ReturnType<typeof store.mapItems>) =>
+      resp.items.flatMap((i) => (i.kind === 'cluster' ? i.restaurant_ids : [i.id]));
+    const byView = (cuisines: readonly string[]) =>
+      SEED_REAL_RESTAURANTS.filter((s) => s.cuisines.some((c) => cuisines.includes(c))).map((s) => s.id);
+    const guizhouIds = () => SEED_REAL_RESTAURANTS.filter((s) => s.cuisines.includes('guizhou')).map((s) => s.id);
+
+    const all = flatten(store.mapItems({ ...base, layer: 'all' }));
+    expect([...all].sort()).toEqual([...guizhouIds()].sort());
+
+    const pending = flatten(store.mapItems({ ...base, layer: 'pending_verification' }));
+    const expectedPending = SEED_REAL_RESTAURANTS.filter(
+      (s) => s.cuisines.includes('guizhou') && s.place_status === 'PENDING',
+    ).map((s) => s.id);
+    expect([...pending].sort()).toEqual([...expectedPending].sort());
 
     const qualified = store.mapItems({ ...base, layer: 'qualified' });
     expect(qualified.items).toHaveLength(0);
+    // 搜索别名与视图归属保持一致（southwest 覆盖滇/川/渝）
+    expect(byView(['guizhou', 'sichuan', 'chongqing', 'yunnan']).length).toBeGreaterThan(0);
   });
 
   it('搜索命中真实店名与招牌菜', () => {

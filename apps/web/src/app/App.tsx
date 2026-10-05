@@ -20,7 +20,7 @@ const TABS = [
 ];
 
 export function App() {
-  const { user, demoBadge, signOut, seedProfile } = useApi();
+  const { user, demoBadge, signOut, seedProfile, previewPending } = useApi();
   const loc = useLocation();
   const onMap = loc.pathname.startsWith('/map');
 
@@ -93,7 +93,9 @@ export function App() {
         <Link to="/admin">内容后台</Link>
         <span>
           {seedProfile === 'real'
-            ? '预览版：门店与地址来自公开资料，坐标为区域估算、待实地核验；推荐票数将来自真实用户的实吃投稿。'
+            ? previewPending
+              ? '预览版：门店与地址来自公开资料，坐标为区域估算、待实地核验；推荐票数将来自真实用户的实吃投稿。'
+              : '预览版：门店与地址来自公开资料整理；推荐票数将来自真实用户的实吃投稿。'
             : '演示版本：门店、图片、实吃记录与票数全部为合成测试数据，不代表任何真实餐馆。'}
         </span>
       </footer>

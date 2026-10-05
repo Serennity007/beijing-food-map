@@ -16,6 +16,8 @@ export class Http implements ApiClient {
   readonly mode = 'http' as const;
   /** 后端演示库当前仍装载合成种子（真实档案接入后端前保持一致）。 */
   readonly seedProfile = 'synthetic' as const;
+  /** 「预览版·待核验」徽标只在 real 档案的静态模式渲染，后端演示恒 false。 */
+  readonly previewPending = false;
   private base: string;
 
   constructor(base: string) {
