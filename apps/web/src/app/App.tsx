@@ -20,7 +20,7 @@ const TABS = [
 ];
 
 export function App() {
-  const { user, demoBadge, signOut, seedProfile, pendingPlaceCount } = useApi();
+  const { user, demoBadge, signOut, seedProfile } = useApi();
   const loc = useLocation();
   const onMap = loc.pathname.startsWith('/map');
 
@@ -37,9 +37,11 @@ export function App() {
             <small>北京 · 贵州菜与西南风味</small>
           </span>
         </Link>
-        <span className="demo-badge" title="所有餐馆、实吃与票数均为合成测试数据">
-          {demoBadge}
-        </span>
+        {demoBadge ? (
+          <span className="demo-badge" title="所有餐馆、实吃与票数均为合成测试数据">
+            {demoBadge}
+          </span>
+        ) : null}
         <nav className="topnav">
           {user ? (
             <>
@@ -92,11 +94,9 @@ export function App() {
         <Link to="/terms">用户条款</Link>
         <Link to="/admin">内容后台</Link>
         <span>
-          {seedProfile === 'real'
-            ? pendingPlaceCount > 0
-              ? `预览版：门店与地址来自公开资料，${pendingPlaceCount} 家坐标为区域估算、待实地核验；推荐票数将来自真实用户的实吃投稿。`
-              : '预览版：门店与地址来自公开资料整理；推荐票数将来自真实用户的实吃投稿。'
-            : '演示版本：门店、图片、实吃记录与票数全部为合成测试数据，不代表任何真实餐馆。'}
+          {seedProfile === 'synthetic'
+            ? '演示版本：门店、图片、实吃记录与票数全部为合成测试数据，不代表任何真实餐馆。'
+            : '门店与地址来自公开资料与用户投稿，出行与营业信息以商家实际情况为准。'}
         </span>
       </footer>
     </div>

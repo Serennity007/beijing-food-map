@@ -102,10 +102,8 @@ export interface ReportInput {
 
 export interface ApiClient {
   readonly mode: 'static' | 'http';
-  /** 种子档案：real = 真实门店事实预览（静态演示默认）；synthetic = 合成测试数据。 */
+  /** 种子档案：real = 真实门店事实档案（静态部署默认）；synthetic = 合成测试数据（演示水印必显）。 */
   readonly seedProfile: 'synthetic' | 'real';
-  /** 真实档案里坐标待核验的门店数（「预览版」徽标按它显示精确数字；后端演示恒 0）。 */
-  readonly pendingPlaceCount: number;
   /** 部署自描述：环境与测试数据装载状态（决定演示水印显隐）。 */
   meta(): Promise<DeploymentMeta>;
   /** 手机验证码登录（真实路径；静态模式不可用）。 */
@@ -136,7 +134,7 @@ export interface ApiClient {
   createCollection(title: string, description: string | null): Promise<Collection>;
   updateCollection(collectionId: string, patch: { title?: string; description?: string | null }): Promise<Collection>;
   toggleSystemItem(restaurantId: string, kind: SystemCollectionKind, on: boolean): Promise<Collection[]>;
-  updateCollectionItem(collectionId: string, restaurantId: string, patch: { note?: string | null; note_shareable?: boolean; remove?: boolean; position?: number }): Promise<Collection>;
+  updateCollectionItem(collectionId: string, restaurantId: string, patch: { note?: string | null; note_shareable?: boolean; remove?: boolean; position?: number; budget_yuan?: number | null }): Promise<Collection>;
   deleteCollection(collectionId: string): Promise<void>;
   requestPublication(collectionId: string, shareItemIds: string[]): Promise<{ id: string; status: string; generation: number }>;
   unpublish(collectionId: string): Promise<Collection>;
@@ -195,7 +193,6 @@ export class StaticClient implements ApiClient {
   /** 网页演示默认装载真实门店事实档案（VITE_SEED_PROFILE=synthetic 可切回合成档案做自检）。 */
   readonly seedProfile: 'synthetic' | 'real' =
     readEnvVar('VITE_SEED_PROFILE') === 'synthetic' ? 'synthetic' : 'real';
-  readonly pendingPlaceCount: number;
   private store: Store;
   private session: string | null;
 
@@ -212,10 +209,6 @@ export class StaticClient implements ApiClient {
     if (this.store.processDeletionJobs()) this.persist();
     this.session = safeGet(LS_SESSION);
     if (this.session && !this.store.sessions.has(this.session)) this.session = null;
-    // 徽标跟着种子事实走：待核验门店数逐家递减，全部核验后徽标自动收窄为「公开资料整理」。
-    this.pendingPlaceCount = [...this.store.restaurants.values()].filter(
-      (r) => !r.deleted && r.place_status === 'PENDING',
-    ).length;
   }
 
   private persist(): void {

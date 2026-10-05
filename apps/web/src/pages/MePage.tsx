@@ -70,6 +70,8 @@ export function MePage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<string | null>(null);
+  // 本月吃饭预算只存本机 localStorage（个人规划数字，不进引擎也不进任何公开口径）
+  const [monthBudget, setMonthBudget] = useState<string>(() => localStorage.getItem('qianwei.monthly-budget') ?? '');
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -240,6 +242,82 @@ export function MePage() {
       <section className="panel">
         <h2>美食打卡 · 记账（{dining ? `${dining.stats.month}：${dining.stats.count} 次 · ¥${(dining.stats.total_fen / 100).toFixed(2)}` : '…'}）</h2>
         <p className="hint">打卡与记账仅本人可见，不参与公开推荐与票数。在门店详情页点「打卡」即可新增记录。</p>
+        {(() => {
+          const raw = monthBudget.trim();
+          const budget = raw === '' ? null : Number(raw);
+          if (raw !== '' && (!Number.isFinite(budget) || budget! <= 0)) {
+            return <p className="hint">预算需为正数；留空表示这个月不做预算。</p>;
+          }
+          if (budget === null) {
+            return (
+              <label className="field" style={{ maxWidth: 320 }}>
+                <span className="label">本月吃饭预算（元，只存在本机）</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  step={1}
+                  value={monthBudget}
+                  onChange={(e) => {
+                    setMonthBudget(e.target.value);
+                    try {
+                      localStorage.setItem('qianwei.monthly-budget', e.target.value);
+                    } catch {
+                      /* 存储不可用只影响下次恢复 */
+                    }
+                  }}
+                  placeholder="选填，如 800"
+                />
+              </label>
+            );
+          }
+          const spent = dining ? dining.stats.total_fen / 100 : 0;
+          const pct = Math.min(100, Math.round((spent / budget) * 100));
+          const over = spent > budget;
+          return (
+            <div style={{ maxWidth: 420 }}>
+              <div className="btn-row" style={{ alignItems: 'center', gap: 8 }}>
+                <label className="field" style={{ margin: 0 }}>
+                  <span className="label">本月吃饭预算（元，只存在本机）</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    step={1}
+                    value={monthBudget}
+                    onChange={(e) => {
+                      setMonthBudget(e.target.value);
+                      try {
+                        localStorage.setItem('qianwei.monthly-budget', e.target.value);
+                      } catch {
+                        /* 存储不可用只影响下次恢复 */
+                      }
+                    }}
+                    style={{ width: 140 }}
+                  />
+                </label>
+              </div>
+              <div
+                aria-hidden="true"
+                style={{ marginTop: 6, background: 'var(--panel-border, rgba(0,0,0,0.12))', borderRadius: 999, height: 8, overflow: 'hidden' }}
+              >
+                <div
+                  style={{
+                    width: `${pct}%`,
+                    height: '100%',
+                    transition: 'width 200ms',
+                    background: over ? 'var(--danger, #b3261e)' : 'var(--accent, #3d5a80)',
+                  }}
+                />
+              </div>
+              <p className="hint" role="status" style={{ margin: '4px 0 0' }}>
+                {dining
+                  ? `已花 ¥${spent.toFixed(2)} / 预算 ¥${budget}（${pct}%）${over ? ` · 已超支 ¥${(spent - budget).toFixed(2)}` : ` · 还剩 ¥${(budget - spent).toFixed(2)}`}`
+                  : '正在读取本月打卡…'}
+              </p>
+            </div>
+          );
+        })()}
         {dining && dining.logs.length === 0 && <p className="hint">还没有打卡记录。去门店详情页点「打卡」。</p>}
         {dining &&
           dining.logs.map((l) => (

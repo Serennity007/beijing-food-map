@@ -266,8 +266,8 @@ const SUBMISSION = obj(
 );
 
 const COLLECTION_ITEM = obj(
-  { restaurant_id: str(), position: int(0), note: nullable(str()), note_shareable: bool(), media_ids: arr(str()), added_at: str('date-time') },
-  ['restaurant_id', 'position', 'note', 'note_shareable', 'media_ids', 'added_at'],
+  { restaurant_id: str(), position: int(0), note: nullable(str()), note_shareable: bool(), budget_yuan: nullable(int(0)), media_ids: arr(str()), added_at: str('date-time') },
+  ['restaurant_id', 'position', 'note', 'note_shareable', 'budget_yuan', 'media_ids', 'added_at'],
 );
 
 const COLLECTION = obj(
@@ -798,7 +798,7 @@ function documentOperations(): Record<string, Record<string, unknown>> {
       tags: ['collections'],
       summary: '新增或更新条目',
       parameters: [p('id', '清单 ID', 32), p('restaurantId', '门店 ID')],
-      requestBody: body(obj({ note: nullable(str()), note_shareable: bool(), position: int(0), media_ids: arr(str()) })),
+      requestBody: body(obj({ note: nullable(str()), note_shareable: bool(), position: int(0), budget_yuan: nullable(int(0)), media_ids: arr(str()) })),
       responses: { '200': ok(ref('Collection')), '401': err(401, 'UNAUTHORIZED', '需要登录'), '404': err(404, 'NOT_FOUND', '清单不存在') },
     },
     'DELETE /collections/{id}/items/{restaurantId}': {

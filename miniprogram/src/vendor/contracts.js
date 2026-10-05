@@ -1653,9 +1653,9 @@ var Store = class {
       title: "\u6D4B\u8BD5\xB7\u6211\u7684\u8D35\u5DDE\u8E29\u70B9\u56FE",
       description: "\u6F14\u793A\u7528\u4E2A\u4EBA\u6E05\u5355\uFF08\u5408\u6210\u5185\u5BB9\uFF09",
       items: [
-        { restaurant_id: "R01", position: 0, note: "\u6D4B\u8BD5\u7B14\u8BB0\uFF08\u9ED8\u8BA4\u4E0D\u516C\u5F00\uFF09", note_shareable: false, media_ids: [], added_at: this.stamp() },
-        { restaurant_id: "R20", position: 1, note: "\u8FD9\u6761\u52FE\u9009\u4E86\u53EF\u516C\u5F00", note_shareable: true, media_ids: [], added_at: this.stamp() },
-        { restaurant_id: "R07", position: 2, note: "\u5F85\u9A8C\u8BC1\u5E97\uFF0C\u516C\u5F00\u6E05\u5355\u9700\u5E26\u6807\u8BC6", note_shareable: true, media_ids: [], added_at: this.stamp() }
+        { restaurant_id: "R01", position: 0, note: "\u6D4B\u8BD5\u7B14\u8BB0\uFF08\u9ED8\u8BA4\u4E0D\u516C\u5F00\uFF09", note_shareable: false, budget_yuan: null, media_ids: [], added_at: this.stamp() },
+        { restaurant_id: "R20", position: 1, note: "\u8FD9\u6761\u52FE\u9009\u4E86\u53EF\u516C\u5F00", note_shareable: true, budget_yuan: null, media_ids: [], added_at: this.stamp() },
+        { restaurant_id: "R07", position: 2, note: "\u5F85\u9A8C\u8BC1\u5E97\uFF0C\u516C\u5F00\u6E05\u5355\u9700\u5E26\u6807\u8BC6", note_shareable: true, budget_yuan: null, media_ids: [], added_at: this.stamp() }
       ],
       publication_status: "PRIVATE",
       active_token: null,
@@ -2621,6 +2621,7 @@ var Store = class {
       position: col.items.length,
       note: null,
       note_shareable: false,
+      budget_yuan: null,
       media_ids: [],
       added_at: this.stamp()
     });
@@ -2696,7 +2697,7 @@ var Store = class {
     return { ...col, items: [...col.items] };
   }
   updateCollectionItem(collectionId, restaurantId, patch, userId) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     const col = this.requireCollection(collectionId, userId);
     if (patch.remove) {
       col.items = col.items.filter((i) => i.restaurant_id !== restaurantId);
@@ -2709,7 +2710,8 @@ var Store = class {
           position: col.items.length,
           note: (_a = patch.note) != null ? _a : null,
           note_shareable: (_b = patch.note_shareable) != null ? _b : false,
-          media_ids: (_c = patch.media_ids) != null ? _c : [],
+          budget_yuan: (_c = patch.budget_yuan) != null ? _c : null,
+          media_ids: (_d = patch.media_ids) != null ? _d : [],
           added_at: this.stamp()
         });
       col.items.sort((a, b) => a.position - b.position);

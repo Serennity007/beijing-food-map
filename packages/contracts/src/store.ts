@@ -531,9 +531,9 @@ export class Store {
       title: '测试·我的贵州踩点图',
       description: '演示用个人清单（合成内容）',
       items: [
-        { restaurant_id: 'R01', position: 0, note: '测试笔记（默认不公开）', note_shareable: false, media_ids: [], added_at: this.stamp() },
-        { restaurant_id: 'R20', position: 1, note: '这条勾选了可公开', note_shareable: true, media_ids: [], added_at: this.stamp() },
-        { restaurant_id: 'R07', position: 2, note: '待验证店，公开清单需带标识', note_shareable: true, media_ids: [], added_at: this.stamp() },
+        { restaurant_id: 'R01', position: 0, note: '测试笔记（默认不公开）', note_shareable: false, budget_yuan: null, media_ids: [], added_at: this.stamp() },
+        { restaurant_id: 'R20', position: 1, note: '这条勾选了可公开', note_shareable: true, budget_yuan: null, media_ids: [], added_at: this.stamp() },
+        { restaurant_id: 'R07', position: 2, note: '待验证店，公开清单需带标识', note_shareable: true, budget_yuan: null, media_ids: [], added_at: this.stamp() },
       ],
       publication_status: 'PRIVATE',
       active_token: null,
@@ -1619,6 +1619,7 @@ export class Store {
       position: col.items.length,
       note: null,
       note_shareable: false,
+      budget_yuan: null,
       media_ids: [],
       added_at: this.stamp(),
     });
@@ -1714,6 +1715,7 @@ export class Store {
           position: col.items.length,
           note: patch.note ?? null,
           note_shareable: patch.note_shareable ?? false,
+          budget_yuan: patch.budget_yuan ?? null,
           media_ids: patch.media_ids ?? [],
           added_at: this.stamp(),
         });

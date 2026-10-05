@@ -564,6 +564,11 @@ export function buildRouter(svc: Services): Router {
         }
         if (ctx.body['note_shareable'] !== undefined) patch.note_shareable = bBool(ctx.body, 'note_shareable', false);
         if (ctx.body['position'] !== undefined) patch.position = bNumRaw(ctx.body['position'], 'position', { integer: true, min: 0, max: 999 }) ?? 0;
+        if (ctx.body['budget_yuan'] !== undefined) {
+          const raw = ctx.body['budget_yuan'];
+          // null = 清除预算；数字为本人自填的规划人均（0—100000 整数），只做个人汇总不参与公开口径
+          patch.budget_yuan = raw === null ? null : bNumRaw(raw, 'budget_yuan', { integer: true, min: 0, max: 100000 });
+        }
         if (ctx.body['media_ids'] !== undefined) patch.media_ids = bStrArray(ctx.body, 'media_ids', { max: 10, itemMax: 64 });
         return store.updateCollectionItem(idParam(ctx, 'id'), idParam(ctx, 'restaurantId'), patch, ctx.uid());
       },

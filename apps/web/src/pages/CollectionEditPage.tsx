@@ -1,9 +1,10 @@
 /** 清单编辑：顺序与笔记 + 显式发布为不可变快照 + 撤回。规则全部由接口判定，页面不推算版本也不补数据。 */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { shanghaiDay, type Collection, type CollectionItemRecord, type PublicationStatus, type Restaurant } from '@qianwei/contracts';
+import { shanghaiDay, straightLineMeters, type Collection, type CollectionItemRecord, type PublicationStatus, type Restaurant } from '@qianwei/contracts';
 import { useApi } from '../data/api';
 import { CuisineBadges, StatusBlock } from '../components/ui';
+import { estimateDriveLegs } from '../features/plan/driving';
 
 const PUB_LABEL: Record<PublicationStatus, string> = {
   PRIVATE: '未发布',
@@ -12,7 +13,7 @@ const PUB_LABEL: Record<PublicationStatus, string> = {
   REVOKED: '已撤销',
 };
 
-type ItemPatch = { note?: string | null; note_shareable?: boolean; remove?: boolean; position?: number };
+type ItemPatch = { note?: string | null; note_shareable?: boolean; remove?: boolean; position?: number; budget_yuan?: number | null };
 
 interface ErrLike {
   code?: string;
@@ -36,6 +37,15 @@ function shareUrl(token: string): string {
   return `${location.origin}${import.meta.env.BASE_URL}s/${token}`;
 }
 
+function fmtDistance(meters: number): string {
+  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} 公里` : `${Math.round(meters)} 米`;
+}
+
+function fmtDuration(seconds: number): string {
+  const mins = Math.round(seconds / 60);
+  return mins >= 60 ? `${Math.floor(mins / 60)} 小时 ${mins % 60} 分` : `${mins} 分钟`;
+}
+
 export function CollectionEditPage() {
   const { api, user, ready } = useApi();
   const { id = '' } = useParams();
@@ -46,6 +56,10 @@ export function CollectionEditPage() {
   const [busy, setBusy] = useState(false);
   const [shops, setShops] = useState<Record<string, Restaurant>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [budgets, setBudgets] = useState<Record<string, string>>({});
+  const [driveLegs, setDriveLegs] = useState<Array<{ meters: number; seconds: number }> | null>(null);
+  const [estimating, setEstimating] = useState(false);
+  const [driveFailed, setDriveFailed] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [term, setTerm] = useState('');
   const [hits, setHits] = useState<Candidate | null>(null);
@@ -219,6 +233,72 @@ export function CollectionEditPage() {
 
   function isSelected(rid: string): boolean {
     return selected[rid] ?? true;
+  }
+
+  async function saveBudget(rid: string) {
+    const raw = (budgets[rid] ?? '').trim();
+    if (raw === '') {
+      await patch(rid, { budget_yuan: null }, '已清除这条的预算。');
+      return;
+    }
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 0 || n > 100000) {
+      setError('预算需为 0—100000 的整数（人均），留空表示不规划这项。');
+      return;
+    }
+    await patch(rid, { budget_yuan: n }, '预算已保存（仅自己可见的规划数字）。');
+  }
+
+  /** 相邻两站直线距离：数据全来自本应用自有坐标，无任何第三方结果。 */
+  const planLegs = useMemo(() => {
+    if (!col) return [];
+    const orderedNow = sortedItems(col);
+    const pts = orderedNow
+      .map((it) => shops[it.restaurant_id])
+      .filter((s): s is Restaurant => Boolean(s));
+    const legs: Array<{ from: string; to: string; meters: number }> = [];
+    for (let i = 0; i < pts.length - 1; i += 1) {
+      const a = pts[i]!;
+      const b = pts[i + 1]!;
+      legs.push({
+        from: `${a.name}${a.branch ? `（${a.branch}）` : ''}`,
+        to: `${b.name}${b.branch ? `（${b.branch}）` : ''}`,
+        meters: straightLineMeters({ lng: a.lng, lat: a.lat }, { lng: b.lng, lat: b.lat }),
+      });
+    }
+    return legs;
+  }, [col, shops]);
+
+  const planSummary = useMemo(() => {
+    if (!col) return { count: 0, total: 0, missing: 0 };
+    let count = 0;
+    let total = 0;
+    let missing = 0;
+    for (const it of col.items) {
+      if (it.budget_yuan === null || it.budget_yuan === undefined) missing += 1;
+      else {
+        count += 1;
+        total += it.budget_yuan;
+      }
+    }
+    return { count, total, missing };
+  }, [col]);
+
+  async function estimateDrive() {
+    if (!col) return;
+    const points = sortedItems(col)
+      .map((it) => shops[it.restaurant_id])
+      .filter((s): s is Restaurant => Boolean(s))
+      .map((s) => ({ lng: s.lng, lat: s.lat }));
+    setEstimating(true);
+    setDriveFailed(false);
+    try {
+      const legs = await estimateDriveLegs(points);
+      if (legs) setDriveLegs(legs);
+      else setDriveFailed(true);
+    } finally {
+      setEstimating(false);
+    }
   }
 
   function nameOf(rid: string): string {
@@ -457,12 +537,47 @@ export function CollectionEditPage() {
                       移除
                     </button>
                   </div>
+                  <label className="field">
+                    <span className="label">人均预算（元，选填的规划数字）</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={100000}
+                      step={1}
+                      value={budgets[it.restaurant_id] ?? (it.budget_yuan === null || it.budget_yuan === undefined ? '' : String(it.budget_yuan))}
+                      onChange={(e) => setBudgets((d) => ({ ...d, [it.restaurant_id]: e.target.value }))}
+                      placeholder="选填：预计人均，如 90"
+                    />
+                  </label>
+                  <div className="btn-row">
+                    <button
+                      className="btn small"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void saveBudget(it.restaurant_id)}
+                    >
+                      保存预算
+                    </button>
+                    <button
+                      className="btn small plain"
+                      type="button"
+                      disabled={busy || !(budgets[it.restaurant_id] ?? '')}
+                      onClick={() => {
+                        setBudgets((d) => ({ ...d, [it.restaurant_id]: '' }));
+                        void patch(it.restaurant_id, { budget_yuan: null }, '已清除这条的预算。');
+                      }}
+                    >
+                      清除
+                    </button>
+                  </div>
                   <p className="hint">
                     {it.note_shareable
                       ? '这条笔记会在你勾选它参与发布时进入快照。'
                       : it.note
                         ? '笔记已保存但不公开：发布时快照里不会出现文字。'
                         : '还没有笔记。'}
+                    {it.budget_yuan !== null && it.budget_yuan !== undefined ? ` 预算 ¥${it.budget_yuan}/人只属于你的规划，不进入公开快照。` : ''}
                   </p>
                 </article>
               );
@@ -470,6 +585,69 @@ export function CollectionEditPage() {
           </div>
         )}
       </section>
+
+      {ordered.length > 0 && (
+        <section className="panel">
+          <h2>行程与花费规划</h2>
+          <p className="hint">
+            预算是只属于你的规划数字：按每家店填「预计人均」，这里帮你在出发前估出总数。它不进入公开快照，也不参与任何推荐口径。
+          </p>
+          <p className="card-dishes">
+            已填预算 {planSummary.count} / {ordered.length} 家
+            {planSummary.count > 0 ? (
+              <>
+                {' '}· 规划人均合计 <strong>¥{planSummary.total}</strong>
+                {planSummary.missing > 0 ? `（${planSummary.missing} 家未填未计入）` : ''}
+              </>
+            ) : (
+              ' · 在上方条目里填预算后自动汇总'
+            )}
+          </p>
+          {planLegs.length > 0 && (
+            <>
+              <h3>路线距离（按清单顺序）</h3>
+              <ol className="pin-list">
+                {planLegs.map((leg, i) => {
+                  const drive = driveLegs?.[i];
+                  return (
+                    <li key={`${leg.from}-${leg.to}`}>
+                      <div>
+                        <strong>{leg.from}</strong> → <strong>{leg.to}</strong>
+                        <p className="hint" style={{ margin: '2px 0 0' }}>
+                          直线约 {fmtDistance(leg.meters)}
+                          {drive ? ` · 驾车约 ${fmtDistance(drive.meters)} · ${fmtDuration(drive.seconds)}` : ''}
+                        </p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+              <div className="btn-row" style={{ marginTop: 6 }}>
+                <button className="btn small" type="button" disabled={busy || estimating} onClick={() => void estimateDrive()}>
+                  {estimating ? '正在向高德查询…' : '按驾车估算全程（高德）'}
+                </button>
+                {driveLegs && (
+                  <button
+                    className="btn small plain"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setDriveLegs(null)}
+                  >
+                    清除驾车估算
+                  </button>
+                )}
+              </div>
+              <p className="hint">
+                {driveFailed
+                  ? '高德驾车估算暂时不可用（网络或服务未响应），上面已显示直线距离，稍后可重试。'
+                  : driveLegs
+                    ? '驾车距离与时长来自高德路线规划，仅当场展示帮助估算，不会保存进清单或快照。'
+                    : '直线距离由平台收录坐标计算；点「按驾车估算」可查询实际道路距离与时长。'}
+              </p>
+            </>
+          )}
+        </section>
+      )}
 
       {isSystem ? (
         <section className="panel">

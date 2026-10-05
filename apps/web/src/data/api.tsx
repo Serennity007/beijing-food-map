@@ -14,8 +14,6 @@ interface ApiState {
   demoBadge: string;
   /** 种子档案（同步可得，决定默认图层与页脚文案）。 */
   seedProfile: 'synthetic' | 'real';
-  /** 真实档案里坐标待核验的门店数（徽标与页脚文案按它收放）。 */
-  pendingPlaceCount: number;
   refresh: () => Promise<void>;
   setUser: (u: SessionUser | null) => void;
   signOut: () => Promise<void>;
@@ -56,20 +54,16 @@ export function ApiProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, [api]);
 
-  // 演示水印跟着部署事实走：production 且未装载测试种子 = 干净上线态，不显示任何演示标记；
-  // 真实档案（real）显示「预览版」——待核验门店数逐家递减，全部核验后只声明资料来源
+  // 演示水印跟着部署事实走：production 且未装载测试种子 = 干净上线态，不显示任何标记；
+  // 合成档案（synthetic）按红线必须带「演示数据」水印，真实档案不显示任何阶段字样
   const showDemoBadge = meta === null || meta.env !== 'production' || meta.test_data_loaded;
   const demoBadge = !showDemoBadge
     ? ''
-    : api.seedProfile === 'real'
+    : api.seedProfile === 'synthetic'
       ? api.mode === 'static'
-        ? api.pendingPlaceCount > 0
-          ? `预览版 · ${api.pendingPlaceCount} 家坐标待核验`
-          : '预览版 · 公开资料整理'
-        : '预览版 · 数据待核验'
-      : api.mode === 'static'
         ? '演示数据 · 存在本机浏览器'
-        : '演示数据 · 含合成测试内容';
+        : '演示数据 · 含合成测试内容'
+      : '';
 
   const value: ApiState = {
     api,
@@ -78,7 +72,6 @@ export function ApiProvider({ children }: { children: ReactNode }) {
     meta,
     demoBadge,
     seedProfile: api.seedProfile,
-    pendingPlaceCount: api.pendingPlaceCount,
     refresh,
     setUser,
     signOut,

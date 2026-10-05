@@ -235,6 +235,8 @@ export interface CollectionItemRecord {
   position: number;
   note: string | null;
   note_shareable: boolean;
+  /** 本人自行填写的规划人均预算（元，0—100000 整数或 null）：只做个人规划汇总，不参与任何公开口径。 */
+  budget_yuan: number | null;
   media_ids: string[];
   added_at: string;
 }

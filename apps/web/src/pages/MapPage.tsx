@@ -50,7 +50,7 @@ interface FocusTarget {
  * 聚合点击按 expansion_bounds 放大；搜索把自有收录与第三方地点候选分开。
  */
 export function MapPage() {
-  const { api, user, seedProfile, pendingPlaceCount } = useApi();
+  const { api, user, seedProfile } = useApi();
   const realSeed = seedProfile === 'real';
   const d = useMapData(api);
   const [params] = useSearchParams();
@@ -577,14 +577,10 @@ export function MapPage() {
             </button>
           )}
           <p className="hint">
-            {realSeed
-              ? pendingPlaceCount > 0
-                ? `预览版：门店信息来自公开资料、${pendingPlaceCount} 家地点待核验，票数等你和朋友的实吃投稿。`
-                : '门店信息来自公开资料整理，票数等你和朋友的实吃投稿。'
-              : d.list.some((r) => r.is_test_data)
-                ? '演示版本：门店、图片、实吃与票数均为合成测试数据。'
-                : ''}
-            {user ? '' : ' 登录后可投稿并建立自己的地图。'}
+            {seedProfile === 'synthetic' && d.list.some((r) => r.is_test_data)
+              ? '演示版本：门店、图片、实吃与票数均为合成测试数据。'
+              : ''}
+            {user ? '' : '登录后可投稿并建立自己的地图。'}
           </p>
         </Drawer>
       </aside>

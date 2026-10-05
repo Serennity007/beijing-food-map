@@ -561,6 +561,18 @@ describe('AUTH/COL/SHARE/DELETE/MERGE/DEMO', () => {
     expect(s.sharedSnapshot(fresh.active_token!).items).toHaveLength(1);
   });
 
+  it('清单条目预算：本人可写入/清除 budget_yuan（PLAN-01），不进公开快照也不改票数', () => {
+    const tallyBefore = s.requireRestaurant('R01').tally.total;
+    s.updateCollectionItem('COL0001', 'R01', { budget_yuan: 90 }, 'U01');
+    let item = s.collections.get('COL0001')!.items.find((i) => i.restaurant_id === 'R01')!;
+    expect(item.budget_yuan).toBe(90);
+    s.updateCollectionItem('COL0001', 'R01', { budget_yuan: null }, 'U01');
+    item = s.collections.get('COL0001')!.items.find((i) => i.restaurant_id === 'R01')!;
+    expect(item.budget_yuan).toBeNull();
+    // 预算是个人规划数字：写入与清除都不影响门店计票
+    expect(s.requireRestaurant('R01').tally.total).toBe(tallyBefore);
+  });
+
   it('未过审图片只有作者与审核人员可读，过审后人人可读（AUTH-01 图片部分）', () => {
     const author = s.login('U02', '888888').session_id;
     const stranger = s.login('U03', '888888').session_id;
