@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * 一键发布网页到 GitHub Pages（手工通道，见 docs/runbooks/deploy-pages.md）。
+ * 一键发布网页到 GitHub Pages（GitHub Pages 手工通道）。
  *
  * 用法：node scripts/deploy-pages.mjs
- * 可选：apps/web/.env.local 里配 VITE_AMAP_KEY / VITE_AMAP_SECURITY_CODE（见 docs/runbooks/amap-key.md），
+ * 可选：apps/web/.env.local 里配 VITE_AMAP_KEY / VITE_AMAP_SECURITY_CODE，
  *       存在时构建会注入高德 JSAPI 凭据；该文件被 .gitignore 忽略，Key 永不进仓库。
  *
  * 全程用 Node 的 execFileSync/fs，不经 Git Bash —— 天然没有 MSYS 路径转换问题
@@ -100,7 +100,7 @@ try {
     if (exitCode === 0) {
       console.log(`\n完成。等 Pages 构建后（gh api repos/:owner/beijing-food-map/pages/builds/latest）访问：`);
       console.log(`  https://serennity007.github.io/beijing-food-map/`);
-      if (hasKey) console.log('记得按 docs/runbooks/amap-key.md 的清单在线上验证高德底图。');
+      if (hasKey) console.log('记得在线上验证高德底图。');
     }
   }
 } finally {

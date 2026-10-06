@@ -6,7 +6,7 @@
  *   node scripts/demo-check.mjs --base=http://IP:PORT # 检别人机器上跑着的那一份
  *
  * 这里只做能被机器判定的检查；静态模式的数据行为存在浏览器里，脚本碰不到，
- * 那部分走 docs/演示动线.md 的第一幕人工确认。
+ * 那部分走 本地浏览器人工确认。
  */
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -163,7 +163,7 @@ for (const r of results) console.log(`  ${r.ok ? '✔' : '✘'} ${r.name}${r.det
 console.log('');
 if (failed.length === 0) {
   console.log(`ALL GREEN（${results.length} 项）· 可以开始演示`);
-  console.log('浏览器里还要人工确认的：地图出瓦片、门店页推荐依据、建店申请与地点核验、举报工单的处置与回写 —— 见 docs/演示动线.md\n');
+  console.log('浏览器里还要人工确认的：地图出瓦片、门店页推荐依据、建店申请与地点核验、举报工单的处置与回写 —— 见 本地浏览器演示动线\n');
 } else {
   console.log(`FAIL ${failed.length}/${results.length} —— 先修这些：`);
   for (const f of failed) console.log(`  · ${f.name}：${f.detail}`);

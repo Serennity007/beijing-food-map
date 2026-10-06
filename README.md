@@ -1,71 +1,75 @@
-# 京城黔味地图（演示版）
+# 京城黔味地图
 
-北京贵州菜与西南美食地图的**可运行演示**：地图首页发现门店 → 查看推荐依据 → 收藏/导航；搜不到这家店时先提交**建店申请**（地点待人工核验）→ “我吃过”投稿 → 人工审核 → 形成有效推荐 → 回到地图；个人清单 → 显式发布不可变快照 → 分享 / 撤回。
+北京贵州菜与西南美食地图：**48 家真实收录门店**，从找店到打卡记账的完整闭环。
 
-按《北京美食地图｜完整 AI 开发执行说明书 V2.0》实现。所有门店、地址、图片、实吃记录与票数都是**合成测试数据**，不代表任何真实餐馆。
+线上打开即用：<https://serennity007.github.io/beijing-food-map/>
+
+## 它能做什么
+
+- **找店**：地图/列表双视图；菜系（贵州菜 · 西南风味 · 北京其他）、预算、菜品口味筛选；搜索支持别名（「酸汤」「烤串」「驻京办」都能直接搜）
+- **看依据**：每家店的推荐资格、地点核验状态、公开资料来源全部透明展示，不达标的店如实列出不符合项，绝不硬推
+- **收藏与行程规划**：想吃 / 吃过 / 私藏清单；条目可填人均预算，自动汇总规划花费与相邻门店距离，可按驾车估算全程（高德路线，当场展示不保存）
+- **打卡记账**：到店打卡记一笔，本月实花与预算进度对比
+- **投稿共建**：搜不到的店提交**建店申请**（地点待人工核验）→ 吃过的店写实吃反馈 → 社区计票达标或编辑实吃背书后进入好店推荐层
+- **清单分享**：显式发布为不可变快照，撤销后链接永久失效
+- **出行**：门店详情页一键跳转高德公交 / 驾车 / 步行路线
+
+## 数据来源与合规
+
+- 门店事实（店名 / 地址 / 招牌菜）来自公开资料（Trip.com、大众点评、主流媒体等），逐店在详情页留有来源注记
+- 坐标经人工对照公开地图逐店核验（进度见各店详情页的地点状态）
+- 不编造票数、探店与图片；公开资料中的人均不冒充用户报告（人均由用户打卡/投稿逐步积累）
+- 高德底图与路线仅做展示与导航，检索结果不写入数据库
 
 ## 快速开始
 
 ```bash
 npm install
 npm run dev          # 前端 http://localhost:5173 + 演示后端 http://127.0.0.1:8787
-npm run dev:web      # 只要前端（静态演示模式，数据存在浏览器 localStorage）
+npm run dev:web      # 只要前端（静态模式，数据存在浏览器 localStorage）
 npm run typecheck
-npm test             # 领域引擎、后端合同与地图纯函数测试（当前 135 项：contracts 92 / api 29 / web 14）
-npx tsx scripts/http-contract-check.mts   # 前端 HTTP 客户端 × 已监听后端的逐接口对账（当前 61 项，先把后端起在 127.0.0.1:8787 的独立库上）
+npm test             # 领域引擎、后端合同与地图纯函数测试
+npx tsx scripts/http-contract-check.mts   # 前端 HTTP 客户端 × 已监听后端的逐接口对账（后端先起在 127.0.0.1:8787 的独立库上）
 npm run build        # apps/web/dist
 ```
 
-需要 Node ≥ 22.5（后端使用内置 `node:sqlite`）；CI、镜像与本机验证都固定用 Node 24。
+需要 Node ≥ 22.5（后端使用内置 `node:sqlite`）；CI 与本机验证固定用 Node 24。
 
 ## 两种运行模式
 
 | 模式 | 触发 | 数据来源 | 用途 |
 | --- | --- | --- | --- |
-| 静态演示 | 默认 | 浏览器内运行同一套领域引擎 + `localStorage` | GitHub Pages、离线试用 |
-| 后端演示 | 构建/运行时设置 `VITE_API_BASE` | `apps/api` + SQLite | 验证真实 HTTP 链路、鉴权、幂等、并发版本 |
+| 静态 | 默认 | 浏览器内运行同一套领域引擎 + `localStorage` | GitHub Pages、离线试用 |
+| 后端 | 构建/运行时设置 `VITE_API_BASE` | `apps/api` + SQLite | 真实 HTTP 链路、鉴权、幂等、并发版本 |
 
 页面层只依赖 `apps/web/src/data/client.ts` 里的 `ApiClient` 接口，两种模式共用同一批页面。业务规则（180 天窗口、社区计票、资格谓词、清单权限）在 `packages/contracts` 里只实现一次。
 
-## 登录
+## 演示环境登录
 
-没有接入短信服务。`/login` 使用预置合成邀请账号，验证码固定 `888888`：
+线上部署未接入短信服务，`/login` 提供预置邀请账号，验证码固定 `888888`：`U01…U05` 食客、`E01` 编辑、`M01` 审核员、`A01` 管理员（`/admin` 后台）、`U06` 已注销账号（验证登录被拒）。固定验证码与演示种子在 `production` 配置下会被引擎直接拒绝。
 
-- `U01…U05` 普通测试食客（投稿、清单、分享）
-- `E01` 编辑（实吃背书）、`M01` 审核员、`A01` 管理员（`/admin` 后台）
-- `U06` 已注销账号（用于验证登录被拒与会话处置）
+## 值得了解的规则
 
-固定验证码和测试种子在 `production` 配置下会被引擎直接拒绝。
-
-## 值得动手验证的规则
-
-- 默认图层谓词：资料可公开 AND 地点 VERIFIED AND 营业 OPEN/UNKNOWN AND 风险 CLEAR AND（社区 QUALIFIED 或编辑 ACTIVE）。不满足时详情页会列出具体不符合项。
-- 社区计票：`R ≥ 3` 且 `4R ≥ 3T`，窗口为 Asia/Shanghai 的 180 个自然日（含两端）。收藏、点赞、编辑背书都不入票。
+- 好店推荐谓词：资料可公开 AND 地点 VERIFIED AND 营业 OPEN/UNKNOWN AND 风险 CLEAR AND（社区 QUALIFIED 或编辑 ACTIVE）。不满足时详情页会列出具体不符合项。
+- 社区计票：`R ≥ 3` 且 `4R ≥ 3T`，窗口为 Asia/Shanghai 的 180 个自然日（含两端）。收藏、打卡、编辑背书都不入票。
 - 撤回立即退出公开与计票，历史版本不会自动复活；较低 revision 不能覆盖已批准的较高 revision。
-- 利益披露非“无关联”的记录会公开披露，但不算独立票。
-- 分享快照不可变；撤销后旧 token 永久失效，`publication_generation` 递增会作废此前全部待审发布申请。
+- 利益披露非"无关联"的记录会公开披露，但不算独立票。
+- 分享快照不可变；撤销后旧 token 永久失效。
 - 作者不能审核自己的内容或发布申请，即使同时是管理员。
-- 建店申请：搜不到这家店就能申请新增，提交后落一家地点 `PENDING` 的门店 —— 只出现在显式开启的待验证图层，**核验通过也不等于好店达标**（详情页会写"不符合项：无有效推荐来源"）。
-- 建店去重：同名且近似直线距离 ≤ 150 米只给重复提示，不自动合并；同一作者重复提交同一家店会复用同一条候选，不会多出第二家门店。被驳回后只能在原申请上补材料（`revision` 递增），不能新开一条。
+- 建店申请：搜不到这家店就能申请新增，提交后落一家地点 `PENDING` 的门店，只出现在显式开启的待核验图层——**核验通过也不等于好店达标**。
+- 建店去重：同名且近似直线距离 ≤ 150 米只给重复提示，不自动合并；被驳回后只能在原申请上补材料，不能新开一条。
 
 ## 目录
 
 ```
-packages/contracts/   # 枚举、DTO、坐标/聚合、资格规则、领域引擎 Store、测试种子
-apps/web/             # Vite + React 19 SPA（含 /admin 路由）
-apps/api/             # 演示后端：node:http + SQLite 持久化 + OpenAPI
+packages/contracts/   # 枚举、DTO、坐标/聚合、资格规则、领域引擎 Store、种子数据
+apps/web/             # Vite + React 19 SPA（含 /admin 审核台）
+apps/api/             # 后端：node:http + SQLite 持久化 + OpenAPI
 database/migrations/  # SQL 迁移（启动时幂等应用）
-scripts/              # 统一开发入口 + HTTP 契约自检
-docs/                 # handover / NEXT / status / blockers / decisions / 演示动线 / design / runbooks / render-check
+scripts/              # 开发入口、演示自检、HTTP 契约自检
 ```
 
 ## 部署
 
-- 网页端：`.github/workflows/deploy-web.yml` 构建 `apps/web/dist` 并发布到 GitHub Pages（测试是发布门禁）；`apps/web/public/404.html` 负责深链接回退。步骤见 `docs/runbooks/deploy-pages.md`。
-- 后端：需要第三方托管平台（Render/Fly/Railway 等）账号授权后才有真实地址。仓库内已备好 `Dockerfile` 与 `render.yaml`，**均未构建/未部署**，参数与坑见 `docs/runbooks/deploy-api.md`。Pages 上的演示不依赖后端。
-- 本地开发与环境变量：`docs/runbooks/local-dev.md`。
-
-## 当前状态
-
-接手改动请先读 `docs/handover.md`（现状口径、规则在哪、改一处的连带清单、已踩过的坑、验收门禁）。
-见 `docs/status.md`（implemented / verified / 未 verified / release_ready 分列）与 `docs/blockers.md`（真实地图 Key、短信、云账号授权、真机视觉验证等外部依赖，以及刻意留下的缺口）。
+- 网页端：`npm run build` 产出 `apps/web/dist`，`.github/workflows/deploy-web.yml` 提供 CI 构建（测试为门禁）；高德 Key（Web端 JS API 类型）与安全密钥经 `apps/web/.env.local` 注入构建，域名白名单限定线上域名
+- 后端：仓库内备好 `Dockerfile` 与 `render.yaml`，托管平台（Render/Fly/Railway 等）导入即可；线上静态演示不依赖后端

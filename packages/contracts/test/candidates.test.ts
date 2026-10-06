@@ -276,7 +276,7 @@ describe('阶段 1A 新门店候选与地点核验', () => {
     // R07 种子是 3-0-0 已达标但地点 PENDING。按现有规则把它核验通过：
     // location_version 递增 → 旧版本记录不再计票，社区状态从 QUALIFIED 变 LAPSED。
     // 规格只规定"搬迁"递增 location_version，没说核验翻转也算，因此这条是待决问题而不是理想设计。
-    // 改它需要单独决策：见 docs/NEXT.md 的 N1。
+    // 改它需要单独决策：该项仍待人拍板。
     const r07 = s.requireRestaurant('R07');
     const lvBefore = r07.location_version;
     expect(r07.tally).toMatchObject({ recommend: 3, total: 3 });

@@ -1,5 +1,5 @@
 /**
- * 把 docs/render-check 里适合当作品集的一批图挑出来，按端分目录拷走。
+ * 把渲染核验截图里适合当作品集的一批图挑出来，按端分目录拷走。
  *
  *   node scripts/collect-portfolio-shots.mjs [输出目录]
  *
@@ -71,7 +71,7 @@ for (const [sub, list] of [['网页', WEB], ['小程序', MP]]) {
 const manifest = [
   '# 作品图集',
   '',
-  `生成：${new Date().toLocaleString('zh-CN')} · 来源 \`docs/render-check\` · 共 ${copied} 张`,
+  `生成：${new Date().toLocaleString('zh-CN')} · 来源 渲染核验截图 · 共 ${copied} 张`,
   '',
   '## 网页（17 张）',
   '',
